@@ -35,7 +35,13 @@ The first-cut contract is organized around one strategy context with nested serv
 `ctx.state` and `ctx.data` intentionally serve different jobs:
 
 - `ctx.state` exposes normalized latest-known runtime snapshots for fast strategy reads
+- `ctx.state` also exposes shared freshness snapshots and a small summary surface so strategies can reason about stale or missing data without importing runtime-local cache types
 - `ctx.data` exposes engine-owned read methods that return typed MinuteTemp contract models aligned to the upstream OpenAPI surface
+
+The repo also exposes provider-aligned model modules for engine adapters:
+
+- `strategy_core.minutetemp` for MinuteTemp REST/websocket payload types that feed the shared weather contract
+- `strategy_core.kalshi` for Kalshi REST/websocket payload types such as orders, orderbooks, market metadata, and live exchange updates
 
 Example:
 

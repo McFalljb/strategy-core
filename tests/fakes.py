@@ -41,6 +41,13 @@ from strategy_core.queries import (
     ReportsQuery,
 )
 from strategy_core.runtime import RuntimeMode, StrategyScope, TimerHandle
+from strategy_core.state import (
+    FreshnessDomain,
+    FreshnessDomainSummary,
+    FreshnessSnapshot,
+    FreshnessStatus,
+    FreshnessSummary,
+)
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -142,6 +149,25 @@ class FakeStateView:
     forecasts: dict[str, StationForecast] = field(default_factory=dict)
     oracle_scores: dict[str, StationOracleScores] = field(default_factory=dict)
     prices: dict[str, TickerPrices] = field(default_factory=dict)
+    weather_freshness: dict[str, FreshnessSnapshot] = field(default_factory=dict)
+    forecast_freshness: dict[str, FreshnessSnapshot] = field(default_factory=dict)
+    oracle_freshness: dict[str, FreshnessSnapshot] = field(default_factory=dict)
+    price_freshness: dict[str, FreshnessSnapshot] = field(default_factory=dict)
+    summary: FreshnessSummary = field(
+        default_factory=lambda: FreshnessSummary(
+            as_of=datetime(2026, 4, 8, tzinfo=UTC),
+            domains=tuple(
+                FreshnessDomainSummary(
+                    domain=domain,
+                    tracked_count=0,
+                    fresh_count=0,
+                    stale_count=0,
+                    stalest_age_seconds=None,
+                )
+                for domain in FreshnessDomain
+            ),
+        ),
+    )
 
     def get_weather(self, station: str) -> StationWeather | None:
         return self.weather.get(station)
@@ -154,6 +180,49 @@ class FakeStateView:
 
     def get_prices(self, ticker: str) -> TickerPrices | None:
         return self.prices.get(ticker)
+
+    def get_weather_freshness(self, station: str) -> FreshnessSnapshot:
+        return self.weather_freshness.get(
+            station,
+            FreshnessSnapshot(
+                domain=FreshnessDomain.WEATHER,
+                key=station,
+                status=FreshnessStatus.MISSING,
+            ),
+        )
+
+    def get_forecast_freshness(self, station: str) -> FreshnessSnapshot:
+        return self.forecast_freshness.get(
+            station,
+            FreshnessSnapshot(
+                domain=FreshnessDomain.FORECAST,
+                key=station,
+                status=FreshnessStatus.MISSING,
+            ),
+        )
+
+    def get_oracle_scores_freshness(self, station: str) -> FreshnessSnapshot:
+        return self.oracle_freshness.get(
+            station,
+            FreshnessSnapshot(
+                domain=FreshnessDomain.ORACLE,
+                key=station,
+                status=FreshnessStatus.MISSING,
+            ),
+        )
+
+    def get_price_freshness(self, ticker: str) -> FreshnessSnapshot:
+        return self.price_freshness.get(
+            ticker,
+            FreshnessSnapshot(
+                domain=FreshnessDomain.PRICE,
+                key=ticker,
+                status=FreshnessStatus.MISSING,
+            ),
+        )
+
+    def freshness_summary(self) -> FreshnessSummary:
+        return self.summary
 
 
 @dataclass

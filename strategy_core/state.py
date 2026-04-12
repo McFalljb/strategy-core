@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Literal, Protocol, runtime_checkable
 
@@ -11,6 +12,74 @@ if TYPE_CHECKING:
     from datetime import datetime
 
 FeeType = Literal["quadratic", "quadratic_with_maker_fees", "flat"]
+
+
+class FreshnessStatus(StrEnum):
+    """Shared freshness status visible to strategy code."""
+
+    FRESH = "fresh"
+    STALE = "stale"
+    MISSING = "missing"
+
+
+class FreshnessDomain(StrEnum):
+    """Tracked latest-state families exposed through `ctx.state`."""
+
+    WEATHER = "weather"
+    FORECAST = "forecast"
+    ORACLE = "oracle"
+    PRICE = "price"
+
+
+@dataclass(frozen=True, slots=True)
+class FreshnessSnapshot:
+    """Resolved freshness facts for one state domain/key pair."""
+
+    domain: FreshnessDomain
+    key: str
+    status: FreshnessStatus
+    source: str | None = None
+    updated_at: datetime | None = None
+    observed_at: datetime | None = None
+    stale_after_seconds: float | None = None
+    age_seconds: float | None = None
+    invalidation_reason: str | None = None
+    detail: str | None = None
+
+    @property
+    def is_stale(self) -> bool:
+        return self.status is FreshnessStatus.STALE
+
+    @property
+    def is_missing(self) -> bool:
+        return self.status is FreshnessStatus.MISSING
+
+
+@dataclass(frozen=True, slots=True)
+class FreshnessDomainSummary:
+    """Aggregated freshness counts for one state family."""
+
+    domain: FreshnessDomain
+    tracked_count: int
+    fresh_count: int
+    stale_count: int
+    stalest_age_seconds: float | None
+
+
+@dataclass(frozen=True, slots=True)
+class FreshnessSummary:
+    """Cross-domain freshness summary for strategies and operator tooling."""
+
+    as_of: datetime
+    domains: tuple[FreshnessDomainSummary, ...]
+
+    @property
+    def tracked_count(self) -> int:
+        return sum(domain.tracked_count for domain in self.domains)
+
+    @property
+    def stale_count(self) -> int:
+        return sum(domain.stale_count for domain in self.domains)
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,3 +237,13 @@ class MarketStateView(Protocol):
     def get_oracle_scores(self, station: str) -> StationOracleScores | None: ...
 
     def get_prices(self, ticker: str) -> TickerPrices | None: ...
+
+    def get_weather_freshness(self, station: str) -> FreshnessSnapshot: ...
+
+    def get_forecast_freshness(self, station: str) -> FreshnessSnapshot: ...
+
+    def get_oracle_scores_freshness(self, station: str) -> FreshnessSnapshot: ...
+
+    def get_price_freshness(self, ticker: str) -> FreshnessSnapshot: ...
+
+    def freshness_summary(self) -> FreshnessSummary: ...

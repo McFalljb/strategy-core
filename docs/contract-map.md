@@ -45,7 +45,9 @@ This document maps the current `trader` strategy-facing contract to the shared `
 - One canonical `run(ctx)` strategy contract
 - Shared immutable event models
 - Shared strategy-visible weather/forecast/oracle/price value objects
+- Shared strategy-visible freshness snapshots and summaries on the read-only `ctx.state` surface
 - Shared MinuteTemp OpenAPI-aligned read models for `ctx.data`
+- Shared Kalshi OpenAPI/AsyncAPI-aligned exchange models for engine adapters
 - Shared broker/data/HTTP/runtime/telemetry protocols
 - Small runtime and capability metadata surfaces
 
