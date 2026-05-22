@@ -28,6 +28,7 @@ from strategy_core.events import (
     ShutdownEvent,
     StationReport,
     StrategyEvent,
+    TimerWake,
     WeatherEvent,
     WeatherEventSource,
 )
@@ -269,6 +270,7 @@ __all__ = [
     "RuntimeCapabilities",
     "RuntimeMode",
     "ShutdownEvent",
+    "TimerWake",
     "StationForecast",
     "StationForecastData",
     "StationInfo",

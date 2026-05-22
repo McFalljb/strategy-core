@@ -286,6 +286,17 @@ class NewLow(BaseModel):
     source_report_id: str | None = None
 
 
+class TimerWake(BaseModel):
+    """Engine-scheduled wake delivered on the strategy event stream."""
+
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal["timer_wake"] = "timer_wake"
+    scheduled_for: datetime
+    fired_at: datetime | None = None
+    name: str = ""
+
+
 class ShutdownEvent(BaseModel):
     """Runtime sentinel signaling clean strategy shutdown."""
 
@@ -305,6 +316,7 @@ StrategyEvent = Annotated[
     | WeatherEvent
     | NewHigh
     | NewLow
+    | TimerWake
     | ShutdownEvent,
     Field(discriminator="type"),
 ]

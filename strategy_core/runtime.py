@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
 from enum import StrEnum
 from typing import TYPE_CHECKING, Literal, Protocol, runtime_checkable
 
@@ -29,6 +30,8 @@ class StrategyScope:
     station_id: str | None = None
     tickers: tuple[str, ...] = field(default_factory=tuple)
     market_type: MarketType | None = None
+    event_ticker: str | None = None
+    event_date: date | None = None
 
 
 @runtime_checkable
