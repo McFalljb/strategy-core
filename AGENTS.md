@@ -1,6 +1,6 @@
 # Strategy Core
 
-Shared typed strategy-contract library for the sibling `trader` and `backtester` repos.
+Shared typed strategy-contract library for consumer runtimes (e.g. `trader`).
 
 ## Project structure
 
@@ -8,7 +8,7 @@ Shared typed strategy-contract library for the sibling `trader` and `backtester`
 strategy-core/
   strategy_core/  # Shared import package
   tests/          # Test suite
-  docs/           # Plans and brainstorms
+  docs/           # Contract documentation (contract-map.md)
 ```
 
 ## Python stack
@@ -23,7 +23,7 @@ strategy-core/
 
 ```bash
 # Install dependencies (commits include uv.lock; CI uses --frozen)
-uv sync
+uv sync --group dev
 
 # Run tests
 uv run pytest
@@ -55,5 +55,4 @@ uv run ruff check . && uv run ruff format --check . && uv run mypy . && uv run p
 
 ## Docs
 
-- Plans: `docs/plans/` (dated filenames, YAML frontmatter)
-- Brainstorms: `docs/brainstorms/`
+- [docs/contract-map.md](docs/contract-map.md) — shared contract vs engine responsibilities

@@ -7,7 +7,7 @@ from datetime import date, datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from strategy_core.minutetemp import OracleRankBy, OracleScoreMode, ReportType
+    from strategy_core.minutetemp import OracleRankBy, OracleScoreMode, ReportType, TemperatureDayMode
 
 DateLike = datetime | str
 LocalDateLike = date | str
@@ -72,4 +72,5 @@ class ReportHistoryQuery:
 
 @dataclass(frozen=True, slots=True)
 class LatestObservationQuery:
+    day_mode: TemperatureDayMode | str | None = None
     refresh: bool = False

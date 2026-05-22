@@ -8,6 +8,9 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 RequiredText = Annotated[str, Field(min_length=1)]
+TemperatureDayMode = Literal["calendar_day", "nws_climate_day"]
+WuDayMode = Literal["calendar_day"]
+PersistenceStatus = Literal["uncommitted", "committed", "failed"]
 
 
 class MarketBracket(BaseModel):
@@ -82,6 +85,10 @@ class Observation(BaseModel):
     wu_daily_low_c: float | None = None
     wu_observation_time: datetime | None = None
     wu_fetched_at: datetime | None = None
+    temperature_day_mode: TemperatureDayMode | None = None
+    temperature_day_date: str | None = None
+    wu_day_mode: WuDayMode | None = None
+    wu_day_date: str | None = None
     dewpoint: float | None = None
     heat_index: float | None = None
     wind_chill: float | None = None
@@ -181,10 +188,11 @@ class OracleScoresUpdated(BaseModel):
     emitted_at: datetime | None = None
     slug: str = ""
     station_id: RequiredText
-    modes: list[Literal["overall", "day_ahead"]] = Field(default_factory=list)
+    modes: list[Literal["overall", "day_ahead", "day_of"]] = Field(default_factory=list)
     updated_at: datetime | None = None
     overall: OracleScoreTable | None = None
     day_ahead: OracleScoreTable | None = None
+    day_of: OracleScoreTable | None = None
 
 
 class StationReport(BaseModel):
@@ -254,12 +262,21 @@ class NewHigh(BaseModel):
     sequence: int | None = None
     city_sequence: int | None = None
     emitted_at: datetime | None = None
+    event_key: str = ""
+    source_timestamp: datetime | None = None
+    wmo_emit_time: datetime | None = None
+    producer_received_at: datetime | None = None
+    live_published_at: datetime | None = None
+    persistence_status: PersistenceStatus | None = None
+    producer_sequence: int | None = None
     slug: str = ""
     station_id: RequiredText
     value_f: float
     value_c: float
     prev_value_f: float | None = None
     observed_at: datetime | None = None
+    temperature_day_mode: TemperatureDayMode | None = None
+    temperature_day_date: str | None = None
     is_from_report: bool = False
     report_type: str | None = None
     source_report_id: str | None = None
@@ -275,12 +292,21 @@ class NewLow(BaseModel):
     sequence: int | None = None
     city_sequence: int | None = None
     emitted_at: datetime | None = None
+    event_key: str = ""
+    source_timestamp: datetime | None = None
+    wmo_emit_time: datetime | None = None
+    producer_received_at: datetime | None = None
+    live_published_at: datetime | None = None
+    persistence_status: PersistenceStatus | None = None
+    producer_sequence: int | None = None
     slug: str = ""
     station_id: RequiredText
     value_f: float
     value_c: float
     prev_value_f: float | None = None
     observed_at: datetime | None = None
+    temperature_day_mode: TemperatureDayMode | None = None
+    temperature_day_date: str | None = None
     is_from_report: bool = False
     report_type: str | None = None
     source_report_id: str | None = None

@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError
+from datetime import date
 from typing import Any, cast
 
 import pytest
 
-from strategy_core.minutetemp import LatestReportsData, ReportClockSchedule
+from strategy_core.minutetemp import LatestObservationData, LatestReportsData, ReportClockSchedule, StationInfo
 
 
 def test_latest_reports_data_freezes_schedule_mappings_and_lists() -> None:
@@ -29,6 +30,21 @@ def test_latest_reports_data_freezes_schedule_mappings_and_lists() -> None:
 
     with pytest.raises(AttributeError):
         cast("Any", schedules["cli"]).append(ReportClockSchedule(hour=17))
+
+
+def test_latest_observation_data_includes_day_bucketing_fields() -> None:
+    payload = LatestObservationData(
+        temperature_day_mode="nws_climate_day",
+        temperature_day_date=date(2026, 5, 22),
+        wu_day_mode="calendar_day",
+        wu_day_date=date(2026, 5, 22),
+        station=StationInfo(station_id="KMDW", uses_nws_climate_day=True),
+    )
+
+    assert payload.temperature_day_mode == "nws_climate_day"
+    assert payload.wu_day_mode == "calendar_day"
+    assert payload.station is not None
+    assert payload.station.uses_nws_climate_day is True
 
 
 def test_latest_reports_data_is_frozen() -> None:

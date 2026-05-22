@@ -6,6 +6,8 @@ build-backend = "hatchling.build"
 name = "strategy-core"
 version = "0.1.0"
 description = "Shared strategy contract package for trader and backtester runtimes"
+readme = "README.md"
+license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
     "pydantic>=2.0",

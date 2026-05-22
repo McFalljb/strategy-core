@@ -135,6 +135,7 @@ async def test_limits_reports_and_latest_observation_accept_query_objects() -> N
     )
     await data.fetch_latest_observation(refresh=True)
     await data.fetch_latest_observation(LatestObservationQuery(refresh=True))
+    await data.fetch_latest_observation(LatestObservationQuery(day_mode="nws_climate_day", refresh=True))
 
     assert data.limits_queries == [LimitsQuery(refresh=True), LimitsQuery(refresh=True)]
     assert data.latest_reports_queries == [
@@ -152,4 +153,5 @@ async def test_limits_reports_and_latest_observation_accept_query_objects() -> N
     assert data.latest_observation_queries == [
         LatestObservationQuery(refresh=True),
         LatestObservationQuery(refresh=True),
+        LatestObservationQuery(day_mode="nws_climate_day", refresh=True),
     ]

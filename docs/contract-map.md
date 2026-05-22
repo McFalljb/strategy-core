@@ -2,6 +2,17 @@
 
 This document maps the current `trader` strategy-facing contract to the shared `strategy_core` package. It is meant to make later `trader` and `backtester` adoption work explicit rather than implicit.
 
+## Upstream spec alignment
+
+Shared MinuteTemp models and events track these upstream specs:
+
+| Spec | Version | Notable additive changes reflected in `strategy_core` |
+|------|---------|--------------------------------------------------------|
+| OpenAPI (`minutetemp/go/api/docs/specs/openapi.yaml`) | 1.4.0 | `day_mode` on latest observation reads; `temperature_day_*` / `wu_day_*` on latest observation payloads; `day_of` oracle score mode |
+| AsyncAPI (`minutetemp/go/api/docs/specs/asyncapi.yaml`) | 1.13.0 | Same day-bucketing fields on `observation` / `new_high` / `new_low`; `oracle_scores_updated.day_of` and `modes` includes `day_of` |
+
+WebSocket `subscribe.oracle_score_modes` is a connection protocol concern; engines pass through opt-in and surface resulting payloads on `OracleScoresUpdated`.
+
 ## Current source modules
 
 | Current `trader` module | Shared package target | Notes |
@@ -30,7 +41,6 @@ This document maps the current `trader` strategy-facing contract to the shared `
   - `ctx.sleeve_id`
   - `ctx.tickers`
   - `ctx.market_type`
-- `a_conv90` still reaches into `ctx.queue` directly for heartbeat-style behavior.
 - `trader` still exposes additional helpers not included in the first shared cut, such as:
   - `get_latest_order_metadata`
   - `get_sleeve_equity`
@@ -53,7 +63,6 @@ This document maps the current `trader` strategy-facing contract to the shared `
 
 ## What it intentionally does not guarantee yet
 
-- Runtime compatibility shims for legacy `trader` strategy code
 - Replay execution semantics
 - Paper/live broker behavior
 - Provider/client implementations

@@ -14,7 +14,9 @@ ReportType = Literal["cli", "dsm", "metar_tgroup", "metar_6hr"]
 TemperatureUnit = Literal["F", "C"]
 PlanTier = Literal["starter", "pro", "clanker"]
 DataResolution = Literal["1m", "5m", "10m"]
-OracleScoreMode = Literal["overall", "day_ahead"]
+TemperatureDayMode = Literal["calendar_day", "nws_climate_day"]
+WuDayMode = Literal["calendar_day"]
+OracleScoreMode = Literal["overall", "day_ahead", "day_of"]
 OracleRankBy = Literal["combined", "high", "low"]
 ReportScheduleBasis = Literal["utc", "local"]
 
@@ -44,6 +46,7 @@ class StationInfo:
     station_id: str = ""
     name: str = ""
     temperature_unit: TemperatureUnit | str = "F"
+    uses_nws_climate_day: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -290,6 +293,10 @@ class LatestObservationData:
     wu_daily_low_c: float | None = None
     wu_observation_time: datetime | None = None
     wu_fetched_at: datetime | None = None
+    temperature_day_mode: TemperatureDayMode | str | None = None
+    temperature_day_date: date | None = None
+    wu_day_mode: WuDayMode | str | None = None
+    wu_day_date: date | None = None
 
 
 @dataclass(frozen=True, slots=True)

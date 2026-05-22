@@ -113,7 +113,9 @@ from strategy_core.minutetemp import (
     StationReportHistoryPage,
     StationReportRecord,
     StationReportsData,
+    TemperatureDayMode,
     TemperatureUnit,
+    WuDayMode,
 )
 from strategy_core.models import JSONObject, JSONValue, OrderId, StrategyConfig, TelemetryField, TelemetryFields
 from strategy_core.queries import (
@@ -291,7 +293,9 @@ __all__ = [
     "Telemetry",
     "TelemetryField",
     "TelemetryFields",
+    "TemperatureDayMode",
     "TemperatureUnit",
+    "WuDayMode",
     "TickerPrices",
     "TimerHandle",
     "WeatherEvent",
