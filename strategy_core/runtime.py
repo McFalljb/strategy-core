@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
 from enum import StrEnum
 from typing import TYPE_CHECKING, Literal, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from datetime import datetime
+    from datetime import date, datetime
 
 MarketType = Literal["high", "low"]
 
