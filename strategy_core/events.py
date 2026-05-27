@@ -32,6 +32,14 @@ class MarketBracket(BaseModel):
     yes_ask: float | None = None
     no_bid: float | None = None
     no_ask: float | None = None
+    yes_bid_depth: int | None = None
+    yes_ask_depth: int | None = None
+    no_bid_depth: int | None = None
+    no_ask_depth: int | None = None
+    yes_bid_levels: list[tuple[float, int]] = Field(default_factory=list)
+    yes_ask_levels: list[tuple[float, int]] = Field(default_factory=list)
+    no_bid_levels: list[tuple[float, int]] = Field(default_factory=list)
+    no_ask_levels: list[tuple[float, int]] = Field(default_factory=list)
     orderbook_depth: int | None = None
     volume: float | None = None
 

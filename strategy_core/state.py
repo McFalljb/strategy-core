@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from datetime import datetime
 
 FeeType = Literal["quadratic", "quadratic_with_maker_fees", "flat"]
+PriceLevel = tuple[float, int]
 
 
 class FreshnessStatus(StrEnum):
@@ -220,10 +221,24 @@ class TickerPrices:
     yes_ask: float | None = None
     no_bid: float | None = None
     no_ask: float | None = None
+    yes_bid_depth: int | None = None
+    yes_ask_depth: int | None = None
+    no_bid_depth: int | None = None
+    no_ask_depth: int | None = None
+    yes_bid_levels: tuple[PriceLevel, ...] = field(default_factory=tuple)
+    yes_ask_levels: tuple[PriceLevel, ...] = field(default_factory=tuple)
+    no_bid_levels: tuple[PriceLevel, ...] = field(default_factory=tuple)
+    no_ask_levels: tuple[PriceLevel, ...] = field(default_factory=tuple)
     orderbook_depth: int | None = None
     volume: float | None = None
     peak_yes_ask: float | None = None
     last_update: datetime | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "yes_bid_levels", tuple(self.yes_bid_levels))
+        object.__setattr__(self, "yes_ask_levels", tuple(self.yes_ask_levels))
+        object.__setattr__(self, "no_bid_levels", tuple(self.no_bid_levels))
+        object.__setattr__(self, "no_ask_levels", tuple(self.no_ask_levels))
 
 
 @runtime_checkable
