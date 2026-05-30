@@ -11,6 +11,7 @@ license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
     "pydantic>=2.0",
+    "tzdata>=2025.2",
 ]
 
 [tool.hatch.build.targets.wheel]

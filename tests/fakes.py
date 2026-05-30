@@ -40,7 +40,7 @@ from strategy_core.queries import (
     ReportHistoryQuery,
     ReportsQuery,
 )
-from strategy_core.runtime import RuntimeMode, StrategyScope, TimerHandle
+from strategy_core.runtime import RuntimeMode, StrategyScope, TimerHandle, WorkHandle
 from strategy_core.state import (
     FreshnessDomain,
     FreshnessDomainSummary,
@@ -50,7 +50,7 @@ from strategy_core.state import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import AsyncIterator, Awaitable, Callable
 
     from strategy_core.models import JSONValue, TelemetryField, TelemetryFields
     from strategy_core.state import StationForecast, StationOracleScores, StationWeather, TickerPrices
@@ -66,6 +66,35 @@ class FakeTimerHandle:
 
     def cancel(self) -> None:
         self.cancelled = True
+
+
+@dataclass
+class FakeWorkHandle:
+    """Simple in-memory tracked-work handle."""
+
+    work: Callable[[], Awaitable[None]]
+    name: str | None = None
+    event_id: str | None = None
+    cancelled: bool = False
+    done: bool = False
+    exception: BaseException | None = None
+
+    def cancel(self) -> None:
+        self.cancelled = True
+
+    async def drain(self, runtime: FakeRuntime) -> None:
+        if self.done or self.cancelled:
+            self.done = True
+            return
+        previous_event_id = runtime.current_event_id
+        runtime.current_event_id = self.event_id
+        try:
+            await self.work()
+        except Exception as exc:
+            self.exception = exc
+        finally:
+            runtime.current_event_id = previous_event_id
+            self.done = True
 
 
 @dataclass
@@ -105,11 +134,36 @@ class FakeRuntime:
     )
     clock: FakeClock = field(default_factory=FakeClock)
     scheduled_wakes: list[FakeTimerHandle] = field(default_factory=list)
+    scheduled_work: list[FakeWorkHandle] = field(default_factory=list)
+    current_event_id: str | None = None
+    suspended: bool = False
 
     def wake_at(self, when: datetime, *, name: str | None = None) -> TimerHandle:
         handle = FakeTimerHandle(when=when, name=name)
         self.scheduled_wakes.append(handle)
         return handle
+
+    def start_work(
+        self,
+        work: Callable[[], Awaitable[None]],
+        *,
+        name: str | None = None,
+    ) -> WorkHandle:
+        if self.suspended:
+            msg = "tracked work is not enabled for this runtime"
+            raise RuntimeError(msg)
+        handle = FakeWorkHandle(work=work, name=name, event_id=self.current_event_id)
+        self.scheduled_work.append(handle)
+        return handle
+
+    def start_event(self, event_id: str) -> None:
+        self.current_event_id = event_id
+
+    def finish_event(self) -> None:
+        self.current_event_id = None
+
+    def event_work_drained(self, event_id: str) -> bool:
+        return all(handle.done for handle in self.scheduled_work if handle.event_id == event_id)
 
 
 @dataclass

@@ -22,7 +22,7 @@ WebSocket `subscribe.oracle_score_modes` is a connection protocol concern; engin
 | `trader/engine/state.py` | `strategy_core/state.py` | Only strategy-visible value objects and the read-only state view moved; mutable cache/runtime logic stays in `trader` |
 | `trader/engine/data_access.py` | `strategy_core/data.py` + `strategy_core/queries.py` + `strategy_core/minutetemp.py` | Shared package defines the grouped data-client contract plus spec-aligned MinuteTemp read models, not caching or invalidation behavior |
 | `trader/engine/broker.py` | `strategy_core/broker.py` | Shared package defines the strategy-facing broker interface and value objects, not the paper broker implementation |
-| `trader` runtime metadata | `strategy_core/runtime.py` + `strategy_core/capabilities.py` | Scope facts now live under runtime metadata rather than as loose top-level fields |
+| `trader` runtime metadata and scheduling | `strategy_core/runtime.py` + `strategy_core/capabilities.py` | Scope facts, engine clock, one-shot timers, and bounded tracked work now live under runtime metadata rather than as loose top-level fields or raw strategy-owned asyncio tasks |
 | `trader` logging/metrics internals | `strategy_core/telemetry.py` | Shared package exposes the strategy-facing telemetry interface only |
 
 ## Intentional contract shifts
@@ -32,6 +32,8 @@ WebSocket `subscribe.oracle_score_modes` is a connection protocol concern; engin
 - Raw `ctx.queue` access is intentionally not part of the canonical shared contract.
   Replay and paper runtimes may still implement queue internals however they want.
 - Sleeve/station/ticker/market-type facts are expected to live under `ctx.runtime.scope`, not as unstructured top-level metadata forever.
+- Strategies should not create detached async work with raw `asyncio` task primitives.
+  Use `ctx.runtime.wake_at(...)` for future wake events, and use `ctx.runtime.start_work(...)` only for bounded immediate child work caused by current event handling.
 - The shared package does not ship feed clients, cache implementations, replay engines, or paper broker implementations.
 
 ## Known adoption gaps for later runtime plans
@@ -59,11 +61,12 @@ WebSocket `subscribe.oracle_score_modes` is a connection protocol concern; engin
 - Shared MinuteTemp OpenAPI-aligned read models for `ctx.data`
 - Shared Kalshi OpenAPI/AsyncAPI-aligned exchange models for engine adapters
 - Shared broker/data/HTTP/runtime/telemetry protocols
-- Small runtime and capability metadata surfaces
+- Small runtime and capability metadata surfaces, including engine clock, one-shot timers, and bounded tracked-work handles
 
 ## What it intentionally does not guarantee yet
 
 - Replay execution semantics
+- Full replay progression/drain-loop implementation for tracked work
 - Paper/live broker behavior
 - Provider/client implementations
 - Packaging or publishing strategy beyond normal Python library use

@@ -7,6 +7,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Literal, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
     from datetime import date, datetime
 
 MarketType = Literal["high", "low"]
@@ -44,6 +45,22 @@ class TimerHandle(Protocol):
 
 
 @runtime_checkable
+class WorkHandle(Protocol):
+    """Handle for bounded immediate work owned by the runtime."""
+
+    @property
+    def cancelled(self) -> bool: ...
+
+    @property
+    def done(self) -> bool: ...
+
+    @property
+    def exception(self) -> BaseException | None: ...
+
+    def cancel(self) -> None: ...
+
+
+@runtime_checkable
 class EngineClock(Protocol):
     """Engine-owned clock so strategy logic can stay portable across runtimes."""
 
@@ -56,7 +73,7 @@ class EngineClock(Protocol):
 
 @runtime_checkable
 class StrategyRuntime(Protocol):
-    """Runtime metadata and timer surface exposed to strategies."""
+    """Runtime metadata, timer, and bounded work surface exposed to strategies."""
 
     mode: RuntimeMode
     run_id: str
@@ -64,3 +81,10 @@ class StrategyRuntime(Protocol):
     clock: EngineClock
 
     def wake_at(self, when: datetime, *, name: str | None = None) -> TimerHandle: ...
+
+    def start_work(
+        self,
+        work: Callable[[], Awaitable[None]],
+        *,
+        name: str | None = None,
+    ) -> WorkHandle: ...
