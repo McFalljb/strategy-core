@@ -7,7 +7,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Literal, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Awaitable, Callable, Mapping
     from datetime import date, datetime
 
 MarketType = Literal["high", "low"]
@@ -79,6 +79,7 @@ class StrategyRuntime(Protocol):
     run_id: str
     scope: StrategyScope
     clock: EngineClock
+    runtime_identity: Mapping[str, object]
 
     def wake_at(self, when: datetime, *, name: str | None = None) -> TimerHandle: ...
 

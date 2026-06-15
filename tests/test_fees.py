@@ -104,6 +104,27 @@ def test_flat_taker_fee_matches_specific_fee_schedule_examples() -> None:
 
 
 def test_maker_fee_exemptions_and_unknown_fee_type() -> None:
+    default_maker = calculate_fill_fee(
+        action="buy",
+        price=0.25,
+        quantity=10,
+        liquidity_role="maker",
+    )
+    explicit_maker = calculate_fill_fee(
+        action="buy",
+        price=0.25,
+        quantity=10,
+        liquidity_role="maker",
+        fee_type="quadratic_with_maker_fees",
+    )
+
+    assert default_maker.trade_fee == pytest.approx(0.0329)
+    assert default_maker.rounding_fee == pytest.approx(0.0071)
+    assert default_maker.net_fee == pytest.approx(0.04)
+    assert default_maker.posted_balance_change == pytest.approx(-2.54)
+    assert default_maker.fee_accumulator == pytest.approx(0.0071)
+    assert explicit_maker == default_maker
+
     assert (
         calculate_fill_fee(
             action="buy",

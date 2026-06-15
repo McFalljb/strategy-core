@@ -57,3 +57,18 @@ jobs:
 
       - name: Pytest
         run: uv run pytest
+
+  rust:
+    name: Rust contract checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install rustfmt
+        run: rustup component add rustfmt
+
+      - name: Cargo format
+        run: cargo fmt --manifest-path native/Cargo.toml --all -- --check
+
+      - name: Cargo test
+        run: cargo test --manifest-path native/Cargo.toml

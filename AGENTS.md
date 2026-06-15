@@ -42,6 +42,15 @@ uv run ruff format --check .
 
 # Run all checks (lint + format + typecheck + test)
 uv run ruff check . && uv run ruff format --check . && uv run mypy . && uv run pytest
+
+# Run the shared Rust contract workspace tests
+cargo test --manifest-path native/Cargo.toml
+
+# Run only the shared Rust native-kernel contract tests
+cargo test --manifest-path native/strategy_core_kernel/Cargo.toml
+
+# Format-check the shared Rust contract workspace
+cargo fmt --manifest-path native/Cargo.toml --all -- --check
 ```
 
 ## Conventions

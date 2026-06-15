@@ -1,0 +1,19 @@
+[package]
+name = "strategy-core"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Rust parity surface for the shared strategy-core contract"
+license = "MIT"
+
+[lib]
+name = "strategy_core"
+path = "src/lib.rs"
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["serde", "std"] }
+chrono-tz = "0.10"
+rust_decimal = { version = "1", default-features = false, features = ["serde", "std"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+strategy-core-kernel = { path = "../strategy_core_kernel" }

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
+from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 from strategy_core.broker import Action, ContractSide, OrderResult, OrderType, PendingOrder, Position
@@ -50,7 +51,7 @@ from strategy_core.state import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Awaitable, Callable
+    from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 
     from strategy_core.models import JSONValue, TelemetryField, TelemetryFields
     from strategy_core.state import StationForecast, StationOracleScores, StationWeather, TickerPrices
@@ -137,6 +138,7 @@ class FakeRuntime:
     scheduled_work: list[FakeWorkHandle] = field(default_factory=list)
     current_event_id: str | None = None
     suspended: bool = False
+    runtime_identity: Mapping[str, object] = field(default_factory=lambda: MappingProxyType({"engine": "test"}))
 
     def wake_at(self, when: datetime, *, name: str | None = None) -> TimerHandle:
         handle = FakeTimerHandle(when=when, name=name)

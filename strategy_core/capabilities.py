@@ -16,6 +16,7 @@ class RuntimeCapabilities:
     supports_data_queries: bool = True
     supports_one_shot_timers: bool = False
     supports_recurring_timers: bool = False
+    supports_native_kernels: bool = False
     queue_is_durable: bool = False
     replay_controls_event_progression: bool = False
     event_delivery: EventDelivery = "wake"

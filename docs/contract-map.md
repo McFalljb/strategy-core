@@ -62,6 +62,9 @@ WebSocket `subscribe.oracle_score_modes` is a connection protocol concern; engin
 - Shared Kalshi OpenAPI/AsyncAPI-aligned exchange models for engine adapters
 - Shared broker/data/HTTP/runtime/telemetry protocols
 - Small runtime and capability metadata surfaces, including engine clock, one-shot timers, and bounded tracked-work handles
+- Additive native-kernel discovery and fallback helpers in `strategy_core.native`
+  for runtimes that can execute a native strategy hot loop without changing the
+  existing Python `run(ctx)` contract
 
 ## What it intentionally does not guarantee yet
 
@@ -70,3 +73,6 @@ WebSocket `subscribe.oracle_score_modes` is a connection protocol concern; engin
 - Paper/live broker behavior
 - Provider/client implementations
 - Packaging or publishing strategy beyond normal Python library use
+- A bundled native-kernel runtime implementation. `strategy_core.native` only
+  defines the Python-side helper/protocol contract; Backtester and Trader own
+  their engine adapters.
