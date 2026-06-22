@@ -249,7 +249,14 @@ class MarketStateView(Protocol):
 
     def get_forecast(self, station: str) -> StationForecast | None: ...
 
-    def get_oracle_scores(self, station: str) -> StationOracleScores | None: ...
+    def get_oracle_scores(
+        self,
+        station: str,
+        *,
+        days: str | int | None = None,
+        mode: str | None = None,
+        rank_by: str | None = None,
+    ) -> StationOracleScores | None: ...
 
     def get_prices(self, ticker: str) -> TickerPrices | None: ...
 

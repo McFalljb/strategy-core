@@ -39,6 +39,9 @@ def test_market_state_view_exposes_read_only_helpers() -> None:
     oracle = StationOracleScores(
         station_id="KMIA",
         scores=(OracleModelScore(model_id="ncep_hrrr_conus", high_mae=1.2),),
+        rank_by="high",
+        score_mode="day_of",
+        days_requested="7",
     )
     weather = StationWeather(current_temp=79.5, running_high=81.0)
     prices = TickerPrices(
@@ -113,6 +116,8 @@ def test_market_state_view_exposes_read_only_helpers() -> None:
     assert isinstance(state, MarketStateView)
     assert state.get_forecast("KMIA") is forecast
     assert state.get_oracle_scores("KMIA") is oracle
+    assert state.get_oracle_scores("KMIA", days="7", mode="day_of", rank_by="high") is oracle
+    assert state.get_oracle_scores("KMIA", days="30", mode="day_of", rank_by="high") is None
     assert state.get_weather("KMIA") is weather
     assert state.get_prices(prices.ticker) is prices
     assert state.get_forecast_freshness("KMIA") is forecast_freshness

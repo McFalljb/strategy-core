@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
+
 import pytest
 
-from strategy_core import Broker, PendingOrder
+from strategy_core import (
+    Broker,
+    BrokerOrderUpdate,
+    BrokerUpdateStatus,
+    OrderIntent,
+    PendingOrder,
+)
 from tests.fakes import FakeBroker
 
 
@@ -46,3 +54,48 @@ async def test_broker_cancel_methods_operate_on_pending_orders() -> None:
     )
     assert await broker.cancel_order("1") is True
     assert await broker.cancel_all_orders() == 0
+
+
+def test_order_intent_and_update_model_direct_sweep_semantics() -> None:
+    intent = OrderIntent(
+        ticker="KXHIGHMIA-26APR08-B70.5",
+        action="buy",
+        contract_side="yes",
+        order_type="market",
+        quantity=5,
+        max_price=0.61,
+        max_cost=305.0,
+        execution_style="sweep",
+        time_policy="immediate_or_cancel",
+        signal_type="demo",
+        client_order_id="client-1",
+    )
+
+    assert asdict(intent)["execution_style"] == "sweep"
+    assert intent.max_price == 0.61
+    assert intent.signal_metadata is None
+
+    update = BrokerOrderUpdate(
+        order_id="order-1",
+        sleeve_id="demo:KMIA",
+        ticker=intent.ticker,
+        status="partially_filled",
+        action=intent.action,
+        contract_side=intent.contract_side,
+        requested_quantity=5,
+        filled_quantity=3,
+        remaining_quantity=2,
+        average_fill_price=0.59,
+        client_order_id=intent.client_order_id,
+        provider_sequence="sid=13:seq=42",
+    )
+
+    assert update.status == "partially_filled"
+    assert update.remaining_quantity == 2
+    assert update.provider_sequence == "sid=13:seq=42"
+
+
+def test_broker_update_status_terminal_market_transitions() -> None:
+    statuses: tuple[BrokerUpdateStatus, BrokerUpdateStatus] = ("expired", "closed")
+
+    assert statuses == ("expired", "closed")

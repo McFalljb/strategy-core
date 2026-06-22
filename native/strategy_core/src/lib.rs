@@ -26,7 +26,8 @@ pub mod stations;
 pub mod telemetry;
 
 pub use broker::{
-    Action, Broker, ContractSide, OrderResult, OrderStatus, OrderType, PendingOrder, Position,
+    Action, Broker, BrokerOrderUpdate, BrokerUpdateStatus, ContractSide, OrderExecutionStyle,
+    OrderIntent, OrderResult, OrderStatus, OrderTimePolicy, OrderType, PendingOrder, Position,
 };
 pub use capabilities::{EventDelivery, RuntimeCapabilities};
 pub use climate_day::{

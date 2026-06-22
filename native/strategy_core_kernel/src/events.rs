@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -122,22 +124,22 @@ pub struct ForecastHourlySnapshot<'a> {
     pub precipitation_probability: Option<f64>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ForecastModelSnapshot<'a> {
     pub model_id: &'a str,
     pub value: f64,
     pub version: &'a str,
     pub updated_at: Option<DateTime<Utc>>,
     pub run_issued_at: Option<DateTime<Utc>>,
-    pub hourly: &'a [ForecastHourlySnapshot<'a>],
+    pub hourly: Cow<'a, [ForecastHourlySnapshot<'a>]>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ForecastInputSnapshot<'a> {
     pub station_id: &'a str,
     pub received_at: Option<DateTime<Utc>>,
     pub source: &'a str,
-    pub models: &'a [ForecastModelSnapshot<'a>],
+    pub models: Cow<'a, [ForecastModelSnapshot<'a>]>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -153,7 +155,7 @@ pub struct OracleModelScoreSnapshot<'a> {
     pub day_count: Option<i64>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct OracleInputSnapshot<'a> {
     pub station_id: &'a str,
     pub received_at: Option<DateTime<Utc>>,
@@ -163,7 +165,7 @@ pub struct OracleInputSnapshot<'a> {
     pub days_requested: &'a str,
     pub range_start: &'a str,
     pub range_end: &'a str,
-    pub scores: &'a [OracleModelScoreSnapshot<'a>],
+    pub scores: Cow<'a, [OracleModelScoreSnapshot<'a>]>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -209,7 +211,10 @@ pub enum StrategyEventView<'a> {
     StationReport(StationReportView<'a>),
     TimerWake(TimerWakeView<'a>),
     Shutdown(ShutdownView<'a>),
-    Unknown { event_type: &'a str },
+    Unknown {
+        event_type: &'a str,
+        emitted_at: Option<DateTime<Utc>>,
+    },
 }
 
 impl StrategyEventView<'_> {
@@ -221,7 +226,7 @@ impl StrategyEventView<'_> {
             Self::StationReport(_) => "station_report",
             Self::TimerWake(_) => "timer_wake",
             Self::Shutdown(_) => "shutdown",
-            Self::Unknown { event_type } => event_type,
+            Self::Unknown { event_type, .. } => event_type,
         }
     }
 }

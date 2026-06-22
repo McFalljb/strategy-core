@@ -231,8 +231,24 @@ class FakeStateView:
     def get_forecast(self, station: str) -> StationForecast | None:
         return self.forecasts.get(station)
 
-    def get_oracle_scores(self, station: str) -> StationOracleScores | None:
-        return self.oracle_scores.get(station)
+    def get_oracle_scores(
+        self,
+        station: str,
+        *,
+        days: str | int | None = None,
+        mode: str | None = None,
+        rank_by: str | None = None,
+    ) -> StationOracleScores | None:
+        scores = self.oracle_scores.get(station)
+        if scores is None:
+            return None
+        if days is not None and scores.days_requested != str(days):
+            return None
+        if mode is not None and scores.score_mode != mode:
+            return None
+        if rank_by is not None and scores.rank_by != rank_by:
+            return None
+        return scores
 
     def get_prices(self, ticker: str) -> TickerPrices | None:
         return self.prices.get(ticker)

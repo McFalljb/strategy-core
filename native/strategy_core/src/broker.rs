@@ -35,6 +35,39 @@ pub enum OrderStatus {
     Cancelled,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OrderExecutionStyle {
+    RestingLimit,
+    Direct,
+    Sweep,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OrderTimePolicy {
+    GoodTillCanceled,
+    ImmediateOrCancel,
+    FillOrKill,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BrokerUpdateStatus {
+    Accepted,
+    Rejected,
+    Submitted,
+    Resting,
+    PartiallyFilled,
+    Filled,
+    CancelRequested,
+    Cancelled,
+    Expired,
+    Closed,
+    SubmissionUnknown,
+    Reconciled,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Position {
     pub ticker: String,
@@ -83,6 +116,55 @@ pub struct OrderResult {
     pub fee_cost: f64,
     #[serde(default)]
     pub reason: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct OrderIntent {
+    pub ticker: String,
+    pub action: Action,
+    pub contract_side: ContractSide,
+    pub order_type: OrderType,
+    pub quantity: i64,
+    pub limit_price: Option<f64>,
+    pub max_price: Option<f64>,
+    pub max_cost: Option<f64>,
+    pub execution_style: Option<OrderExecutionStyle>,
+    pub time_policy: Option<OrderTimePolicy>,
+    #[serde(default)]
+    pub reduce_only: bool,
+    #[serde(default)]
+    pub post_only: bool,
+    pub signal_type: Option<String>,
+    pub signal_metadata: Option<String>,
+    pub client_order_id: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct BrokerOrderUpdate {
+    pub order_id: OrderId,
+    pub sleeve_id: String,
+    pub ticker: String,
+    pub status: BrokerUpdateStatus,
+    pub action: Action,
+    pub contract_side: ContractSide,
+    pub requested_quantity: i64,
+    #[serde(default)]
+    pub filled_quantity: i64,
+    #[serde(default)]
+    pub remaining_quantity: i64,
+    #[serde(default)]
+    pub fill_price: f64,
+    #[serde(default)]
+    pub average_fill_price: f64,
+    #[serde(default)]
+    pub fee_cost: f64,
+    #[serde(default)]
+    pub reason: String,
+    pub client_order_id: Option<String>,
+    pub provider_order_id: Option<String>,
+    pub provider_sequence: Option<String>,
+    #[serde(default)]
+    pub updated_at: String,
 }
 
 pub trait Broker {

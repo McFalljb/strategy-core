@@ -6,13 +6,14 @@ use std::{
 use chrono::{NaiveDate, TimeZone, Utc};
 use serde_json::{Value, json};
 use strategy_core::{
-    Action, Broker, ContractSide, EngineClock, ForecastRunLookup, FreshnessDomain,
-    FreshnessDomainSummary, FreshnessSnapshot, FreshnessStatus, FreshnessSummary, HttpClient,
-    HttpMethod, HttpRequest, HttpResponse, LatestObservationQuery, MarketStateView, OrderResult,
-    OrderStatus, OrderType, PendingOrder, Position, RuntimeCapabilities, RuntimeMode,
-    SIGNAL_DSM_REACTION, SIGNAL_METAR_6HR_LOW, SIGNAL_METAR_6HR_NEW_LOW, StrategyContext,
-    StrategyDataClient, StrategyEvent, StrategyLogger, StrategyRuntime, StrategyScope, Telemetry,
-    TelemetryField, TickerPrices, TimerHandle, WorkHandle, climate_day_date, climate_day_end,
+    Action, Broker, BrokerOrderUpdate, BrokerUpdateStatus, ContractSide, EngineClock,
+    ForecastRunLookup, FreshnessDomain, FreshnessDomainSummary, FreshnessSnapshot, FreshnessStatus,
+    FreshnessSummary, HttpClient, HttpMethod, HttpRequest, HttpResponse, LatestObservationQuery,
+    MarketStateView, OrderExecutionStyle, OrderIntent, OrderResult, OrderStatus, OrderTimePolicy,
+    OrderType, PendingOrder, Position, RuntimeCapabilities, RuntimeMode, SIGNAL_DSM_REACTION,
+    SIGNAL_METAR_6HR_LOW, SIGNAL_METAR_6HR_NEW_LOW, StrategyContext, StrategyDataClient,
+    StrategyEvent, StrategyLogger, StrategyRuntime, StrategyScope, Telemetry, TelemetryField,
+    TickerPrices, TimerHandle, WorkHandle, climate_day_date, climate_day_end,
     climate_day_has_ended, parse_climate_date, station_timezone,
 };
 
@@ -172,6 +173,63 @@ fn strategy_context_traits_are_implementable() {
         ctx.broker()
             .get_positions()
             .contains_key("KXHIGHMIA-26APR08-B70.5:yes")
+    );
+}
+
+#[test]
+fn broker_intent_and_update_models_preserve_explicit_execution_semantics() {
+    let intent = OrderIntent {
+        ticker: "KXHIGHMIA-26APR08-B70.5".to_string(),
+        action: Action::Buy,
+        contract_side: ContractSide::Yes,
+        order_type: OrderType::Market,
+        quantity: 5,
+        limit_price: None,
+        max_price: Some(0.61),
+        max_cost: Some(305.0),
+        execution_style: Some(OrderExecutionStyle::Sweep),
+        time_policy: Some(OrderTimePolicy::ImmediateOrCancel),
+        reduce_only: false,
+        post_only: false,
+        signal_type: Some("demo".to_string()),
+        signal_metadata: None,
+        client_order_id: Some("client-1".to_string()),
+    };
+
+    let encoded = serde_json::to_value(&intent).unwrap();
+    assert_eq!(encoded["execution_style"], json!("sweep"));
+    assert_eq!(encoded["time_policy"], json!("immediate_or_cancel"));
+
+    let update = BrokerOrderUpdate {
+        order_id: "order-1".to_string(),
+        sleeve_id: "demo:KMIA".to_string(),
+        ticker: intent.ticker,
+        status: BrokerUpdateStatus::PartiallyFilled,
+        action: intent.action,
+        contract_side: intent.contract_side,
+        requested_quantity: 5,
+        filled_quantity: 3,
+        remaining_quantity: 2,
+        fill_price: 0.0,
+        average_fill_price: 0.59,
+        fee_cost: 0.0,
+        reason: String::new(),
+        client_order_id: intent.client_order_id,
+        provider_order_id: Some("provider-order-1".to_string()),
+        provider_sequence: Some("sid=13:seq=42".to_string()),
+        updated_at: "2026-06-17T12:00:00Z".to_string(),
+    };
+
+    let encoded_update = serde_json::to_value(update).unwrap();
+    assert_eq!(encoded_update["status"], json!("partially_filled"));
+    assert_eq!(encoded_update["provider_sequence"], json!("sid=13:seq=42"));
+    assert_eq!(
+        serde_json::to_value(BrokerUpdateStatus::Expired).unwrap(),
+        json!("expired")
+    );
+    assert_eq!(
+        serde_json::to_value(BrokerUpdateStatus::Closed).unwrap(),
+        json!("closed")
     );
 }
 
