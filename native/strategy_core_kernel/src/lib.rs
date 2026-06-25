@@ -9,8 +9,9 @@ pub mod errors;
 pub mod events;
 
 pub use actions::{
-    CancelOrderRequest, ContractSide, KernelAction, LogAction, OrderAction, OrderResult,
-    OrderStatus, OrderType, PlaceOrderRequest, StopAction, TelemetryAction, WakeAtRequest,
+    CancelAllOrdersRequest, CancelOrderRequest, ContractSide, KernelAction, LogAction, OrderAction,
+    OrderResult, OrderStatus, OrderType, PendingOrderView, PlaceOrderRequest, StopAction,
+    TelemetryAction, WakeAtRequest,
 };
 pub use context::{
     NativeKernel, StrategyKernelBroker, StrategyKernelContext, StrategyKernelData,
@@ -18,8 +19,9 @@ pub use context::{
 };
 pub use errors::{KernelError, KernelResult};
 pub use events::{
-    ForecastHourlySnapshot, ForecastInputSnapshot, ForecastModelSnapshot, MarketBracketView,
-    ObservationView, OracleInputSnapshot, OracleModelScoreSnapshot, PriceLevelView,
-    PriceUpdateView, ShutdownView, StationReportView, StationWeatherView, StrategyEventView,
-    TickerPriceView, TimerWakeView,
+    ForecastHourlySnapshot, ForecastInputSnapshot, ForecastModelSnapshot, ForecastUpdatedView,
+    ForecastVersionsView, HighLowView, MarketBracketView, ObservationView, OracleInputSnapshot,
+    OracleModelScoreSnapshot, OracleScoresUpdatedView, PriceLevelView, PriceUpdateView,
+    ShutdownView, StationReportView, StationWeatherView, StrategyEventView, TickerPriceView,
+    TimerWakeView, WeatherEventSourceView, WeatherEventView,
 };

@@ -1,4 +1,7 @@
-use crate::actions::{ContractSide, KernelAction, OrderResult, PlaceOrderRequest, WakeAtRequest};
+use crate::actions::{
+    CancelOrderRequest, ContractSide, KernelAction, OrderResult, PendingOrderView,
+    PlaceOrderRequest, WakeAtRequest,
+};
 use crate::errors::KernelResult;
 use crate::events::{
     ForecastInputSnapshot, OracleInputSnapshot, StationWeatherView, StrategyEventView,
@@ -68,7 +71,19 @@ pub trait StrategyKernelBroker {
 
     fn position_avg_price(&self, ticker: &str, side: ContractSide) -> Option<f64>;
 
+    fn pending_orders(&self) -> Vec<PendingOrderView<'_>> {
+        Vec::new()
+    }
+
     fn place_order(&mut self, request: PlaceOrderRequest) -> KernelResult<OrderResult>;
+
+    fn cancel_order(&mut self, _request: CancelOrderRequest) -> KernelResult<bool> {
+        Ok(false)
+    }
+
+    fn cancel_all_orders(&mut self) -> KernelResult<usize> {
+        Ok(0)
+    }
 }
 
 pub trait StrategyKernelRuntime {

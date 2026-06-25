@@ -1,10 +1,10 @@
 use chrono::{TimeZone, Utc};
 use strategy_core_kernel::{
-    ContractSide, KernelAction, KernelResult, MarketBracketView, NativeKernel, OrderAction,
-    OrderResult, OrderStatus, OrderType, PlaceOrderRequest, PriceLevelView, PriceUpdateView,
-    StrategyEventView, StrategyKernelBroker, StrategyKernelContext, StrategyKernelData,
-    StrategyKernelRuntime, StrategyKernelState, StrategyKernelTelemetry, TickerPriceView,
-    TimerWakeView, WakeAtRequest,
+    CancelAllOrdersRequest, CancelOrderRequest, ContractSide, KernelAction, KernelResult,
+    MarketBracketView, NativeKernel, OrderAction, OrderResult, OrderStatus, OrderType,
+    PlaceOrderRequest, PriceLevelView, PriceUpdateView, StrategyEventView, StrategyKernelBroker,
+    StrategyKernelContext, StrategyKernelData, StrategyKernelRuntime, StrategyKernelState,
+    StrategyKernelTelemetry, TickerPriceView, TimerWakeView, WakeAtRequest,
 };
 
 const YES_BID_LEVELS: [PriceLevelView; 1] = [PriceLevelView {
@@ -79,11 +79,17 @@ impl StrategyKernelState for FakeState {
     fn get_price(&self, _ticker: &str) -> Option<TickerPriceView<'_>> {
         Some(TickerPriceView {
             ticker: "KXHIGHMIA-26MAY30-B90",
+            source: "fixture",
             event_ticker: "KXHIGHMIA-26MAY30",
             event_date: "2026-05-30",
+            series_ticker: "KXHIGHMIA",
+            fee_type: "kalshi",
+            fee_multiplier: Some(1.0),
             strike_type: "above",
             floor_strike: Some(90.0),
             cap_strike: None,
+            yes_price: 0.42,
+            no_price: 0.58,
             yes_bid: Some(0.41),
             yes_ask: Some(0.42),
             no_bid: Some(0.58),
@@ -97,6 +103,8 @@ impl StrategyKernelState for FakeState {
             no_bid_levels: &NO_BID_LEVELS,
             no_ask_levels: &NO_ASK_LEVELS,
             orderbook_depth: Some(2),
+            volume: Some(100.0),
+            peak_yes_ask: Some(0.43),
             last_update: Some(Utc.with_ymd_and_hms(2026, 5, 30, 12, 0, 0).unwrap()),
         })
     }
@@ -236,6 +244,23 @@ fn kernel_can_emit_deterministic_place_order_action() {
             r#""quantity":2,"limit_price":0.42,"signal_type":"test_signal","#,
             r#""signal_metadata":"{\"source\":\"fixture\"}","client_order_id":"kernel-1"}"#
         ),
+    );
+}
+
+#[test]
+fn kernel_can_emit_deterministic_cancel_actions() {
+    let cancel_one = KernelAction::CancelOrder(CancelOrderRequest {
+        order_id: "order-1".to_string(),
+    });
+    let cancel_all = KernelAction::CancelAllOrders(CancelAllOrdersRequest {});
+
+    assert_eq!(
+        serde_json::to_string(&cancel_one).unwrap(),
+        r#"{"type":"cancel_order","order_id":"order-1"}"#,
+    );
+    assert_eq!(
+        serde_json::to_string(&cancel_all).unwrap(),
+        r#"{"type":"cancel_all_orders"}"#,
     );
 }
 

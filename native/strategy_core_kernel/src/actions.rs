@@ -51,6 +51,26 @@ pub struct CancelOrderRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CancelAllOrdersRequest {}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PendingOrderView<'a> {
+    pub order_id: &'a str,
+    pub ticker: &'a str,
+    pub status: &'a str,
+    pub action: &'a str,
+    pub contract_side: &'a str,
+    pub limit_price: Option<f64>,
+    pub requested_quantity: i64,
+    pub filled_quantity: i64,
+    pub remaining_quantity: i64,
+    pub reserved_cost: f64,
+    pub client_order_id: Option<&'a str>,
+    pub created_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WakeAtRequest {
     pub when: DateTime<Utc>,
     pub name: Option<String>,
@@ -79,6 +99,7 @@ pub struct StopAction {
 pub enum KernelAction {
     PlaceOrder(PlaceOrderRequest),
     CancelOrder(CancelOrderRequest),
+    CancelAllOrders(CancelAllOrdersRequest),
     WakeAt(WakeAtRequest),
     Telemetry(TelemetryAction),
     Log(LogAction),
