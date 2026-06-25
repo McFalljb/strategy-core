@@ -2,9 +2,9 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Shared Python contract package for strategy code that runs across paper, replay, and live engines. Consumer repos (such as [`trader`](https://github.com/McFalljb/trader)) implement the runtime; this library defines the strategy-facing surface.
+Shared strategy contract package for Python and Rust strategy code that runs across paper, replay, backtest, and live engines. Consumer repos (such as [`trader2`](https://github.com/McFalljb/trader2)) implement the runtime; this library defines the strategy-facing surface.
 
-This repo is a **library, not an engine**. It holds the canonical `run(ctx)` contract, typed events, shared value objects, and runtime-neutral protocols.
+This repo is a **library, not an engine**. It holds the canonical Python `run(ctx)` contract, typed events, shared value objects, runtime-neutral protocols, and Rust parity crates for native strategy adapters.
 
 ## Status
 
@@ -14,12 +14,15 @@ Version **0.1.x** is an early public contract. Breaking changes may land without
 
 - [uv](https://docs.astral.sh/uv/)
 - Python 3.12+ (see `.python-version`)
+- Rust 1.85+ when working on the optional native crates under `native/`
 
 ## Quick start
 
 ```bash
 uv sync --group dev
 uv run ruff check . && uv run ruff format --check . && uv run mypy . && uv run pytest
+cargo fmt --manifest-path native/Cargo.toml --all -- --check
+cargo test --manifest-path native/Cargo.toml
 ```
 
 When you change dependencies in `pyproject.toml`, run `uv lock` (or `uv sync`) and commit `uv.lock` in the same change. CI uses `uv sync --frozen --group dev`.
@@ -56,7 +59,7 @@ The contract centers on one strategy context with nested services:
 | `ctx.config` | Strategy configuration mapping |
 | `ctx.telemetry` | Counters, gauges, structured logging hooks |
 
-`ctx.state` and `ctx.data` are intentionally separate: state is the fast latest-known view; data is explicit fetches against upstream APIs.
+`ctx.state` and `ctx.data` are intentionally separate: state is the fast latest-known view; data is explicit engine-owned reads against upstream APIs. `ctx.http` is optional and must be enabled by the runtime; strategies should check `ctx.capabilities.supports_http` before using it.
 
 Provider-aligned model modules for engine adapters:
 
@@ -89,15 +92,17 @@ Engines implement these protocols differently while keeping the same strategy-fa
 ## Repository layout
 
 ```text
-strategy_core/   # Importable package
-tests/           # Pytest suite
-docs/            # Contract documentation
+strategy_core/   # Importable Python package
+tests/           # Python pytest suite
+native/          # Rust strategy_core and strategy_core_kernel crates
+docs/            # Contract and Rust parity documentation
 AGENTS.md        # Contributor commands and conventions
 ```
 
 ## Documentation
 
-- [docs/contract-map.md](docs/contract-map.md) — mapping from engine modules to this package
+- [docs/contract-map.md](docs/contract-map.md) — shared contract boundaries and engine responsibilities
+- [docs/rust-parity-strategy-core.md](docs/rust-parity-strategy-core.md) — Rust parity status and native crate rules
 
 ## License
 

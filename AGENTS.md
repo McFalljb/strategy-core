@@ -1,6 +1,6 @@
 # Strategy Core
 
-Shared typed strategy-contract library for consumer runtimes (e.g. `trader`).
+Shared typed strategy-contract library for consumer runtimes (e.g. `trader2`).
 
 ## Project structure
 
@@ -8,7 +8,8 @@ Shared typed strategy-contract library for consumer runtimes (e.g. `trader`).
 strategy-core/
   strategy_core/  # Shared import package
   tests/          # Test suite
-  docs/           # Contract documentation (contract-map.md)
+  native/         # Rust strategy_core and strategy_core_kernel crates
+  docs/           # Contract documentation and Rust parity notes
 ```
 
 ## Python stack

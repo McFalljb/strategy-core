@@ -1,9 +1,9 @@
 # Rust Strategy-Core Parity
 
 The Python package remains the complete source contract today. The Rust crate in
-`native/strategy_core` is the parity target for moving Trader and Backtester to a
-shared Rust-owned contract while keeping Python bots supported through engine
-adapters.
+`native/strategy_core` is the parity target for moving consumer runtimes such as
+Trader2 and backtesters to a shared Rust-owned contract while keeping Python bots
+supported through engine adapters.
 
 ## Crates
 
@@ -11,7 +11,7 @@ adapters.
   contract used by the Rust backtester.
 - `native/strategy_core`: broader Rust parity surface for Python
   `strategy_core` modules. This crate should own shared helper logic and value
-  objects that both Trader and Backtester need.
+  objects that consumer runtimes need.
 
 ## Current Rust Parity Status
 
@@ -40,8 +40,8 @@ adapters.
 
 - Rust enum serde names must match the Python literal values.
 - Shared helper functions need direct Rust tests mirroring the Python tests.
-- Engine-specific behavior stays out of this repo. Trader and Backtester own
-  runtime adapters, broker execution, replay ordering, persistence, and risk.
+- Engine-specific behavior stays out of this repo. Consumer runtimes own runtime
+  adapters, broker execution, replay ordering, persistence, and risk.
 - New Rust bot work should depend on `native/strategy_core` for shared types and
   `native/strategy_core_kernel` for the hot-loop execution trait.
 - Python bot compatibility remains an adapter responsibility: Python scripts
@@ -50,7 +50,7 @@ adapters.
 
 ## Remaining Integration Work
 
-- Wire Backtester/Trader adapters to use the shared Rust state/event types for
+- Wire consumer runtime adapters to use the shared Rust state/event types for
   price, forecast, oracle, weather, freshness, and fee status instead of local
   copies.
 - Add fixture-based cross-language conformance tests that serialize Python

@@ -1,6 +1,6 @@
 # Strategy Contract Map
 
-This document maps the current `trader` strategy-facing contract to the shared `strategy_core` package. It is meant to make later `trader` and `backtester` adoption work explicit rather than implicit.
+This document maps the shared `strategy_core` package to the strategy-facing responsibilities that consumer runtimes such as `trader2` and backtesters implement. The package defines portable contracts and value objects; engines own feeds, adapters, broker execution, persistence, and replay/live semantics.
 
 ## Upstream spec alignment
 
@@ -13,17 +13,22 @@ Shared MinuteTemp models and events track these upstream specs:
 
 WebSocket `subscribe.oracle_score_modes` is a connection protocol concern; engines pass through opt-in and surface resulting payloads on `OracleScoresUpdated`.
 
-## Current source modules
+## Package modules
 
-| Current `trader` module | Shared package target | Notes |
+| Shared package module | Contract role | Engine-owned behavior intentionally excluded |
 |---|---|---|
-| `trader/engine/context.py` | `strategy_core/context.py` | Shared contract now centers on nested services instead of a flat `fetch_*` surface |
-| `trader/engine/events.py` | `strategy_core/events.py` | Event field names remain spec-aligned and immutable |
-| `trader/engine/state.py` | `strategy_core/state.py` | Only strategy-visible value objects and the read-only state view moved; mutable cache/runtime logic stays in `trader` |
-| `trader/engine/data_access.py` | `strategy_core/data.py` + `strategy_core/queries.py` + `strategy_core/minutetemp.py` | Shared package defines the grouped data-client contract plus spec-aligned MinuteTemp read models, not caching or invalidation behavior |
-| `trader/engine/broker.py` | `strategy_core/broker.py` | Shared package defines the strategy-facing broker interface and value objects, not the paper broker implementation |
-| `trader` runtime metadata and scheduling | `strategy_core/runtime.py` + `strategy_core/capabilities.py` | Scope facts, engine clock, one-shot timers, and bounded tracked work now live under runtime metadata rather than as loose top-level fields or raw strategy-owned asyncio tasks |
-| `trader` logging/metrics internals | `strategy_core/telemetry.py` | Shared package exposes the strategy-facing telemetry interface only |
+| `strategy_core.context` | Canonical `StrategyContext` protocol and `run(ctx)` handler type. | Context construction, process supervision, and adapter IPC. |
+| `strategy_core.events` | Immutable strategy-visible event models. | Provider subscriptions, ordering, replay progression, and fanout. |
+| `strategy_core.state` | Strategy-visible weather/forecast/oracle/price value objects plus read-only state view protocol. | Mutable latest-state caches, freshness policy enforcement, and persistence. |
+| `strategy_core.data`, `strategy_core.queries`, `strategy_core.minutetemp` | Grouped data-client protocol and MinuteTemp read models. | REST/WebSocket clients, caching, refresh throttling, credentials, and invalidation. |
+| `strategy_core.broker` | Strategy-facing order, position, buying-power, and broker protocol types. | Paper simulation, live order placement, reconciliation, risk gates, and ledgers. |
+| `strategy_core.runtime`, `strategy_core.capabilities` | Scope facts, runtime mode, clock, one-shot timers, bounded work handles, and feature flags. | Engine scheduling loops and lifecycle supervision. |
+| `strategy_core.http` | Optional runtime-mediated HTTP protocol. | Whether HTTP is enabled and how requests are authorized/audited. |
+| `strategy_core.telemetry` | Strategy-facing counters, gauges, and structured logging hooks. | Metrics backends, log sinks, and operator status aggregation. |
+| `strategy_core.kalshi` | Kalshi REST/WebSocket payload types for engine adapters. | Kalshi clients, authentication, rate limits, and replay storage. |
+| `strategy_core.native` | Python-side native-kernel discovery/fallback helper contract. | Native strategy loading policy and engine-specific hot-loop execution. |
+| `native/strategy_core` | Rust parity surface for the Python strategy contract. | Engine adapters and provider/broker implementations. |
+| `native/strategy_core_kernel` | Narrow native strategy hot-loop context/action/event contract. | Runtime loop ownership and broker/feed side effects. |
 
 ## Intentional contract shifts
 
@@ -36,21 +41,18 @@ WebSocket `subscribe.oracle_score_modes` is a connection protocol concern; engin
   Use `ctx.runtime.wake_at(...)` for future wake events, and use `ctx.runtime.start_work(...)` only for bounded immediate child work caused by current event handling.
 - The shared package does not ship feed clients, cache implementations, replay engines, or paper broker implementations.
 
-## Known adoption gaps for later runtime plans
+## Engine adoption notes
 
-- Current `trader` strategies still use direct metadata such as:
-  - `ctx.station`
-  - `ctx.sleeve_id`
-  - `ctx.tickers`
-  - `ctx.market_type`
-- `trader` still exposes additional helpers not included in the first shared cut, such as:
-  - `get_latest_order_metadata`
-  - `get_sleeve_equity`
-  - `get_daily_pool_remaining`
-  - `get_realized_pnl`
-  - `get_daily_loss`
-  - `get_daily_trades_count`
-- `trader` also has more read families than the first contract exposes. The first shared cut only includes the query families proven by current example strategies.
+- Runtime-specific shortcuts such as direct `ctx.station`, `ctx.sleeve_id`,
+  `ctx.tickers`, or `ctx.market_type` should stay out of portable strategy code;
+  use `ctx.runtime.scope` instead.
+- Engines may expose additional local helpers while migrating, but portable bots
+  should use the nested shared surfaces: `ctx.state`, `ctx.data`, `ctx.broker`,
+  `ctx.runtime`, `ctx.capabilities`, `ctx.config`, `ctx.telemetry`, and optional
+  `ctx.http` only when the runtime advertises HTTP support.
+- Engine adapters may support more read families than this package currently
+  models. New portable reads should be added here first, then implemented by
+  each engine adapter.
 
 ## What the shared package guarantees today
 
@@ -74,5 +76,5 @@ WebSocket `subscribe.oracle_score_modes` is a connection protocol concern; engin
 - Provider/client implementations
 - Packaging or publishing strategy beyond normal Python library use
 - A bundled native-kernel runtime implementation. `strategy_core.native` only
-  defines the Python-side helper/protocol contract; Backtester and Trader own
-  their engine adapters.
+  defines the Python-side helper/protocol contract; consumer runtimes own their
+  engine adapters.
