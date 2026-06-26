@@ -1,6 +1,6 @@
 # Strategy Core
 
-Shared typed strategy-contract library for consumer runtimes (e.g. `trader2`).
+Shared typed strategy-contract library for consumer runtimes (e.g. `trader`).
 
 ## Project structure
 

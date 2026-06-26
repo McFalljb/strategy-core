@@ -1,4 +1,4 @@
-"""Shared strategy contract package for trader2 and backtester runtimes."""
+"""Shared strategy contract package for trader and backtester runtimes."""
 
 from strategy_core.broker import (
     Action,

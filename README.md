@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Shared strategy contract package for Python and Rust strategy code that runs across paper, replay, backtest, and live engines. Consumer repos (such as [`trader2`](https://github.com/McFalljb/trader2)) implement the runtime; this library defines the strategy-facing surface.
+Shared strategy contract package for Python and Rust strategy code that runs across paper, replay, backtest, and live engines. Consumer repos (such as [`trader`](https://github.com/McFalljb/trader)) implement the runtime; this library defines the strategy-facing surface.
 
 This repo is a **library, not an engine**. It holds the canonical Python `run(ctx)` contract, typed events, shared value objects, runtime-neutral protocols, and Rust parity crates for native strategy adapters.
 

@@ -1,6 +1,6 @@
 # Strategy Contract Map
 
-This document maps the shared `strategy_core` package to the strategy-facing responsibilities that consumer runtimes such as `trader2` and backtesters implement. The package defines portable contracts and value objects; engines own feeds, adapters, broker execution, persistence, and replay/live semantics.
+This document maps the shared `strategy_core` package to the strategy-facing responsibilities that consumer runtimes such as `trader` and backtesters implement. The package defines portable contracts and value objects; engines own feeds, adapters, broker execution, persistence, and replay/live semantics.
 
 ## Upstream spec alignment
 

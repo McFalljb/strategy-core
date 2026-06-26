@@ -2,7 +2,7 @@
 
 The Python package remains the complete source contract today. The Rust crate in
 `native/strategy_core` is the parity target for moving consumer runtimes such as
-Trader2 and backtesters to a shared Rust-owned contract while keeping Python bots
+Trader and backtesters to a shared Rust-owned contract while keeping Python bots
 supported through engine adapters.
 
 ## Crates
