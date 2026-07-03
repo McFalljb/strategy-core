@@ -7,6 +7,7 @@ use crate::events::{
     ForecastInputSnapshot, OracleInputSnapshot, StationWeatherView, StrategyEventView,
     TickerPriceView,
 };
+use chrono::{DateTime, Utc};
 
 pub trait NativeKernel {
     fn name(&self) -> &str;
@@ -60,6 +61,23 @@ pub trait StrategyKernelState {
     ) -> Option<OracleInputSnapshot<'_>> {
         None
     }
+
+    fn state_read_diagnostics(&self) -> Vec<StateReadDiagnostic> {
+        Vec::new()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StateReadDiagnostic {
+    pub kind: String,
+    pub key: String,
+    pub status: String,
+    pub reason: Option<String>,
+    pub host_state_seq: Option<u64>,
+    pub source_feed_event_seq: Option<u64>,
+    pub source_state_seq: Option<u64>,
+    pub source_observed_at: Option<DateTime<Utc>>,
+    pub source_updated_at: Option<DateTime<Utc>>,
 }
 
 pub trait StrategyKernelData {}

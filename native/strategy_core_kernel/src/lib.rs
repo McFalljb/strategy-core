@@ -14,8 +14,8 @@ pub use actions::{
     TelemetryAction, WakeAtRequest,
 };
 pub use context::{
-    NativeKernel, StrategyKernelBroker, StrategyKernelContext, StrategyKernelData,
-    StrategyKernelRuntime, StrategyKernelState, StrategyKernelTelemetry,
+    NativeKernel, StateReadDiagnostic, StrategyKernelBroker, StrategyKernelContext,
+    StrategyKernelData, StrategyKernelRuntime, StrategyKernelState, StrategyKernelTelemetry,
 };
 pub use errors::{KernelError, KernelResult};
 pub use events::{
