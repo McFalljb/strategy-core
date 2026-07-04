@@ -40,6 +40,8 @@ pub struct PlaceOrderRequest {
     pub order_type: OrderType,
     pub quantity: i64,
     pub limit_price: Option<f64>,
+    #[serde(default)]
+    pub reduce_only: bool,
     pub signal_type: Option<String>,
     pub signal_metadata: Option<String>,
     pub client_order_id: Option<String>,
