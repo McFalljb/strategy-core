@@ -5,11 +5,11 @@ use strategy_core::{
     Action, ContractSide, EventDelivery, FeeType, ForecastHourly, FreshnessDomain,
     FreshnessDomainSummary, FreshnessSnapshot, FreshnessStatus, FreshnessSummary,
     ICAO_TO_CITY_CODES, MARKET_TYPE_PREFIX, ModelForecast, NewHigh, Observation, OracleModelScore,
-    OracleScoresUpdated, PriceUpdate, RuntimeCapabilities, STATION_TIMEZONES, StationForecast,
-    StationOracleScores, StationWeather, StrategyEvent, TICKER_PREFIXES, TickerPrices,
-    WeatherEvent, apply_fee_rounding, calculate_fill_fee, city_codes_for_market_type,
-    primary_city_code_for_market_type, primary_city_code_for_series, station_from_event_ticker,
-    ticker_prefixes_for_station,
+    OracleScoresUpdated, OrderExecutionStyle, OrderIntent, OrderTimePolicy, OrderType, PriceUpdate,
+    RuntimeCapabilities, STATION_TIMEZONES, StationForecast, StationOracleScores, StationWeather,
+    StrategyEvent, TICKER_PREFIXES, TickerPrices, WeatherEvent, apply_fee_rounding,
+    calculate_fill_fee, city_codes_for_market_type, primary_city_code_for_market_type,
+    primary_city_code_for_series, station_from_event_ticker, ticker_prefixes_for_station,
 };
 
 #[test]
@@ -20,6 +20,32 @@ fn broker_enums_serialize_to_python_literal_values() {
         serde_json::to_string(&ContractSide::Yes).unwrap(),
         r#""yes""#
     );
+}
+
+#[test]
+fn order_intent_carries_optional_expiry_duration() {
+    let intent = OrderIntent {
+        ticker: "KXHIGHMIA-26APR08-B70.5".to_owned(),
+        action: Action::Buy,
+        contract_side: ContractSide::Yes,
+        order_type: OrderType::Limit,
+        quantity: 3,
+        limit_price: Some(0.61),
+        max_price: None,
+        max_cost: None,
+        execution_style: Some(OrderExecutionStyle::RestingLimit),
+        time_policy: Some(OrderTimePolicy::GoodTillCanceled),
+        expires_after_ms: Some(30_000),
+        reduce_only: false,
+        post_only: false,
+        signal_type: Some("demo".to_owned()),
+        signal_metadata: None,
+        client_order_id: Some("client-1".to_owned()),
+    };
+
+    let encoded = serde_json::to_value(&intent).unwrap();
+    assert_eq!(encoded["expires_after_ms"], 30_000);
+    assert_eq!(encoded["execution_style"], "resting_limit");
 }
 
 #[test]

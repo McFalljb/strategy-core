@@ -61,6 +61,7 @@ class PendingOrder:
     signal_metadata: str | None = None
     created_at: str = ""
     client_order_id: str | None = None
+    expires_at: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,6 +96,7 @@ class OrderIntent:
     signal_type: str | None = None
     signal_metadata: str | None = None
     client_order_id: str | None = None
+    expires_after_ms: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,6 +120,7 @@ class BrokerOrderUpdate:
     provider_order_id: str | None = None
     provider_sequence: str | None = None
     updated_at: str = ""
+    expires_at: str | None = None
 
 
 @runtime_checkable
@@ -133,6 +136,13 @@ class Broker(Protocol):
         order_type: OrderType,
         quantity: int,
         limit_price: float | None = None,
+        max_price: float | None = None,
+        max_cost: float | None = None,
+        execution_style: OrderExecutionStyle | None = None,
+        time_policy: OrderTimePolicy | None = None,
+        expires_after_ms: int | None = None,
+        reduce_only: bool = False,
+        post_only: bool = False,
         signal_type: str | None = None,
         signal_metadata: str | None = None,
         client_order_id: str | None = None,

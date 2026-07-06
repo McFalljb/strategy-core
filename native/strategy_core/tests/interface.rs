@@ -177,6 +177,35 @@ fn strategy_context_traits_are_implementable() {
 }
 
 #[test]
+fn broker_place_order_with_intent_preserves_legacy_trait_method() {
+    let mut broker = FakeBroker::default();
+    let result = broker.place_order_with_intent(OrderIntent {
+        ticker: "KXHIGHMIA-26APR08-B70.5".to_string(),
+        action: Action::Buy,
+        contract_side: ContractSide::Yes,
+        order_type: OrderType::Limit,
+        quantity: 1,
+        limit_price: Some(0.42),
+        max_price: Some(0.43),
+        max_cost: Some(0.43),
+        execution_style: Some(OrderExecutionStyle::RestingLimit),
+        time_policy: Some(OrderTimePolicy::GoodTillCanceled),
+        reduce_only: false,
+        post_only: false,
+        signal_type: Some("dsm_reaction".to_string()),
+        signal_metadata: Some("{\"source\":\"test\"}".to_string()),
+        client_order_id: Some("client-1".to_string()),
+        expires_after_ms: Some(30_000),
+    });
+
+    assert_eq!(result.unwrap().status, OrderStatus::Filled);
+    assert_eq!(
+        broker.pending[0].client_order_id.as_deref(),
+        Some("client-1")
+    );
+}
+
+#[test]
 fn broker_intent_and_update_models_preserve_explicit_execution_semantics() {
     let intent = OrderIntent {
         ticker: "KXHIGHMIA-26APR08-B70.5".to_string(),
@@ -189,6 +218,7 @@ fn broker_intent_and_update_models_preserve_explicit_execution_semantics() {
         max_cost: Some(305.0),
         execution_style: Some(OrderExecutionStyle::Sweep),
         time_policy: Some(OrderTimePolicy::ImmediateOrCancel),
+        expires_after_ms: None,
         reduce_only: false,
         post_only: false,
         signal_type: Some("demo".to_string()),
@@ -218,11 +248,13 @@ fn broker_intent_and_update_models_preserve_explicit_execution_semantics() {
         provider_order_id: Some("provider-order-1".to_string()),
         provider_sequence: Some("sid=13:seq=42".to_string()),
         updated_at: "2026-06-17T12:00:00Z".to_string(),
+        expires_at: Some("2026-06-17T12:00:30Z".to_string()),
     };
 
     let encoded_update = serde_json::to_value(update).unwrap();
     assert_eq!(encoded_update["status"], json!("partially_filled"));
     assert_eq!(encoded_update["provider_sequence"], json!("sid=13:seq=42"));
+    assert_eq!(encoded_update["expires_at"], json!("2026-06-17T12:00:30Z"));
     assert_eq!(
         serde_json::to_value(BrokerUpdateStatus::Expired).unwrap(),
         json!("expired")
@@ -231,6 +263,33 @@ fn broker_intent_and_update_models_preserve_explicit_execution_semantics() {
         serde_json::to_value(BrokerUpdateStatus::Closed).unwrap(),
         json!("closed")
     );
+}
+
+#[test]
+fn pending_order_preserves_expiry_deadline() {
+    let pending = PendingOrder {
+        order_id: "order-1".to_string(),
+        sleeve_id: "demo:KMIA".to_string(),
+        ticker: "KXHIGHMIA-26APR08-B70.5".to_string(),
+        action: Action::Buy,
+        contract_side: ContractSide::Yes,
+        limit_price: 0.61,
+        requested_quantity: 3,
+        filled_quantity: 0,
+        reserved_global: 0.0,
+        reserved_sleeve: 0.0,
+        fee_type: String::new(),
+        fee_multiplier: None,
+        fee_accumulator: 0.0,
+        signal_type: None,
+        signal_metadata: None,
+        created_at: String::new(),
+        client_order_id: None,
+        expires_at: Some("2026-06-17T12:00:30Z".to_string()),
+    };
+
+    let encoded = serde_json::to_value(pending).unwrap();
+    assert_eq!(encoded["expires_at"], json!("2026-06-17T12:00:30Z"));
 }
 
 #[test]
@@ -765,6 +824,7 @@ impl Broker for FakeBroker {
             signal_metadata: signal_metadata.map(str::to_string),
             created_at: String::new(),
             client_order_id: client_order_id.map(str::to_string),
+            expires_at: None,
         });
         Ok(OrderResult {
             order_id: client_order_id.unwrap_or("order-1").to_string(),

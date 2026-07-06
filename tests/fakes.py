@@ -8,7 +8,16 @@ from datetime import UTC, date, datetime, timedelta
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
-from strategy_core.broker import Action, ContractSide, OrderResult, OrderType, PendingOrder, Position
+from strategy_core.broker import (
+    Action,
+    ContractSide,
+    OrderExecutionStyle,
+    OrderResult,
+    OrderTimePolicy,
+    OrderType,
+    PendingOrder,
+    Position,
+)
 from strategy_core.capabilities import RuntimeCapabilities
 from strategy_core.events import ShutdownEvent, StrategyEvent
 from strategy_core.http import HttpHeaders, HttpParams, HttpRequest, HttpResponse
@@ -500,6 +509,13 @@ class FakeBroker:
         order_type: OrderType,
         quantity: int,
         limit_price: float | None = None,
+        max_price: float | None = None,
+        max_cost: float | None = None,
+        execution_style: OrderExecutionStyle | None = None,
+        time_policy: OrderTimePolicy | None = None,
+        expires_after_ms: int | None = None,
+        reduce_only: bool = False,
+        post_only: bool = False,
         signal_type: str | None = None,
         signal_metadata: str | None = None,
         client_order_id: str | None = None,
@@ -512,6 +528,13 @@ class FakeBroker:
                 "order_type": order_type,
                 "quantity": quantity,
                 "limit_price": limit_price,
+                "max_price": max_price,
+                "max_cost": max_cost,
+                "execution_style": execution_style,
+                "time_policy": time_policy,
+                "expires_after_ms": expires_after_ms,
+                "reduce_only": reduce_only,
+                "post_only": post_only,
                 "signal_type": signal_type,
                 "signal_metadata": signal_metadata,
                 "client_order_id": client_order_id,

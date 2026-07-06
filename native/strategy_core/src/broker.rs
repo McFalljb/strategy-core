@@ -101,6 +101,8 @@ pub struct PendingOrder {
     #[serde(default)]
     pub created_at: String,
     pub client_order_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -137,6 +139,8 @@ pub struct OrderIntent {
     pub signal_type: Option<String>,
     pub signal_metadata: Option<String>,
     pub client_order_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expires_after_ms: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -165,6 +169,8 @@ pub struct BrokerOrderUpdate {
     pub provider_sequence: Option<String>,
     #[serde(default)]
     pub updated_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<String>,
 }
 
 pub trait Broker {
@@ -182,6 +188,20 @@ pub trait Broker {
         signal_metadata: Option<&str>,
         client_order_id: Option<&str>,
     ) -> Result<OrderResult, Self::Error>;
+
+    fn place_order_with_intent(&mut self, intent: OrderIntent) -> Result<OrderResult, Self::Error> {
+        self.place_order(
+            &intent.ticker,
+            intent.action,
+            intent.contract_side,
+            intent.order_type,
+            intent.quantity,
+            intent.limit_price,
+            intent.signal_type.as_deref(),
+            intent.signal_metadata.as_deref(),
+            intent.client_order_id.as_deref(),
+        )
+    }
 
     fn cancel_order(&mut self, order_id: &str) -> Result<bool, Self::Error>;
     fn cancel_all_orders(&mut self) -> Result<usize, Self::Error>;
