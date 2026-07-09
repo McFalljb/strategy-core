@@ -41,6 +41,8 @@ pub struct PlaceOrderRequest {
     pub quantity: i64,
     pub limit_price: Option<f64>,
     #[serde(default)]
+    pub expires_after_ms: Option<i64>,
+    #[serde(default)]
     pub reduce_only: bool,
     pub signal_type: Option<String>,
     pub signal_metadata: Option<String>,
