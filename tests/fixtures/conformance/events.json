@@ -791,6 +791,359 @@
         "reason": "",
         "type": "shutdown"
       }
+    },
+    {
+      "covers": [
+        "PriceUpdate",
+        "MarketBracket",
+        "PriceLevel",
+        "StrategyEvent",
+        "EngineEvent"
+      ],
+      "expected": {
+        "city_id": "nyc",
+        "city_sequence": null,
+        "emitted_at": "2026-06-16T12:00:01Z",
+        "event_id": "evt-price-1",
+        "markets": [
+          {
+            "cap_strike": null,
+            "event_date": "2026-06-16",
+            "event_ticker": "KXHIGHNY-26JUN16",
+            "floor_strike": null,
+            "market_id": "KXHIGHNY-26JUN16-T70",
+            "no_ask": 0.58,
+            "no_ask_depth": null,
+            "no_ask_levels": [],
+            "no_bid": 0.56,
+            "no_bid_depth": null,
+            "no_bid_levels": [],
+            "no_price": 0.57,
+            "orderbook_depth": 2,
+            "snapshot_time": "2026-06-16T12:00:01Z",
+            "strike_type": "",
+            "ticker": "KXHIGHNY-26JUN16-T70",
+            "volume": null,
+            "yes_ask": 0.44,
+            "yes_ask_depth": 80,
+            "yes_ask_levels": [],
+            "yes_bid": 0.42,
+            "yes_bid_depth": 120,
+            "yes_bid_levels": [],
+            "yes_price": 0.43
+          }
+        ],
+        "sequence": 12,
+        "slug": "nyc",
+        "source": "kalshi",
+        "station_id": "KNYC",
+        "timestamp": "2026-06-16T12:00:01Z",
+        "type": "price_update"
+      },
+      "id": "trader-price-update-knyc",
+      "rust_type": "StrategyEvent",
+      "wire": {
+        "city_id": "nyc",
+        "city_sequence": null,
+        "emitted_at": "2026-06-16T12:00:01Z",
+        "event_id": "evt-price-1",
+        "markets": [
+          {
+            "cap_strike": null,
+            "event_date": "2026-06-16",
+            "event_ticker": "KXHIGHNY-26JUN16",
+            "floor_strike": null,
+            "market_id": "KXHIGHNY-26JUN16-T70",
+            "no_ask": 0.58,
+            "no_ask_depth": null,
+            "no_ask_levels": [],
+            "no_bid": 0.56,
+            "no_bid_depth": null,
+            "no_bid_levels": [],
+            "no_price": 0.57,
+            "orderbook_depth": 2,
+            "snapshot_time": "2026-06-16T12:00:01Z",
+            "strike_type": "",
+            "ticker": "KXHIGHNY-26JUN16-T70",
+            "volume": null,
+            "yes_ask": 0.44,
+            "yes_ask_depth": 80,
+            "yes_ask_levels": [],
+            "yes_bid": 0.42,
+            "yes_bid_depth": 120,
+            "yes_bid_levels": [],
+            "yes_price": 0.43
+          }
+        ],
+        "sequence": 12,
+        "slug": "nyc",
+        "source": "kalshi",
+        "station_id": "KNYC",
+        "timestamp": "2026-06-16T12:00:01Z",
+        "type": "price_update"
+      }
+    },
+    {
+      "covers": [
+        "ForecastUpdated",
+        "StrategyEvent",
+        "EngineEvent"
+      ],
+      "expected": {
+        "emitted_at": "2026-06-16T12:00:00Z",
+        "event_id": "mt-knyc-forecast-1",
+        "model_id": "gfs",
+        "sequence": 91,
+        "slug": "nyc",
+        "station_id": "KNYC",
+        "type": "forecast_updated",
+        "version": "2026-06-16T12:00:00Z"
+      },
+      "id": "trader-forecast-updated-knyc",
+      "rust_type": "StrategyEvent",
+      "wire": {
+        "emitted_at": "2026-06-16T12:00:00Z",
+        "event_id": "mt-knyc-forecast-1",
+        "model_id": "gfs",
+        "sequence": 91,
+        "slug": "nyc",
+        "station_id": "KNYC",
+        "type": "forecast_updated",
+        "version": "2026-06-16T12:00:00Z"
+      }
+    },
+    {
+      "covers": [
+        "OracleScoresUpdated",
+        "OracleScoreTable",
+        "OracleScoreRow",
+        "OracleScoreMode",
+        "StrategyEvent",
+        "EngineEvent"
+      ],
+      "expected": {
+        "day_ahead": {
+          "all_time": false,
+          "days_requested": 30,
+          "range_end": "2026-07-12",
+          "range_start": "2026-06-01",
+          "rank_by": "high",
+          "score_mode": "day_ahead",
+          "scores": [
+            {
+              "combined_mae": 1.25,
+              "day_count": 30,
+              "high_bias": -0.0,
+              "high_mae": 1.0,
+              "is_public": true,
+              "low_bias": -0.25,
+              "low_mae": 1.5,
+              "model_id": "ncep_hrrr_conus",
+              "model_name": "HRRR"
+            }
+          ],
+          "station_id": "KMIA"
+        },
+        "day_of": {
+          "all_time": false,
+          "days_requested": 30,
+          "range_end": "2026-07-12",
+          "range_start": "2026-06-01",
+          "rank_by": "high",
+          "score_mode": "day_of",
+          "scores": [
+            {
+              "combined_mae": 1.25,
+              "day_count": 30,
+              "high_bias": -0.0,
+              "high_mae": 1.0,
+              "is_public": true,
+              "low_bias": -0.25,
+              "low_mae": 1.5,
+              "model_id": "ncep_hrrr_conus",
+              "model_name": "HRRR"
+            }
+          ],
+          "station_id": "KMIA"
+        },
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "event_id": "oracle-1",
+        "modes": [
+          "overall",
+          "day_ahead",
+          "day_of"
+        ],
+        "overall": {
+          "all_time": false,
+          "days_requested": 30,
+          "range_end": "2026-07-12",
+          "range_start": "2026-06-01",
+          "rank_by": "high",
+          "score_mode": "overall",
+          "scores": [
+            {
+              "combined_mae": 1.25,
+              "day_count": 30,
+              "high_bias": -0.0,
+              "high_mae": 1.0,
+              "is_public": true,
+              "low_bias": -0.25,
+              "low_mae": 1.5,
+              "model_id": "ncep_hrrr_conus",
+              "model_name": "HRRR"
+            }
+          ],
+          "station_id": "KMIA"
+        },
+        "sequence": 5,
+        "slug": "",
+        "station_id": "KMIA",
+        "type": "oracle_scores_updated",
+        "updated_at": "2026-07-13T12:35:01.987654Z"
+      },
+      "id": "trader-oracle-scores-updated-kmia",
+      "rust_type": "StrategyEvent",
+      "wire": {
+        "day_ahead": {
+          "all_time": false,
+          "days_requested": 30,
+          "range_end": "2026-07-12",
+          "range_start": "2026-06-01",
+          "rank_by": "high",
+          "score_mode": "day_ahead",
+          "scores": [
+            {
+              "combined_mae": 1.25,
+              "day_count": 30,
+              "high_bias": -0.0,
+              "high_mae": 1.0,
+              "is_public": true,
+              "low_bias": -0.25,
+              "low_mae": 1.5,
+              "model_id": "ncep_hrrr_conus",
+              "model_name": "HRRR"
+            }
+          ],
+          "station_id": "KMIA"
+        },
+        "day_of": {
+          "all_time": false,
+          "days_requested": 30,
+          "range_end": "2026-07-12",
+          "range_start": "2026-06-01",
+          "rank_by": "high",
+          "score_mode": "day_of",
+          "scores": [
+            {
+              "combined_mae": 1.25,
+              "day_count": 30,
+              "high_bias": -0.0,
+              "high_mae": 1.0,
+              "is_public": true,
+              "low_bias": -0.25,
+              "low_mae": 1.5,
+              "model_id": "ncep_hrrr_conus",
+              "model_name": "HRRR"
+            }
+          ],
+          "station_id": "KMIA"
+        },
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "event_id": "oracle-1",
+        "modes": [
+          "overall",
+          "day_ahead",
+          "day_of"
+        ],
+        "overall": {
+          "all_time": false,
+          "days_requested": 30,
+          "range_end": "2026-07-12",
+          "range_start": "2026-06-01",
+          "rank_by": "high",
+          "score_mode": "overall",
+          "scores": [
+            {
+              "combined_mae": 1.25,
+              "day_count": 30,
+              "high_bias": -0.0,
+              "high_mae": 1.0,
+              "is_public": true,
+              "low_bias": -0.25,
+              "low_mae": 1.5,
+              "model_id": "ncep_hrrr_conus",
+              "model_name": "HRRR"
+            }
+          ],
+          "station_id": "KMIA"
+        },
+        "sequence": 5,
+        "slug": "",
+        "station_id": "KMIA",
+        "type": "oracle_scores_updated",
+        "updated_at": "2026-07-13T12:35:01.987654Z"
+      }
+    },
+    {
+      "covers": [
+        "StationReport",
+        "StrategyEvent",
+        "EngineEvent"
+      ],
+      "expected": {
+        "city_sequence": 12,
+        "emitted_at": "2026-06-21T04:16:00Z",
+        "event_id": "mt-kphx-dsm-1",
+        "fetched_at": "2026-06-21T04:17:07Z",
+        "issuance_time": "2026-06-21T04:16:00Z",
+        "max_temp_c": 45.6,
+        "max_temp_f": 114.0,
+        "max_temp_time_utc": "2026-06-21T04:16:00Z",
+        "min_temp_c": 32.8,
+        "min_temp_f": 91.0,
+        "min_temp_time_utc": "2026-06-21T04:16:00Z",
+        "provider": "minutetemp",
+        "report_date": "2026-06-20",
+        "report_id": "latest-dsm",
+        "report_revision": 0,
+        "report_type": "dsm",
+        "report_updated_at": "2026-06-21T04:16:00Z",
+        "sequence": 90,
+        "slug": "phoenix",
+        "source_url": "",
+        "station_id": "KPHX",
+        "temp_c": 42.8,
+        "temp_f": 109.0,
+        "type": "station_report"
+      },
+      "id": "trader-station-report-kphx",
+      "rust_type": "StrategyEvent",
+      "wire": {
+        "city_sequence": 12,
+        "emitted_at": "2026-06-21T04:16:00Z",
+        "event_id": "mt-kphx-dsm-1",
+        "fetched_at": "2026-06-21T04:17:07Z",
+        "issuance_time": "2026-06-21T04:16:00Z",
+        "max_temp_c": 45.6,
+        "max_temp_f": 114.0,
+        "max_temp_time_utc": "2026-06-21T04:16:00Z",
+        "min_temp_c": 32.8,
+        "min_temp_f": 91.0,
+        "min_temp_time_utc": "2026-06-21T04:16:00Z",
+        "provider": "minutetemp",
+        "report_date": "2026-06-20",
+        "report_id": "latest-dsm",
+        "report_revision": 0,
+        "report_type": "dsm",
+        "report_updated_at": "2026-06-21T04:16:00Z",
+        "sequence": 90,
+        "slug": "phoenix",
+        "source_url": "",
+        "station_id": "KPHX",
+        "temp_c": 42.8,
+        "temp_f": 109.0,
+        "type": "station_report"
+      }
     }
   ],
   "wire_policy": {

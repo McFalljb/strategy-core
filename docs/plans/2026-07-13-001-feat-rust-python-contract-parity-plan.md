@@ -418,7 +418,7 @@ MinuteTemp, Kalshi, data, and HTTP model families.
 - The parity inventory has no unclassified broad public surfaces and shared helper vectors pass in both
   languages.
 
-- [ ] **Unit 4: Complete Trader boundary conformance**
+- [x] **Unit 4: Complete Trader boundary conformance**
 
 **Goal:** Prove every Trader-supported shared event and strategy boundary through both Rust protocol
 decoding and the Python adapter, while making unsupported-event behavior explicit.
@@ -472,7 +472,7 @@ forecast fixtures.
 - The event support matrix has no implicit gaps and every supported family is exercised through both
   language adapters.
 
-- [ ] **Unit 5: Add Backtester's broad Strategy Core projection adapter**
+- [x] **Unit 5: Add Backtester's broad Strategy Core projection adapter**
 
 **Goal:** Introduce one owned strategy-boundary adapter that projects replay state into complete broad
 shared Rust objects without replacing replay-owned storage or the kernel hot loop.
