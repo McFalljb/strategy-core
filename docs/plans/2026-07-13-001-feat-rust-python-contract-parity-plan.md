@@ -543,7 +543,7 @@ them.
 - Backtester has one tested broad projection boundary; each shared field is traceable to a replay source
   or an intentional default, while replay ownership and kernel dispatch remain architecturally unchanged.
 
-- [ ] **Unit 6: Route Backtester's Python bridge through canonical projections**
+- [x] **Unit 6: Route Backtester's Python bridge through canonical projections**
 
 **Goal:** Ensure Python strategies and owned Rust consumers observe the same shared state values from a
 single Backtester projection path.
