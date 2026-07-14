@@ -65,6 +65,7 @@ impl NativeKernel for OrderKernel {
             order_type: OrderType::Limit,
             quantity: 2,
             limit_price: Some(0.42),
+            expires_after_ms: Some(30_000),
             reduce_only: false,
             signal_type: Some("test_signal".to_string()),
             signal_metadata: Some("{\"source\":\"fixture\"}".to_string()),
@@ -242,7 +243,8 @@ fn kernel_can_emit_deterministic_place_order_action() {
         concat!(
             r#"{"type":"place_order","ticker":"KXHIGHMIA-26MAY30-B90","#,
             r#""action":"buy","contract_side":"yes","order_type":"limit","#,
-            r#""quantity":2,"limit_price":0.42,"reduce_only":false,"signal_type":"test_signal","#,
+            r#""quantity":2,"limit_price":0.42,"expires_after_ms":30000,"reduce_only":false,"#,
+            r#""signal_type":"test_signal","#,
             r#""signal_metadata":"{\"source\":\"fixture\"}","client_order_id":"kernel-1"}"#
         ),
     );
