@@ -1,7 +1,7 @@
 ---
 title: "feat: Complete Rust/Python strategy contract parity"
 type: feat
-status: active
+status: completed
 date: 2026-07-13
 deepened: 2026-07-13
 ---
@@ -634,7 +634,7 @@ formula code.
 - No portable fee formula remains duplicated in Backtester, and replay accounting results remain
   stable for characterized scenarios.
 
-- [ ] **Unit 8: Certify parity through existing gates and reconcile documentation**
+- [x] **Unit 8: Certify parity through existing gates and reconcile documentation**
 
 **Goal:** Make parity completion visible, durable, and reviewable across Strategy Core, Trader, and
 Backtester.
