@@ -5,6 +5,17 @@
   "invalid": [
     {
       "category": "enum",
+      "covers": [
+        "RuntimeCapabilities"
+      ],
+      "evidence": {
+        "RuntimeCapabilities": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
       "id": "unknown-event-delivery",
       "rust_type": "RuntimeCapabilities",
       "wire": {
@@ -20,6 +31,17 @@
     },
     {
       "category": "enum",
+      "covers": [
+        "StrategyScope"
+      ],
+      "evidence": {
+        "StrategyScope": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
       "id": "unknown-market-type",
       "rust_type": "StrategyScope",
       "wire": {
@@ -37,11 +59,1196 @@
     },
     {
       "category": "type",
+      "covers": [
+        "RuntimeCapabilities"
+      ],
+      "evidence": {
+        "RuntimeCapabilities": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "coerced-supports-http",
+      "rust_type": "RuntimeCapabilities",
+      "wire": {
+        "supports_http": "true"
+      }
+    },
+    {
+      "category": "type",
+      "covers": [
+        "TelemetryFields"
+      ],
+      "evidence": {
+        "TelemetryFields": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
       "id": "invalid-telemetry-field",
       "rust_type": "TelemetryFields",
       "wire": {
         "nested": []
       }
+    },
+    {
+      "category": "type",
+      "covers": [
+        "BrokerOrderUpdate"
+      ],
+      "evidence": {
+        "BrokerOrderUpdate": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-BrokerOrderUpdate-invalid-order_id",
+      "rust_type": "BrokerOrderUpdate",
+      "wire": {
+        "action": "buy",
+        "contract_side": "yes",
+        "order_id": [],
+        "requested_quantity": 1,
+        "sleeve_id": "value",
+        "status": "accepted",
+        "ticker": "value"
+      }
+    },
+    {
+      "category": "type",
+      "covers": [
+        "ForecastHourly"
+      ],
+      "evidence": {
+        "ForecastHourly": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-ForecastHourly-invalid-time",
+      "rust_type": "ForecastHourly",
+      "wire": {
+        "time": []
+      }
+    },
+    {
+      "category": "type",
+      "covers": [
+        "ForecastQuery"
+      ],
+      "evidence": {
+        "ForecastQuery": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-ForecastQuery-invalid-model_id",
+      "rust_type": "ForecastQuery",
+      "wire": {
+        "model_id": []
+      }
+    },
+    {
+      "category": "type",
+      "covers": [
+        "ForecastRunQuery"
+      ],
+      "evidence": {
+        "ForecastRunQuery": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-ForecastRunQuery-invalid-run_id",
+      "rust_type": "ForecastRunQuery",
+      "wire": {
+        "run_id": []
+      }
+    },
+    {
+      "category": "type",
+      "covers": [
+        "ForecastRunsQuery"
+      ],
+      "evidence": {
+        "ForecastRunsQuery": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-ForecastRunsQuery-invalid-model_id",
+      "rust_type": "ForecastRunsQuery",
+      "wire": {
+        "model_id": []
+      }
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "ForecastUpdated"
+      ],
+      "evidence": {
+        "ForecastUpdated": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-ForecastUpdated-invalid-type",
+      "rust_type": "ForecastUpdated",
+      "wire": {
+        "model_id": "value",
+        "station_id": "value",
+        "type": "invalid",
+        "version": "value"
+      }
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "ForecastVersions"
+      ],
+      "evidence": {
+        "ForecastVersions": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-ForecastVersions-invalid-type",
+      "rust_type": "ForecastVersions",
+      "wire": {
+        "station_id": "value",
+        "type": "invalid"
+      }
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "FreshnessDomainSummary"
+      ],
+      "evidence": {
+        "FreshnessDomainSummary": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-FreshnessDomainSummary-invalid-domain",
+      "rust_type": "FreshnessDomainSummary",
+      "wire": {
+        "domain": "invalid",
+        "fresh_count": 1,
+        "stale_count": 1,
+        "stalest_age_seconds": 1.0,
+        "tracked_count": 1
+      }
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "FreshnessSnapshot"
+      ],
+      "evidence": {
+        "FreshnessSnapshot": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-FreshnessSnapshot-invalid-domain",
+      "rust_type": "FreshnessSnapshot",
+      "wire": {
+        "domain": "invalid",
+        "key": "value",
+        "status": "fresh"
+      }
+    },
+    {
+      "category": "type",
+      "covers": [
+        "FreshnessSummary"
+      ],
+      "evidence": {
+        "FreshnessSummary": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-FreshnessSummary-invalid-as_of",
+      "rust_type": "FreshnessSummary",
+      "wire": {
+        "as_of": [],
+        "domains": []
+      }
+    },
+    {
+      "category": "type",
+      "covers": [
+        "LatestObservationQuery"
+      ],
+      "evidence": {
+        "LatestObservationQuery": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-LatestObservationQuery-invalid-day_mode",
+      "rust_type": "LatestObservationQuery",
+      "wire": {
+        "day_mode": []
+      }
+    },
+    {
+      "category": "type",
+      "covers": [
+        "LatestReportsQuery"
+      ],
+      "evidence": {
+        "LatestReportsQuery": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-LatestReportsQuery-invalid-refresh",
+      "rust_type": "LatestReportsQuery",
+      "wire": {
+        "refresh": []
+      }
+    },
+    {
+      "category": "type",
+      "covers": [
+        "LimitsQuery"
+      ],
+      "evidence": {
+        "LimitsQuery": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-LimitsQuery-invalid-refresh",
+      "rust_type": "LimitsQuery",
+      "wire": {
+        "refresh": []
+      }
+    },
+    {
+      "category": "type",
+      "covers": [
+        "MarketBracket"
+      ],
+      "evidence": {
+        "MarketBracket": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-MarketBracket-invalid-market_id",
+      "rust_type": "MarketBracket",
+      "wire": {
+        "market_id": [],
+        "ticker": "value"
+      }
+    },
+    {
+      "category": "type",
+      "covers": [
+        "ModelForecast"
+      ],
+      "evidence": {
+        "ModelForecast": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-ModelForecast-invalid-model_id",
+      "rust_type": "ModelForecast",
+      "wire": {
+        "model_id": [],
+        "value": 1.0
+      }
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "NativeKernelResult"
+      ],
+      "evidence": {
+        "NativeKernelResult": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-NativeKernelResult-invalid-status",
+      "rust_type": "NativeKernelResult",
+      "wire": {
+        "status": "invalid"
+      }
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "NewHigh"
+      ],
+      "evidence": {
+        "NewHigh": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-NewHigh-invalid-type",
+      "rust_type": "NewHigh",
+      "wire": {
+        "station_id": "value",
+        "type": "invalid",
+        "value_c": 1.0,
+        "value_f": 1.0
+      }
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "NewLow"
+      ],
+      "evidence": {
+        "NewLow": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-NewLow-invalid-type",
+      "rust_type": "NewLow",
+      "wire": {
+        "station_id": "value",
+        "type": "invalid",
+        "value_c": 1.0,
+        "value_f": 1.0
+      }
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "Observation"
+      ],
+      "evidence": {
+        "Observation": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-Observation-invalid-type",
+      "rust_type": "Observation",
+      "wire": {
+        "station_id": "value",
+        "type": "invalid"
+      }
+    },
+    {
+      "category": "type",
+      "covers": [
+        "OracleModelScore"
+      ],
+      "evidence": {
+        "OracleModelScore": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-OracleModelScore-invalid-model_id",
+      "rust_type": "OracleModelScore",
+      "wire": {
+        "model_id": []
+      }
+    },
+    {
+      "category": "type",
+      "covers": [
+        "OracleScoreRow"
+      ],
+      "evidence": {
+        "OracleScoreRow": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-OracleScoreRow-invalid-model_id",
+      "rust_type": "OracleScoreRow",
+      "wire": {
+        "model_id": []
+      }
+    },
+    {
+      "category": "type",
+      "covers": [
+        "OracleScoreTable"
+      ],
+      "evidence": {
+        "OracleScoreTable": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-OracleScoreTable-invalid-station_id",
+      "rust_type": "OracleScoreTable",
+      "wire": {
+        "station_id": []
+      }
+    },
+    {
+      "category": "type",
+      "covers": [
+        "OracleScoresQuery"
+      ],
+      "evidence": {
+        "OracleScoresQuery": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-OracleScoresQuery-invalid-days",
+      "rust_type": "OracleScoresQuery",
+      "wire": {
+        "days": []
+      }
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "OracleScoresUpdated"
+      ],
+      "evidence": {
+        "OracleScoresUpdated": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-OracleScoresUpdated-invalid-type",
+      "rust_type": "OracleScoresUpdated",
+      "wire": {
+        "station_id": "value",
+        "type": "invalid"
+      }
+    },
+    {
+      "category": "type",
+      "covers": [
+        "OrderIntent"
+      ],
+      "evidence": {
+        "OrderIntent": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-OrderIntent-invalid-ticker",
+      "rust_type": "OrderIntent",
+      "wire": {
+        "action": "buy",
+        "contract_side": "yes",
+        "order_type": "market",
+        "quantity": 1,
+        "ticker": []
+      }
+    },
+    {
+      "category": "type",
+      "covers": [
+        "OrderResult"
+      ],
+      "evidence": {
+        "OrderResult": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-OrderResult-invalid-order_id",
+      "rust_type": "OrderResult",
+      "wire": {
+        "order_id": [],
+        "sleeve_id": "value",
+        "status": "filled"
+      }
+    },
+    {
+      "category": "type",
+      "covers": [
+        "PendingOrder"
+      ],
+      "evidence": {
+        "PendingOrder": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-PendingOrder-invalid-order_id",
+      "rust_type": "PendingOrder",
+      "wire": {
+        "action": "buy",
+        "contract_side": "yes",
+        "limit_price": 1.0,
+        "order_id": [],
+        "requested_quantity": 1,
+        "sleeve_id": "value",
+        "ticker": "value"
+      }
+    },
+    {
+      "category": "type",
+      "covers": [
+        "Position"
+      ],
+      "evidence": {
+        "Position": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-Position-invalid-ticker",
+      "rust_type": "Position",
+      "wire": {
+        "avg_price": 1.0,
+        "quantity": 1,
+        "side": "yes",
+        "ticker": []
+      }
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "PriceUpdate"
+      ],
+      "evidence": {
+        "PriceUpdate": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-PriceUpdate-invalid-type",
+      "rust_type": "PriceUpdate",
+      "wire": {
+        "source": "value",
+        "station_id": "value",
+        "type": "invalid"
+      }
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "ReportHistoryQuery"
+      ],
+      "evidence": {
+        "ReportHistoryQuery": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-ReportHistoryQuery-invalid-report_type",
+      "rust_type": "ReportHistoryQuery",
+      "wire": {
+        "report_type": "invalid"
+      }
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "ReportsQuery"
+      ],
+      "evidence": {
+        "ReportsQuery": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-ReportsQuery-invalid-report_type",
+      "rust_type": "ReportsQuery",
+      "wire": {
+        "report_type": "invalid"
+      }
+    },
+    {
+      "category": "type",
+      "covers": [
+        "RuntimeCapabilities"
+      ],
+      "evidence": {
+        "RuntimeCapabilities": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-RuntimeCapabilities-invalid-supports_http",
+      "rust_type": "RuntimeCapabilities",
+      "wire": {
+        "supports_http": []
+      }
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "ShutdownEvent"
+      ],
+      "evidence": {
+        "ShutdownEvent": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-ShutdownEvent-invalid-type",
+      "rust_type": "ShutdownEvent",
+      "wire": {
+        "type": "invalid"
+      }
+    },
+    {
+      "category": "type",
+      "covers": [
+        "StationForecast"
+      ],
+      "evidence": {
+        "StationForecast": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-StationForecast-invalid-model_forecasts",
+      "rust_type": "StationForecast",
+      "wire": {
+        "model_forecasts": "invalid"
+      }
+    },
+    {
+      "category": "type",
+      "covers": [
+        "StationOracleScores"
+      ],
+      "evidence": {
+        "StationOracleScores": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-StationOracleScores-invalid-station_id",
+      "rust_type": "StationOracleScores",
+      "wire": {
+        "station_id": []
+      }
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "StationReport"
+      ],
+      "evidence": {
+        "StationReport": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-StationReport-invalid-type",
+      "rust_type": "StationReport",
+      "wire": {
+        "report_id": "value",
+        "station_id": "value",
+        "type": "invalid"
+      }
+    },
+    {
+      "category": "type",
+      "covers": [
+        "StationWeather"
+      ],
+      "evidence": {
+        "StationWeather": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-StationWeather-invalid-current_temp",
+      "rust_type": "StationWeather",
+      "wire": {
+        "current_temp": []
+      }
+    },
+    {
+      "category": "type",
+      "covers": [
+        "StrategyScope"
+      ],
+      "evidence": {
+        "StrategyScope": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-StrategyScope-invalid-sleeve_id",
+      "rust_type": "StrategyScope",
+      "wire": {
+        "sleeve_id": [],
+        "strategy_name": "value"
+      }
+    },
+    {
+      "category": "type",
+      "covers": [
+        "TickerPrices"
+      ],
+      "evidence": {
+        "TickerPrices": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-TickerPrices-invalid-ticker",
+      "rust_type": "TickerPrices",
+      "wire": {
+        "ticker": []
+      }
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "TimerWake"
+      ],
+      "evidence": {
+        "TimerWake": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-TimerWake-invalid-type",
+      "rust_type": "TimerWake",
+      "wire": {
+        "scheduled_for": "2026-07-13T12:34:56.123456Z",
+        "type": "invalid"
+      }
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "WeatherEvent"
+      ],
+      "evidence": {
+        "WeatherEvent": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-WeatherEvent-invalid-type",
+      "rust_type": "WeatherEvent",
+      "wire": {
+        "event_type": "value",
+        "id": "value",
+        "station_id": "value",
+        "type": "invalid"
+      }
+    },
+    {
+      "category": "type",
+      "covers": [
+        "WeatherEventSource"
+      ],
+      "evidence": {
+        "WeatherEventSource": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-WeatherEventSource-invalid-metar_type",
+      "rust_type": "WeatherEventSource",
+      "wire": {
+        "metar_type": []
+      }
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "Action"
+      ],
+      "evidence": {
+        "Action": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-Action-unknown",
+      "rust_type": "Action",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "BrokerUpdateStatus"
+      ],
+      "evidence": {
+        "BrokerUpdateStatus": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-BrokerUpdateStatus-unknown",
+      "rust_type": "BrokerUpdateStatus",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "ContractSide"
+      ],
+      "evidence": {
+        "ContractSide": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-ContractSide-unknown",
+      "rust_type": "ContractSide",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "EventDelivery"
+      ],
+      "evidence": {
+        "EventDelivery": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-EventDelivery-unknown",
+      "rust_type": "EventDelivery",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "FeeType"
+      ],
+      "evidence": {
+        "FeeType": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-FeeType-unknown",
+      "rust_type": "FeeType",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "FreshnessDomain"
+      ],
+      "evidence": {
+        "FreshnessDomain": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-FreshnessDomain-unknown",
+      "rust_type": "FreshnessDomain",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "FreshnessStatus"
+      ],
+      "evidence": {
+        "FreshnessStatus": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-FreshnessStatus-unknown",
+      "rust_type": "FreshnessStatus",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "MarketType"
+      ],
+      "evidence": {
+        "MarketType": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-MarketType-unknown",
+      "rust_type": "MarketType",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "NativeKernelStatus"
+      ],
+      "evidence": {
+        "NativeKernelStatus": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-NativeKernelStatus-unknown",
+      "rust_type": "NativeKernelStatus",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "OracleScoreMode"
+      ],
+      "evidence": {
+        "OracleScoreMode": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-OracleScoreMode-unknown",
+      "rust_type": "OracleScoreMode",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "OrderExecutionStyle"
+      ],
+      "evidence": {
+        "OrderExecutionStyle": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-OrderExecutionStyle-unknown",
+      "rust_type": "OrderExecutionStyle",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "OrderStatus"
+      ],
+      "evidence": {
+        "OrderStatus": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-OrderStatus-unknown",
+      "rust_type": "OrderStatus",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "OrderTimePolicy"
+      ],
+      "evidence": {
+        "OrderTimePolicy": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-OrderTimePolicy-unknown",
+      "rust_type": "OrderTimePolicy",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "OrderType"
+      ],
+      "evidence": {
+        "OrderType": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-OrderType-unknown",
+      "rust_type": "OrderType",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "PersistenceStatus"
+      ],
+      "evidence": {
+        "PersistenceStatus": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-PersistenceStatus-unknown",
+      "rust_type": "PersistenceStatus",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "RuntimeMode"
+      ],
+      "evidence": {
+        "RuntimeMode": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-RuntimeMode-unknown",
+      "rust_type": "RuntimeMode",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "TemperatureDayMode"
+      ],
+      "evidence": {
+        "TemperatureDayMode": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-TemperatureDayMode-unknown",
+      "rust_type": "TemperatureDayMode",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "WuDayMode"
+      ],
+      "evidence": {
+        "WuDayMode": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-WuDayMode-unknown",
+      "rust_type": "WuDayMode",
+      "wire": "unknown"
     }
   ],
   "schema_version": 1,
@@ -50,6 +1257,17 @@
       "covers": [
         "RuntimeCapabilities",
         "EventDelivery"
+      ],
+      "evidence": {
+        "EventDelivery": [
+          "non_default_round_trip"
+        ],
+        "RuntimeCapabilities": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
       ],
       "expected": {
         "event_delivery": "decision",
@@ -78,6 +1296,16 @@
       "covers": [
         "RuntimeCapabilities"
       ],
+      "evidence": {
+        "RuntimeCapabilities": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
       "expected": {
         "event_delivery": "wake",
         "queue_is_durable": false,
@@ -95,6 +1323,18 @@
     {
       "covers": [
         "RuntimeCapabilities"
+      ],
+      "evidence": {
+        "RuntimeCapabilities": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
       ],
       "expected": {
         "event_delivery": "wake",
@@ -116,6 +1356,19 @@
       "covers": [
         "StrategyScope",
         "MarketType"
+      ],
+      "evidence": {
+        "MarketType": [
+          "non_default_round_trip"
+        ],
+        "StrategyScope": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
       ],
       "expected": {
         "event_date": "2026-07-13",
@@ -148,6 +1401,18 @@
       "covers": [
         "StrategyScope"
       ],
+      "evidence": {
+        "StrategyScope": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
       "expected": {
         "event_date": null,
         "event_ticker": null,
@@ -170,6 +1435,27 @@
         "NativeKernelStatus",
         "JSONValue",
         "JSONObject"
+      ],
+      "evidence": {
+        "JSONObject": [
+          "non_default_round_trip"
+        ],
+        "JSONValue": [
+          "non_default_round_trip"
+        ],
+        "NativeKernelResult": [
+          "explicit_null",
+          "non_default_round_trip",
+          "numeric_boundaries"
+        ],
+        "NativeKernelStatus": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "explicit_null",
+        "non_default_round_trip",
+        "numeric_boundaries"
       ],
       "expected": {
         "actions_emitted": 0,
@@ -204,6 +1490,16 @@
       "covers": [
         "NativeKernelResult"
       ],
+      "evidence": {
+        "NativeKernelResult": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
       "expected": {
         "actions_emitted": 0,
         "events_handled": 0,
@@ -218,6 +1514,16 @@
     {
       "covers": [
         "StrategyConfig"
+      ],
+      "evidence": {
+        "StrategyConfig": [
+          "explicit_null",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "explicit_null",
+        "non_default_round_trip"
       ],
       "expected": {
         "enabled": true,
@@ -243,6 +1549,21 @@
         "TelemetryField",
         "TelemetryFields"
       ],
+      "evidence": {
+        "TelemetryField": [
+          "non_default_round_trip"
+        ],
+        "TelemetryFields": [
+          "explicit_null",
+          "non_default_round_trip",
+          "numeric_boundaries"
+        ]
+      },
+      "evidence_dimensions": [
+        "explicit_null",
+        "non_default_round_trip",
+        "numeric_boundaries"
+      ],
       "expected": {
         "active": true,
         "count": 3,
@@ -264,6 +1585,16 @@
       "covers": [
         "RuntimeMode"
       ],
+      "evidence": {
+        "RuntimeMode": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
       "expected": "paper",
       "id": "runtime-mode-paper",
       "rust_type": "RuntimeMode",
@@ -272,6 +1603,16 @@
     {
       "covers": [
         "RuntimeMode"
+      ],
+      "evidence": {
+        "RuntimeMode": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
       ],
       "expected": "replay",
       "id": "runtime-mode-replay",
@@ -282,6 +1623,16 @@
       "covers": [
         "RuntimeMode"
       ],
+      "evidence": {
+        "RuntimeMode": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
       "expected": "live",
       "id": "runtime-mode-live",
       "rust_type": "RuntimeMode",
@@ -290,6 +1641,16 @@
     {
       "covers": [
         "MarketType"
+      ],
+      "evidence": {
+        "MarketType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
       ],
       "expected": "high",
       "id": "market-type-high",
@@ -300,6 +1661,16 @@
       "covers": [
         "MarketType"
       ],
+      "evidence": {
+        "MarketType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
       "expected": "low",
       "id": "market-type-low",
       "rust_type": "MarketType",
@@ -308,6 +1679,16 @@
     {
       "covers": [
         "EventDelivery"
+      ],
+      "evidence": {
+        "EventDelivery": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
       ],
       "expected": "wake",
       "id": "event-delivery-wake",
@@ -318,6 +1699,16 @@
       "covers": [
         "EventDelivery"
       ],
+      "evidence": {
+        "EventDelivery": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
       "expected": "decision",
       "id": "event-delivery-decision",
       "rust_type": "EventDelivery",
@@ -326,6 +1717,16 @@
     {
       "covers": [
         "NativeKernelStatus"
+      ],
+      "evidence": {
+        "NativeKernelStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
       ],
       "expected": "completed",
       "id": "native-status-completed",
@@ -336,16 +1737,6273 @@
       "covers": [
         "NativeKernelStatus"
       ],
+      "evidence": {
+        "NativeKernelStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
       "expected": "fallback_completed",
       "id": "native-status-fallback_completed",
       "rust_type": "NativeKernelStatus",
       "wire": "fallback_completed"
+    },
+    {
+      "covers": [
+        "BrokerOrderUpdate"
+      ],
+      "evidence": {
+        "BrokerOrderUpdate": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "action": "buy",
+        "average_fill_price": 0.0,
+        "client_order_id": null,
+        "contract_side": "yes",
+        "expires_at": null,
+        "fee_cost": 0.0,
+        "fill_price": 0.0,
+        "filled_quantity": 0,
+        "order_id": "non-default",
+        "provider_order_id": null,
+        "provider_sequence": null,
+        "reason": "",
+        "remaining_quantity": 0,
+        "requested_quantity": 1,
+        "sleeve_id": "value",
+        "status": "accepted",
+        "ticker": "value",
+        "updated_at": ""
+      },
+      "id": "direct-BrokerOrderUpdate-non-default",
+      "rust_type": "BrokerOrderUpdate",
+      "wire": {
+        "action": "buy",
+        "contract_side": "yes",
+        "order_id": "non-default",
+        "requested_quantity": 1,
+        "sleeve_id": "value",
+        "status": "accepted",
+        "ticker": "value"
+      }
+    },
+    {
+      "covers": [
+        "BrokerOrderUpdate"
+      ],
+      "evidence": {
+        "BrokerOrderUpdate": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "action": "buy",
+        "average_fill_price": 0.0,
+        "client_order_id": null,
+        "contract_side": "yes",
+        "expires_at": null,
+        "fee_cost": 0.0,
+        "fill_price": 0.0,
+        "filled_quantity": 0,
+        "order_id": "value",
+        "provider_order_id": null,
+        "provider_sequence": null,
+        "reason": "",
+        "remaining_quantity": 0,
+        "requested_quantity": 1,
+        "sleeve_id": "value",
+        "status": "accepted",
+        "ticker": "value",
+        "updated_at": ""
+      },
+      "id": "direct-BrokerOrderUpdate-defaults",
+      "rust_type": "BrokerOrderUpdate",
+      "wire": {
+        "action": "buy",
+        "contract_side": "yes",
+        "order_id": "value",
+        "requested_quantity": 1,
+        "sleeve_id": "value",
+        "status": "accepted",
+        "ticker": "value"
+      }
+    },
+    {
+      "covers": [
+        "BrokerOrderUpdate"
+      ],
+      "evidence": {
+        "BrokerOrderUpdate": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "action": "buy",
+        "average_fill_price": 0.0,
+        "client_order_id": null,
+        "contract_side": "yes",
+        "expires_at": null,
+        "fee_cost": 0.0,
+        "fill_price": 0.0,
+        "filled_quantity": 0,
+        "order_id": "value",
+        "provider_order_id": null,
+        "provider_sequence": null,
+        "reason": "",
+        "remaining_quantity": 0,
+        "requested_quantity": 1,
+        "sleeve_id": "value",
+        "status": "accepted",
+        "ticker": "value",
+        "updated_at": ""
+      },
+      "id": "direct-BrokerOrderUpdate-explicit-null",
+      "rust_type": "BrokerOrderUpdate",
+      "wire": {
+        "action": "buy",
+        "client_order_id": null,
+        "contract_side": "yes",
+        "order_id": "value",
+        "requested_quantity": 1,
+        "sleeve_id": "value",
+        "status": "accepted",
+        "ticker": "value"
+      }
+    },
+    {
+      "covers": [
+        "BrokerOrderUpdate"
+      ],
+      "evidence": {
+        "BrokerOrderUpdate": [
+          "defaults",
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "omission"
+      ],
+      "expected": {
+        "action": "buy",
+        "average_fill_price": 0.0,
+        "client_order_id": null,
+        "contract_side": "yes",
+        "expires_at": null,
+        "fee_cost": 0.0,
+        "fill_price": 0.0,
+        "filled_quantity": 0,
+        "order_id": "value",
+        "provider_order_id": null,
+        "provider_sequence": null,
+        "reason": "",
+        "remaining_quantity": 0,
+        "requested_quantity": 9007199254740991,
+        "sleeve_id": "value",
+        "status": "accepted",
+        "ticker": "value",
+        "updated_at": ""
+      },
+      "id": "direct-BrokerOrderUpdate-numeric-boundaries",
+      "rust_type": "BrokerOrderUpdate",
+      "wire": {
+        "action": "buy",
+        "contract_side": "yes",
+        "order_id": "value",
+        "requested_quantity": 9007199254740991,
+        "sleeve_id": "value",
+        "status": "accepted",
+        "ticker": "value"
+      }
+    },
+    {
+      "covers": [
+        "ForecastHourly"
+      ],
+      "evidence": {
+        "ForecastHourly": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "apparent_temperature_f": null,
+        "cloud_cover": null,
+        "dew_point_2m": null,
+        "precipitation_probability": null,
+        "pressure_msl": null,
+        "relative_humidity_2m": null,
+        "temperature_2m_c": null,
+        "temperature_2m_f": null,
+        "time": "non-default",
+        "wind_direction_10m": null,
+        "wind_gusts_10m": null,
+        "wind_speed_10m": null
+      },
+      "id": "direct-ForecastHourly-non-default",
+      "rust_type": "ForecastHourly",
+      "wire": {
+        "time": "non-default"
+      }
+    },
+    {
+      "covers": [
+        "ForecastHourly"
+      ],
+      "evidence": {
+        "ForecastHourly": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
+      "expected": {
+        "apparent_temperature_f": null,
+        "cloud_cover": null,
+        "dew_point_2m": null,
+        "precipitation_probability": null,
+        "pressure_msl": null,
+        "relative_humidity_2m": null,
+        "temperature_2m_c": null,
+        "temperature_2m_f": null,
+        "time": "",
+        "wind_direction_10m": null,
+        "wind_gusts_10m": null,
+        "wind_speed_10m": null
+      },
+      "id": "direct-ForecastHourly-defaults",
+      "rust_type": "ForecastHourly",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "ForecastHourly"
+      ],
+      "evidence": {
+        "ForecastHourly": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "apparent_temperature_f": null,
+        "cloud_cover": null,
+        "dew_point_2m": null,
+        "precipitation_probability": null,
+        "pressure_msl": null,
+        "relative_humidity_2m": null,
+        "temperature_2m_c": null,
+        "temperature_2m_f": null,
+        "time": "",
+        "wind_direction_10m": null,
+        "wind_gusts_10m": null,
+        "wind_speed_10m": null
+      },
+      "id": "direct-ForecastHourly-explicit-null",
+      "rust_type": "ForecastHourly",
+      "wire": {
+        "temperature_2m_f": null
+      }
+    },
+    {
+      "covers": [
+        "ForecastHourly"
+      ],
+      "evidence": {
+        "ForecastHourly": [
+          "defaults",
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "omission"
+      ],
+      "expected": {
+        "apparent_temperature_f": null,
+        "cloud_cover": null,
+        "dew_point_2m": null,
+        "precipitation_probability": null,
+        "pressure_msl": null,
+        "relative_humidity_2m": null,
+        "temperature_2m_c": null,
+        "temperature_2m_f": -0.0,
+        "time": "",
+        "wind_direction_10m": null,
+        "wind_gusts_10m": null,
+        "wind_speed_10m": null
+      },
+      "id": "direct-ForecastHourly-numeric-boundaries",
+      "rust_type": "ForecastHourly",
+      "wire": {
+        "temperature_2m_f": -0.0
+      }
+    },
+    {
+      "covers": [
+        "ForecastQuery"
+      ],
+      "evidence": {
+        "ForecastQuery": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "model_id": "non-default",
+        "refresh": false
+      },
+      "id": "direct-ForecastQuery-non-default",
+      "rust_type": "ForecastQuery",
+      "wire": {
+        "model_id": "non-default"
+      }
+    },
+    {
+      "covers": [
+        "ForecastQuery"
+      ],
+      "evidence": {
+        "ForecastQuery": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
+      "expected": {
+        "model_id": null,
+        "refresh": false
+      },
+      "id": "direct-ForecastQuery-defaults",
+      "rust_type": "ForecastQuery",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "ForecastQuery"
+      ],
+      "evidence": {
+        "ForecastQuery": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "model_id": null,
+        "refresh": false
+      },
+      "id": "direct-ForecastQuery-explicit-null",
+      "rust_type": "ForecastQuery",
+      "wire": {
+        "model_id": null
+      }
+    },
+    {
+      "covers": [
+        "ForecastRunQuery"
+      ],
+      "evidence": {
+        "ForecastRunQuery": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "refresh": false,
+        "run_id": "non-default"
+      },
+      "id": "direct-ForecastRunQuery-non-default",
+      "rust_type": "ForecastRunQuery",
+      "wire": {
+        "run_id": "non-default"
+      }
+    },
+    {
+      "covers": [
+        "ForecastRunQuery"
+      ],
+      "evidence": {
+        "ForecastRunQuery": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "refresh": false,
+        "run_id": "value"
+      },
+      "id": "direct-ForecastRunQuery-defaults",
+      "rust_type": "ForecastRunQuery",
+      "wire": {
+        "run_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "ForecastRunsQuery"
+      ],
+      "evidence": {
+        "ForecastRunsQuery": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "cursor": null,
+        "end": null,
+        "limit": null,
+        "model_id": "non-default",
+        "refresh": false,
+        "start": null
+      },
+      "id": "direct-ForecastRunsQuery-non-default",
+      "rust_type": "ForecastRunsQuery",
+      "wire": {
+        "model_id": "non-default"
+      }
+    },
+    {
+      "covers": [
+        "ForecastRunsQuery"
+      ],
+      "evidence": {
+        "ForecastRunsQuery": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
+      "expected": {
+        "cursor": null,
+        "end": null,
+        "limit": null,
+        "model_id": null,
+        "refresh": false,
+        "start": null
+      },
+      "id": "direct-ForecastRunsQuery-defaults",
+      "rust_type": "ForecastRunsQuery",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "ForecastRunsQuery"
+      ],
+      "evidence": {
+        "ForecastRunsQuery": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "cursor": null,
+        "end": null,
+        "limit": null,
+        "model_id": null,
+        "refresh": false,
+        "start": null
+      },
+      "id": "direct-ForecastRunsQuery-explicit-null",
+      "rust_type": "ForecastRunsQuery",
+      "wire": {
+        "model_id": null
+      }
+    },
+    {
+      "covers": [
+        "ForecastRunsQuery"
+      ],
+      "evidence": {
+        "ForecastRunsQuery": [
+          "defaults",
+          "non_default_round_trip",
+          "omission",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "cursor": null,
+        "end": null,
+        "limit": null,
+        "model_id": null,
+        "refresh": false,
+        "start": "2026-07-13T12:34:56.123456Z"
+      },
+      "id": "direct-ForecastRunsQuery-timestamp-formatting",
+      "rust_type": "ForecastRunsQuery",
+      "wire": {
+        "start": "2026-07-13T12:34:56.123456Z"
+      }
+    },
+    {
+      "covers": [
+        "ForecastRunsQuery"
+      ],
+      "evidence": {
+        "ForecastRunsQuery": [
+          "defaults",
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "omission"
+      ],
+      "expected": {
+        "cursor": null,
+        "end": null,
+        "limit": 9007199254740991,
+        "model_id": null,
+        "refresh": false,
+        "start": null
+      },
+      "id": "direct-ForecastRunsQuery-numeric-boundaries",
+      "rust_type": "ForecastRunsQuery",
+      "wire": {
+        "limit": 9007199254740991
+      }
+    },
+    {
+      "covers": [
+        "ForecastUpdated"
+      ],
+      "evidence": {
+        "ForecastUpdated": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "emitted_at": null,
+        "event_id": "non-default",
+        "model_id": "value",
+        "sequence": null,
+        "slug": "",
+        "station_id": "value",
+        "type": "forecast_updated",
+        "version": "value"
+      },
+      "id": "direct-ForecastUpdated-non-default",
+      "rust_type": "ForecastUpdated",
+      "wire": {
+        "event_id": "non-default",
+        "model_id": "value",
+        "station_id": "value",
+        "version": "value"
+      }
+    },
+    {
+      "covers": [
+        "ForecastUpdated"
+      ],
+      "evidence": {
+        "ForecastUpdated": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "emitted_at": null,
+        "event_id": null,
+        "model_id": "value",
+        "sequence": null,
+        "slug": "",
+        "station_id": "value",
+        "type": "forecast_updated",
+        "version": "value"
+      },
+      "id": "direct-ForecastUpdated-defaults",
+      "rust_type": "ForecastUpdated",
+      "wire": {
+        "model_id": "value",
+        "station_id": "value",
+        "version": "value"
+      }
+    },
+    {
+      "covers": [
+        "ForecastUpdated"
+      ],
+      "evidence": {
+        "ForecastUpdated": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "emitted_at": null,
+        "event_id": null,
+        "model_id": "value",
+        "sequence": null,
+        "slug": "",
+        "station_id": "value",
+        "type": "forecast_updated",
+        "version": "value"
+      },
+      "id": "direct-ForecastUpdated-explicit-null",
+      "rust_type": "ForecastUpdated",
+      "wire": {
+        "event_id": null,
+        "model_id": "value",
+        "station_id": "value",
+        "version": "value"
+      }
+    },
+    {
+      "covers": [
+        "ForecastUpdated"
+      ],
+      "evidence": {
+        "ForecastUpdated": [
+          "defaults",
+          "non_default_round_trip",
+          "omission",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "event_id": null,
+        "model_id": "value",
+        "sequence": null,
+        "slug": "",
+        "station_id": "value",
+        "type": "forecast_updated",
+        "version": "value"
+      },
+      "id": "direct-ForecastUpdated-timestamp-formatting",
+      "rust_type": "ForecastUpdated",
+      "wire": {
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "model_id": "value",
+        "station_id": "value",
+        "version": "value"
+      }
+    },
+    {
+      "covers": [
+        "ForecastUpdated"
+      ],
+      "evidence": {
+        "ForecastUpdated": [
+          "defaults",
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "omission"
+      ],
+      "expected": {
+        "emitted_at": null,
+        "event_id": null,
+        "model_id": "value",
+        "sequence": 9007199254740991,
+        "slug": "",
+        "station_id": "value",
+        "type": "forecast_updated",
+        "version": "value"
+      },
+      "id": "direct-ForecastUpdated-numeric-boundaries",
+      "rust_type": "ForecastUpdated",
+      "wire": {
+        "model_id": "value",
+        "sequence": 9007199254740991,
+        "station_id": "value",
+        "version": "value"
+      }
+    },
+    {
+      "covers": [
+        "ForecastVersions"
+      ],
+      "evidence": {
+        "ForecastVersions": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "emitted_at": null,
+        "event_id": "non-default",
+        "sequence": null,
+        "slug": "",
+        "station_id": "value",
+        "type": "forecast_versions",
+        "versions": {}
+      },
+      "id": "direct-ForecastVersions-non-default",
+      "rust_type": "ForecastVersions",
+      "wire": {
+        "event_id": "non-default",
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "ForecastVersions"
+      ],
+      "evidence": {
+        "ForecastVersions": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "emitted_at": null,
+        "event_id": null,
+        "sequence": null,
+        "slug": "",
+        "station_id": "value",
+        "type": "forecast_versions",
+        "versions": {}
+      },
+      "id": "direct-ForecastVersions-defaults",
+      "rust_type": "ForecastVersions",
+      "wire": {
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "ForecastVersions"
+      ],
+      "evidence": {
+        "ForecastVersions": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "emitted_at": null,
+        "event_id": null,
+        "sequence": null,
+        "slug": "",
+        "station_id": "value",
+        "type": "forecast_versions",
+        "versions": {}
+      },
+      "id": "direct-ForecastVersions-explicit-null",
+      "rust_type": "ForecastVersions",
+      "wire": {
+        "event_id": null,
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "ForecastVersions"
+      ],
+      "evidence": {
+        "ForecastVersions": [
+          "defaults",
+          "non_default_round_trip",
+          "omission",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "event_id": null,
+        "sequence": null,
+        "slug": "",
+        "station_id": "value",
+        "type": "forecast_versions",
+        "versions": {}
+      },
+      "id": "direct-ForecastVersions-timestamp-formatting",
+      "rust_type": "ForecastVersions",
+      "wire": {
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "ForecastVersions"
+      ],
+      "evidence": {
+        "ForecastVersions": [
+          "defaults",
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "omission"
+      ],
+      "expected": {
+        "emitted_at": null,
+        "event_id": null,
+        "sequence": 9007199254740991,
+        "slug": "",
+        "station_id": "value",
+        "type": "forecast_versions",
+        "versions": {}
+      },
+      "id": "direct-ForecastVersions-numeric-boundaries",
+      "rust_type": "ForecastVersions",
+      "wire": {
+        "sequence": 9007199254740991,
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "FreshnessDomainSummary"
+      ],
+      "evidence": {
+        "FreshnessDomainSummary": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
+      "expected": {
+        "domain": "price",
+        "fresh_count": 1,
+        "stale_count": 1,
+        "stalest_age_seconds": 1.0,
+        "tracked_count": 1
+      },
+      "id": "direct-FreshnessDomainSummary-non-default",
+      "rust_type": "FreshnessDomainSummary",
+      "wire": {
+        "domain": "price",
+        "fresh_count": 1,
+        "stale_count": 1,
+        "stalest_age_seconds": 1.0,
+        "tracked_count": 1
+      }
+    },
+    {
+      "covers": [
+        "FreshnessDomainSummary"
+      ],
+      "evidence": {
+        "FreshnessDomainSummary": [
+          "explicit_null",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "explicit_null",
+        "non_default_round_trip"
+      ],
+      "expected": {
+        "domain": "weather",
+        "fresh_count": 1,
+        "stale_count": 1,
+        "stalest_age_seconds": null,
+        "tracked_count": 1
+      },
+      "id": "direct-FreshnessDomainSummary-explicit-null",
+      "rust_type": "FreshnessDomainSummary",
+      "wire": {
+        "domain": "weather",
+        "fresh_count": 1,
+        "stale_count": 1,
+        "stalest_age_seconds": null,
+        "tracked_count": 1
+      }
+    },
+    {
+      "covers": [
+        "FreshnessDomainSummary"
+      ],
+      "evidence": {
+        "FreshnessDomainSummary": [
+          "non_default_round_trip",
+          "numeric_boundaries"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "numeric_boundaries"
+      ],
+      "expected": {
+        "domain": "weather",
+        "fresh_count": 1,
+        "stale_count": 1,
+        "stalest_age_seconds": 1.0,
+        "tracked_count": 9007199254740991
+      },
+      "id": "direct-FreshnessDomainSummary-numeric-boundaries",
+      "rust_type": "FreshnessDomainSummary",
+      "wire": {
+        "domain": "weather",
+        "fresh_count": 1,
+        "stale_count": 1,
+        "stalest_age_seconds": 1.0,
+        "tracked_count": 9007199254740991
+      }
+    },
+    {
+      "covers": [
+        "FreshnessSnapshot"
+      ],
+      "evidence": {
+        "FreshnessSnapshot": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "age_seconds": null,
+        "detail": null,
+        "domain": "price",
+        "invalidation_reason": null,
+        "key": "value",
+        "observed_at": null,
+        "source": null,
+        "stale_after_seconds": null,
+        "status": "fresh",
+        "updated_at": null
+      },
+      "id": "direct-FreshnessSnapshot-non-default",
+      "rust_type": "FreshnessSnapshot",
+      "wire": {
+        "domain": "price",
+        "key": "value",
+        "status": "fresh"
+      }
+    },
+    {
+      "covers": [
+        "FreshnessSnapshot"
+      ],
+      "evidence": {
+        "FreshnessSnapshot": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "age_seconds": null,
+        "detail": null,
+        "domain": "weather",
+        "invalidation_reason": null,
+        "key": "value",
+        "observed_at": null,
+        "source": null,
+        "stale_after_seconds": null,
+        "status": "fresh",
+        "updated_at": null
+      },
+      "id": "direct-FreshnessSnapshot-defaults",
+      "rust_type": "FreshnessSnapshot",
+      "wire": {
+        "domain": "weather",
+        "key": "value",
+        "status": "fresh"
+      }
+    },
+    {
+      "covers": [
+        "FreshnessSnapshot"
+      ],
+      "evidence": {
+        "FreshnessSnapshot": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "age_seconds": null,
+        "detail": null,
+        "domain": "weather",
+        "invalidation_reason": null,
+        "key": "value",
+        "observed_at": null,
+        "source": null,
+        "stale_after_seconds": null,
+        "status": "fresh",
+        "updated_at": null
+      },
+      "id": "direct-FreshnessSnapshot-explicit-null",
+      "rust_type": "FreshnessSnapshot",
+      "wire": {
+        "domain": "weather",
+        "key": "value",
+        "source": null,
+        "status": "fresh"
+      }
+    },
+    {
+      "covers": [
+        "FreshnessSnapshot"
+      ],
+      "evidence": {
+        "FreshnessSnapshot": [
+          "defaults",
+          "non_default_round_trip",
+          "omission",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "age_seconds": null,
+        "detail": null,
+        "domain": "weather",
+        "invalidation_reason": null,
+        "key": "value",
+        "observed_at": null,
+        "source": null,
+        "stale_after_seconds": null,
+        "status": "fresh",
+        "updated_at": "2026-07-13T12:34:56.123456Z"
+      },
+      "id": "direct-FreshnessSnapshot-timestamp-formatting",
+      "rust_type": "FreshnessSnapshot",
+      "wire": {
+        "domain": "weather",
+        "key": "value",
+        "status": "fresh",
+        "updated_at": "2026-07-13T12:34:56.123456Z"
+      }
+    },
+    {
+      "covers": [
+        "FreshnessSnapshot"
+      ],
+      "evidence": {
+        "FreshnessSnapshot": [
+          "defaults",
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "omission"
+      ],
+      "expected": {
+        "age_seconds": null,
+        "detail": null,
+        "domain": "weather",
+        "invalidation_reason": null,
+        "key": "value",
+        "observed_at": null,
+        "source": null,
+        "stale_after_seconds": -0.0,
+        "status": "fresh",
+        "updated_at": null
+      },
+      "id": "direct-FreshnessSnapshot-numeric-boundaries",
+      "rust_type": "FreshnessSnapshot",
+      "wire": {
+        "domain": "weather",
+        "key": "value",
+        "stale_after_seconds": -0.0,
+        "status": "fresh"
+      }
+    },
+    {
+      "covers": [
+        "FreshnessSummary"
+      ],
+      "evidence": {
+        "FreshnessSummary": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "as_of": "2026-07-13T12:34:56.123456Z",
+        "domains": [
+          {
+            "domain": "price",
+            "fresh_count": 1,
+            "stale_count": 1,
+            "stalest_age_seconds": 1.0,
+            "tracked_count": 1
+          }
+        ]
+      },
+      "id": "direct-FreshnessSummary-non-default",
+      "rust_type": "FreshnessSummary",
+      "wire": {
+        "as_of": "2026-07-13T12:34:56.123456Z",
+        "domains": [
+          {
+            "domain": "price",
+            "fresh_count": 1,
+            "stale_count": 1,
+            "stalest_age_seconds": 1.0,
+            "tracked_count": 1
+          }
+        ]
+      }
+    },
+    {
+      "covers": [
+        "FreshnessSummary"
+      ],
+      "evidence": {
+        "FreshnessSummary": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "as_of": "2026-07-13T12:34:56.123456Z",
+        "domains": []
+      },
+      "id": "direct-FreshnessSummary-timestamp-formatting",
+      "rust_type": "FreshnessSummary",
+      "wire": {
+        "as_of": "2026-07-13T12:34:56.123456Z",
+        "domains": []
+      }
+    },
+    {
+      "covers": [
+        "LatestObservationQuery"
+      ],
+      "evidence": {
+        "LatestObservationQuery": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "day_mode": "nws_climate_day",
+        "refresh": false
+      },
+      "id": "direct-LatestObservationQuery-non-default",
+      "rust_type": "LatestObservationQuery",
+      "wire": {
+        "day_mode": "nws_climate_day"
+      }
+    },
+    {
+      "covers": [
+        "LatestObservationQuery"
+      ],
+      "evidence": {
+        "LatestObservationQuery": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
+      "expected": {
+        "day_mode": null,
+        "refresh": false
+      },
+      "id": "direct-LatestObservationQuery-defaults",
+      "rust_type": "LatestObservationQuery",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "LatestObservationQuery"
+      ],
+      "evidence": {
+        "LatestObservationQuery": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "day_mode": null,
+        "refresh": false
+      },
+      "id": "direct-LatestObservationQuery-explicit-null",
+      "rust_type": "LatestObservationQuery",
+      "wire": {
+        "day_mode": null
+      }
+    },
+    {
+      "covers": [
+        "LatestReportsQuery"
+      ],
+      "evidence": {
+        "LatestReportsQuery": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
+      "expected": {
+        "refresh": true
+      },
+      "id": "direct-LatestReportsQuery-non-default",
+      "rust_type": "LatestReportsQuery",
+      "wire": {
+        "refresh": true
+      }
+    },
+    {
+      "covers": [
+        "LatestReportsQuery"
+      ],
+      "evidence": {
+        "LatestReportsQuery": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
+      "expected": {
+        "refresh": false
+      },
+      "id": "direct-LatestReportsQuery-defaults",
+      "rust_type": "LatestReportsQuery",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "LimitsQuery"
+      ],
+      "evidence": {
+        "LimitsQuery": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
+      "expected": {
+        "refresh": true
+      },
+      "id": "direct-LimitsQuery-non-default",
+      "rust_type": "LimitsQuery",
+      "wire": {
+        "refresh": true
+      }
+    },
+    {
+      "covers": [
+        "LimitsQuery"
+      ],
+      "evidence": {
+        "LimitsQuery": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
+      "expected": {
+        "refresh": false
+      },
+      "id": "direct-LimitsQuery-defaults",
+      "rust_type": "LimitsQuery",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "MarketBracket"
+      ],
+      "evidence": {
+        "MarketBracket": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "cap_strike": null,
+        "event_date": "",
+        "event_ticker": "",
+        "floor_strike": null,
+        "market_id": "non-default",
+        "no_ask": null,
+        "no_ask_depth": null,
+        "no_ask_levels": [],
+        "no_bid": null,
+        "no_bid_depth": null,
+        "no_bid_levels": [],
+        "no_price": 0.0,
+        "orderbook_depth": null,
+        "snapshot_time": null,
+        "strike_type": "",
+        "ticker": "value",
+        "volume": null,
+        "yes_ask": null,
+        "yes_ask_depth": null,
+        "yes_ask_levels": [],
+        "yes_bid": null,
+        "yes_bid_depth": null,
+        "yes_bid_levels": [],
+        "yes_price": 0.0
+      },
+      "id": "direct-MarketBracket-non-default",
+      "rust_type": "MarketBracket",
+      "wire": {
+        "market_id": "non-default",
+        "ticker": "value"
+      }
+    },
+    {
+      "covers": [
+        "MarketBracket"
+      ],
+      "evidence": {
+        "MarketBracket": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "cap_strike": null,
+        "event_date": "",
+        "event_ticker": "",
+        "floor_strike": null,
+        "market_id": "",
+        "no_ask": null,
+        "no_ask_depth": null,
+        "no_ask_levels": [],
+        "no_bid": null,
+        "no_bid_depth": null,
+        "no_bid_levels": [],
+        "no_price": 0.0,
+        "orderbook_depth": null,
+        "snapshot_time": null,
+        "strike_type": "",
+        "ticker": "value",
+        "volume": null,
+        "yes_ask": null,
+        "yes_ask_depth": null,
+        "yes_ask_levels": [],
+        "yes_bid": null,
+        "yes_bid_depth": null,
+        "yes_bid_levels": [],
+        "yes_price": 0.0
+      },
+      "id": "direct-MarketBracket-defaults",
+      "rust_type": "MarketBracket",
+      "wire": {
+        "ticker": "value"
+      }
+    },
+    {
+      "covers": [
+        "MarketBracket"
+      ],
+      "evidence": {
+        "MarketBracket": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "cap_strike": null,
+        "event_date": "",
+        "event_ticker": "",
+        "floor_strike": null,
+        "market_id": "",
+        "no_ask": null,
+        "no_ask_depth": null,
+        "no_ask_levels": [],
+        "no_bid": null,
+        "no_bid_depth": null,
+        "no_bid_levels": [],
+        "no_price": 0.0,
+        "orderbook_depth": null,
+        "snapshot_time": null,
+        "strike_type": "",
+        "ticker": "value",
+        "volume": null,
+        "yes_ask": null,
+        "yes_ask_depth": null,
+        "yes_ask_levels": [],
+        "yes_bid": null,
+        "yes_bid_depth": null,
+        "yes_bid_levels": [],
+        "yes_price": 0.0
+      },
+      "id": "direct-MarketBracket-explicit-null",
+      "rust_type": "MarketBracket",
+      "wire": {
+        "floor_strike": null,
+        "ticker": "value"
+      }
+    },
+    {
+      "covers": [
+        "MarketBracket"
+      ],
+      "evidence": {
+        "MarketBracket": [
+          "defaults",
+          "non_default_round_trip",
+          "omission",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "cap_strike": null,
+        "event_date": "",
+        "event_ticker": "",
+        "floor_strike": null,
+        "market_id": "",
+        "no_ask": null,
+        "no_ask_depth": null,
+        "no_ask_levels": [],
+        "no_bid": null,
+        "no_bid_depth": null,
+        "no_bid_levels": [],
+        "no_price": 0.0,
+        "orderbook_depth": null,
+        "snapshot_time": "2026-07-13T12:34:56.123456Z",
+        "strike_type": "",
+        "ticker": "value",
+        "volume": null,
+        "yes_ask": null,
+        "yes_ask_depth": null,
+        "yes_ask_levels": [],
+        "yes_bid": null,
+        "yes_bid_depth": null,
+        "yes_bid_levels": [],
+        "yes_price": 0.0
+      },
+      "id": "direct-MarketBracket-timestamp-formatting",
+      "rust_type": "MarketBracket",
+      "wire": {
+        "snapshot_time": "2026-07-13T12:34:56.123456Z",
+        "ticker": "value"
+      }
+    },
+    {
+      "covers": [
+        "MarketBracket"
+      ],
+      "evidence": {
+        "MarketBracket": [
+          "defaults",
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "omission"
+      ],
+      "expected": {
+        "cap_strike": null,
+        "event_date": "",
+        "event_ticker": "",
+        "floor_strike": null,
+        "market_id": "",
+        "no_ask": null,
+        "no_ask_depth": null,
+        "no_ask_levels": [],
+        "no_bid": null,
+        "no_bid_depth": null,
+        "no_bid_levels": [],
+        "no_price": 0.0,
+        "orderbook_depth": null,
+        "snapshot_time": null,
+        "strike_type": "",
+        "ticker": "value",
+        "volume": null,
+        "yes_ask": null,
+        "yes_ask_depth": null,
+        "yes_ask_levels": [],
+        "yes_bid": null,
+        "yes_bid_depth": null,
+        "yes_bid_levels": [],
+        "yes_price": -0.0
+      },
+      "id": "direct-MarketBracket-numeric-boundaries",
+      "rust_type": "MarketBracket",
+      "wire": {
+        "ticker": "value",
+        "yes_price": -0.0
+      }
+    },
+    {
+      "covers": [
+        "ModelForecast"
+      ],
+      "evidence": {
+        "ModelForecast": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "hourly": [],
+        "model_id": "non-default",
+        "run_issued_at": null,
+        "updated_at": null,
+        "value": 1.0,
+        "version": ""
+      },
+      "id": "direct-ModelForecast-non-default",
+      "rust_type": "ModelForecast",
+      "wire": {
+        "model_id": "non-default",
+        "value": 1.0
+      }
+    },
+    {
+      "covers": [
+        "ModelForecast"
+      ],
+      "evidence": {
+        "ModelForecast": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "hourly": [],
+        "model_id": "value",
+        "run_issued_at": null,
+        "updated_at": null,
+        "value": 1.0,
+        "version": ""
+      },
+      "id": "direct-ModelForecast-defaults",
+      "rust_type": "ModelForecast",
+      "wire": {
+        "model_id": "value",
+        "value": 1.0
+      }
+    },
+    {
+      "covers": [
+        "ModelForecast"
+      ],
+      "evidence": {
+        "ModelForecast": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "hourly": [],
+        "model_id": "value",
+        "run_issued_at": null,
+        "updated_at": null,
+        "value": 1.0,
+        "version": ""
+      },
+      "id": "direct-ModelForecast-explicit-null",
+      "rust_type": "ModelForecast",
+      "wire": {
+        "model_id": "value",
+        "updated_at": null,
+        "value": 1.0
+      }
+    },
+    {
+      "covers": [
+        "ModelForecast"
+      ],
+      "evidence": {
+        "ModelForecast": [
+          "defaults",
+          "non_default_round_trip",
+          "omission",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "hourly": [],
+        "model_id": "value",
+        "run_issued_at": null,
+        "updated_at": "2026-07-13T12:34:56.123456Z",
+        "value": 1.0,
+        "version": ""
+      },
+      "id": "direct-ModelForecast-timestamp-formatting",
+      "rust_type": "ModelForecast",
+      "wire": {
+        "model_id": "value",
+        "updated_at": "2026-07-13T12:34:56.123456Z",
+        "value": 1.0
+      }
+    },
+    {
+      "covers": [
+        "ModelForecast"
+      ],
+      "evidence": {
+        "ModelForecast": [
+          "defaults",
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "omission"
+      ],
+      "expected": {
+        "hourly": [],
+        "model_id": "value",
+        "run_issued_at": null,
+        "updated_at": null,
+        "value": -0.0,
+        "version": ""
+      },
+      "id": "direct-ModelForecast-numeric-boundaries",
+      "rust_type": "ModelForecast",
+      "wire": {
+        "model_id": "value",
+        "value": -0.0
+      }
+    },
+    {
+      "covers": [
+        "NativeKernelResult"
+      ],
+      "evidence": {
+        "NativeKernelResult": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "actions_emitted": 0,
+        "events_handled": 0,
+        "fallback_used": false,
+        "metadata": {},
+        "status": "fallback_completed"
+      },
+      "id": "direct-NativeKernelResult-non-default",
+      "rust_type": "NativeKernelResult",
+      "wire": {
+        "status": "fallback_completed"
+      }
+    },
+    {
+      "covers": [
+        "NativeKernelResult"
+      ],
+      "evidence": {
+        "NativeKernelResult": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
+      "expected": {
+        "actions_emitted": 0,
+        "events_handled": 0,
+        "fallback_used": false,
+        "metadata": {},
+        "status": "completed"
+      },
+      "id": "direct-NativeKernelResult-defaults",
+      "rust_type": "NativeKernelResult",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "NativeKernelResult"
+      ],
+      "evidence": {
+        "NativeKernelResult": [
+          "defaults",
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "omission"
+      ],
+      "expected": {
+        "actions_emitted": 0,
+        "events_handled": 9007199254740991,
+        "fallback_used": false,
+        "metadata": {},
+        "status": "completed"
+      },
+      "id": "direct-NativeKernelResult-numeric-boundaries",
+      "rust_type": "NativeKernelResult",
+      "wire": {
+        "events_handled": 9007199254740991
+      }
+    },
+    {
+      "covers": [
+        "NewHigh"
+      ],
+      "evidence": {
+        "NewHigh": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "city_sequence": null,
+        "emitted_at": null,
+        "event_id": "non-default",
+        "event_key": "",
+        "is_from_report": false,
+        "live_published_at": null,
+        "observed_at": null,
+        "persistence_status": null,
+        "prev_value_f": null,
+        "producer_received_at": null,
+        "producer_sequence": null,
+        "report_type": null,
+        "sequence": null,
+        "slug": "",
+        "source_report_id": null,
+        "source_timestamp": null,
+        "station_id": "value",
+        "temperature_day_date": null,
+        "temperature_day_mode": null,
+        "type": "new_high",
+        "value_c": 1.0,
+        "value_f": 1.0,
+        "wmo_emit_time": null
+      },
+      "id": "direct-NewHigh-non-default",
+      "rust_type": "NewHigh",
+      "wire": {
+        "event_id": "non-default",
+        "station_id": "value",
+        "value_c": 1.0,
+        "value_f": 1.0
+      }
+    },
+    {
+      "covers": [
+        "NewHigh"
+      ],
+      "evidence": {
+        "NewHigh": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "city_sequence": null,
+        "emitted_at": null,
+        "event_id": null,
+        "event_key": "",
+        "is_from_report": false,
+        "live_published_at": null,
+        "observed_at": null,
+        "persistence_status": null,
+        "prev_value_f": null,
+        "producer_received_at": null,
+        "producer_sequence": null,
+        "report_type": null,
+        "sequence": null,
+        "slug": "",
+        "source_report_id": null,
+        "source_timestamp": null,
+        "station_id": "value",
+        "temperature_day_date": null,
+        "temperature_day_mode": null,
+        "type": "new_high",
+        "value_c": 1.0,
+        "value_f": 1.0,
+        "wmo_emit_time": null
+      },
+      "id": "direct-NewHigh-defaults",
+      "rust_type": "NewHigh",
+      "wire": {
+        "station_id": "value",
+        "value_c": 1.0,
+        "value_f": 1.0
+      }
+    },
+    {
+      "covers": [
+        "NewHigh"
+      ],
+      "evidence": {
+        "NewHigh": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "city_sequence": null,
+        "emitted_at": null,
+        "event_id": null,
+        "event_key": "",
+        "is_from_report": false,
+        "live_published_at": null,
+        "observed_at": null,
+        "persistence_status": null,
+        "prev_value_f": null,
+        "producer_received_at": null,
+        "producer_sequence": null,
+        "report_type": null,
+        "sequence": null,
+        "slug": "",
+        "source_report_id": null,
+        "source_timestamp": null,
+        "station_id": "value",
+        "temperature_day_date": null,
+        "temperature_day_mode": null,
+        "type": "new_high",
+        "value_c": 1.0,
+        "value_f": 1.0,
+        "wmo_emit_time": null
+      },
+      "id": "direct-NewHigh-explicit-null",
+      "rust_type": "NewHigh",
+      "wire": {
+        "event_id": null,
+        "station_id": "value",
+        "value_c": 1.0,
+        "value_f": 1.0
+      }
+    },
+    {
+      "covers": [
+        "NewHigh"
+      ],
+      "evidence": {
+        "NewHigh": [
+          "defaults",
+          "non_default_round_trip",
+          "omission",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "city_sequence": null,
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "event_id": null,
+        "event_key": "",
+        "is_from_report": false,
+        "live_published_at": null,
+        "observed_at": null,
+        "persistence_status": null,
+        "prev_value_f": null,
+        "producer_received_at": null,
+        "producer_sequence": null,
+        "report_type": null,
+        "sequence": null,
+        "slug": "",
+        "source_report_id": null,
+        "source_timestamp": null,
+        "station_id": "value",
+        "temperature_day_date": null,
+        "temperature_day_mode": null,
+        "type": "new_high",
+        "value_c": 1.0,
+        "value_f": 1.0,
+        "wmo_emit_time": null
+      },
+      "id": "direct-NewHigh-timestamp-formatting",
+      "rust_type": "NewHigh",
+      "wire": {
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "station_id": "value",
+        "value_c": 1.0,
+        "value_f": 1.0
+      }
+    },
+    {
+      "covers": [
+        "NewHigh"
+      ],
+      "evidence": {
+        "NewHigh": [
+          "defaults",
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "omission"
+      ],
+      "expected": {
+        "city_sequence": null,
+        "emitted_at": null,
+        "event_id": null,
+        "event_key": "",
+        "is_from_report": false,
+        "live_published_at": null,
+        "observed_at": null,
+        "persistence_status": null,
+        "prev_value_f": null,
+        "producer_received_at": null,
+        "producer_sequence": null,
+        "report_type": null,
+        "sequence": 9007199254740991,
+        "slug": "",
+        "source_report_id": null,
+        "source_timestamp": null,
+        "station_id": "value",
+        "temperature_day_date": null,
+        "temperature_day_mode": null,
+        "type": "new_high",
+        "value_c": 1.0,
+        "value_f": 1.0,
+        "wmo_emit_time": null
+      },
+      "id": "direct-NewHigh-numeric-boundaries",
+      "rust_type": "NewHigh",
+      "wire": {
+        "sequence": 9007199254740991,
+        "station_id": "value",
+        "value_c": 1.0,
+        "value_f": 1.0
+      }
+    },
+    {
+      "covers": [
+        "NewLow"
+      ],
+      "evidence": {
+        "NewLow": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "city_sequence": null,
+        "emitted_at": null,
+        "event_id": "non-default",
+        "event_key": "",
+        "is_from_report": false,
+        "live_published_at": null,
+        "observed_at": null,
+        "persistence_status": null,
+        "prev_value_f": null,
+        "producer_received_at": null,
+        "producer_sequence": null,
+        "report_type": null,
+        "sequence": null,
+        "slug": "",
+        "source_report_id": null,
+        "source_timestamp": null,
+        "station_id": "value",
+        "temperature_day_date": null,
+        "temperature_day_mode": null,
+        "type": "new_low",
+        "value_c": 1.0,
+        "value_f": 1.0,
+        "wmo_emit_time": null
+      },
+      "id": "direct-NewLow-non-default",
+      "rust_type": "NewLow",
+      "wire": {
+        "event_id": "non-default",
+        "station_id": "value",
+        "value_c": 1.0,
+        "value_f": 1.0
+      }
+    },
+    {
+      "covers": [
+        "NewLow"
+      ],
+      "evidence": {
+        "NewLow": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "city_sequence": null,
+        "emitted_at": null,
+        "event_id": null,
+        "event_key": "",
+        "is_from_report": false,
+        "live_published_at": null,
+        "observed_at": null,
+        "persistence_status": null,
+        "prev_value_f": null,
+        "producer_received_at": null,
+        "producer_sequence": null,
+        "report_type": null,
+        "sequence": null,
+        "slug": "",
+        "source_report_id": null,
+        "source_timestamp": null,
+        "station_id": "value",
+        "temperature_day_date": null,
+        "temperature_day_mode": null,
+        "type": "new_low",
+        "value_c": 1.0,
+        "value_f": 1.0,
+        "wmo_emit_time": null
+      },
+      "id": "direct-NewLow-defaults",
+      "rust_type": "NewLow",
+      "wire": {
+        "station_id": "value",
+        "value_c": 1.0,
+        "value_f": 1.0
+      }
+    },
+    {
+      "covers": [
+        "NewLow"
+      ],
+      "evidence": {
+        "NewLow": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "city_sequence": null,
+        "emitted_at": null,
+        "event_id": null,
+        "event_key": "",
+        "is_from_report": false,
+        "live_published_at": null,
+        "observed_at": null,
+        "persistence_status": null,
+        "prev_value_f": null,
+        "producer_received_at": null,
+        "producer_sequence": null,
+        "report_type": null,
+        "sequence": null,
+        "slug": "",
+        "source_report_id": null,
+        "source_timestamp": null,
+        "station_id": "value",
+        "temperature_day_date": null,
+        "temperature_day_mode": null,
+        "type": "new_low",
+        "value_c": 1.0,
+        "value_f": 1.0,
+        "wmo_emit_time": null
+      },
+      "id": "direct-NewLow-explicit-null",
+      "rust_type": "NewLow",
+      "wire": {
+        "event_id": null,
+        "station_id": "value",
+        "value_c": 1.0,
+        "value_f": 1.0
+      }
+    },
+    {
+      "covers": [
+        "NewLow"
+      ],
+      "evidence": {
+        "NewLow": [
+          "defaults",
+          "non_default_round_trip",
+          "omission",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "city_sequence": null,
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "event_id": null,
+        "event_key": "",
+        "is_from_report": false,
+        "live_published_at": null,
+        "observed_at": null,
+        "persistence_status": null,
+        "prev_value_f": null,
+        "producer_received_at": null,
+        "producer_sequence": null,
+        "report_type": null,
+        "sequence": null,
+        "slug": "",
+        "source_report_id": null,
+        "source_timestamp": null,
+        "station_id": "value",
+        "temperature_day_date": null,
+        "temperature_day_mode": null,
+        "type": "new_low",
+        "value_c": 1.0,
+        "value_f": 1.0,
+        "wmo_emit_time": null
+      },
+      "id": "direct-NewLow-timestamp-formatting",
+      "rust_type": "NewLow",
+      "wire": {
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "station_id": "value",
+        "value_c": 1.0,
+        "value_f": 1.0
+      }
+    },
+    {
+      "covers": [
+        "NewLow"
+      ],
+      "evidence": {
+        "NewLow": [
+          "defaults",
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "omission"
+      ],
+      "expected": {
+        "city_sequence": null,
+        "emitted_at": null,
+        "event_id": null,
+        "event_key": "",
+        "is_from_report": false,
+        "live_published_at": null,
+        "observed_at": null,
+        "persistence_status": null,
+        "prev_value_f": null,
+        "producer_received_at": null,
+        "producer_sequence": null,
+        "report_type": null,
+        "sequence": 9007199254740991,
+        "slug": "",
+        "source_report_id": null,
+        "source_timestamp": null,
+        "station_id": "value",
+        "temperature_day_date": null,
+        "temperature_day_mode": null,
+        "type": "new_low",
+        "value_c": 1.0,
+        "value_f": 1.0,
+        "wmo_emit_time": null
+      },
+      "id": "direct-NewLow-numeric-boundaries",
+      "rust_type": "NewLow",
+      "wire": {
+        "sequence": 9007199254740991,
+        "station_id": "value",
+        "value_c": 1.0,
+        "value_f": 1.0
+      }
+    },
+    {
+      "covers": [
+        "Observation"
+      ],
+      "evidence": {
+        "Observation": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "city_sequence": null,
+        "dewpoint": null,
+        "emitted_at": null,
+        "event_id": "non-default",
+        "heat_index": null,
+        "is_from_report": false,
+        "lag_seconds": null,
+        "observed_at": null,
+        "preliminary": false,
+        "relative_humidity": null,
+        "report_type": null,
+        "sequence": null,
+        "slug": "",
+        "source_report_id": null,
+        "station_id": "value",
+        "temp_max_c": null,
+        "temp_max_f": null,
+        "temp_min_c": null,
+        "temp_min_f": null,
+        "temperature_c": null,
+        "temperature_day_date": null,
+        "temperature_day_mode": null,
+        "temperature_f": null,
+        "text_description": null,
+        "type": "observation",
+        "wind_chill": null,
+        "wind_direction": null,
+        "wind_gust": null,
+        "wind_speed": null,
+        "wu_current_temp_c": null,
+        "wu_current_temp_f": null,
+        "wu_daily_high_c": null,
+        "wu_daily_high_f": null,
+        "wu_daily_low_c": null,
+        "wu_daily_low_f": null,
+        "wu_day_date": null,
+        "wu_day_mode": null,
+        "wu_fetched_at": null,
+        "wu_observation_time": null
+      },
+      "id": "direct-Observation-non-default",
+      "rust_type": "Observation",
+      "wire": {
+        "event_id": "non-default",
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "Observation"
+      ],
+      "evidence": {
+        "Observation": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "city_sequence": null,
+        "dewpoint": null,
+        "emitted_at": null,
+        "event_id": null,
+        "heat_index": null,
+        "is_from_report": false,
+        "lag_seconds": null,
+        "observed_at": null,
+        "preliminary": false,
+        "relative_humidity": null,
+        "report_type": null,
+        "sequence": null,
+        "slug": "",
+        "source_report_id": null,
+        "station_id": "value",
+        "temp_max_c": null,
+        "temp_max_f": null,
+        "temp_min_c": null,
+        "temp_min_f": null,
+        "temperature_c": null,
+        "temperature_day_date": null,
+        "temperature_day_mode": null,
+        "temperature_f": null,
+        "text_description": null,
+        "type": "observation",
+        "wind_chill": null,
+        "wind_direction": null,
+        "wind_gust": null,
+        "wind_speed": null,
+        "wu_current_temp_c": null,
+        "wu_current_temp_f": null,
+        "wu_daily_high_c": null,
+        "wu_daily_high_f": null,
+        "wu_daily_low_c": null,
+        "wu_daily_low_f": null,
+        "wu_day_date": null,
+        "wu_day_mode": null,
+        "wu_fetched_at": null,
+        "wu_observation_time": null
+      },
+      "id": "direct-Observation-defaults",
+      "rust_type": "Observation",
+      "wire": {
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "Observation"
+      ],
+      "evidence": {
+        "Observation": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "city_sequence": null,
+        "dewpoint": null,
+        "emitted_at": null,
+        "event_id": null,
+        "heat_index": null,
+        "is_from_report": false,
+        "lag_seconds": null,
+        "observed_at": null,
+        "preliminary": false,
+        "relative_humidity": null,
+        "report_type": null,
+        "sequence": null,
+        "slug": "",
+        "source_report_id": null,
+        "station_id": "value",
+        "temp_max_c": null,
+        "temp_max_f": null,
+        "temp_min_c": null,
+        "temp_min_f": null,
+        "temperature_c": null,
+        "temperature_day_date": null,
+        "temperature_day_mode": null,
+        "temperature_f": null,
+        "text_description": null,
+        "type": "observation",
+        "wind_chill": null,
+        "wind_direction": null,
+        "wind_gust": null,
+        "wind_speed": null,
+        "wu_current_temp_c": null,
+        "wu_current_temp_f": null,
+        "wu_daily_high_c": null,
+        "wu_daily_high_f": null,
+        "wu_daily_low_c": null,
+        "wu_daily_low_f": null,
+        "wu_day_date": null,
+        "wu_day_mode": null,
+        "wu_fetched_at": null,
+        "wu_observation_time": null
+      },
+      "id": "direct-Observation-explicit-null",
+      "rust_type": "Observation",
+      "wire": {
+        "event_id": null,
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "Observation"
+      ],
+      "evidence": {
+        "Observation": [
+          "defaults",
+          "non_default_round_trip",
+          "omission",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "city_sequence": null,
+        "dewpoint": null,
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "event_id": null,
+        "heat_index": null,
+        "is_from_report": false,
+        "lag_seconds": null,
+        "observed_at": null,
+        "preliminary": false,
+        "relative_humidity": null,
+        "report_type": null,
+        "sequence": null,
+        "slug": "",
+        "source_report_id": null,
+        "station_id": "value",
+        "temp_max_c": null,
+        "temp_max_f": null,
+        "temp_min_c": null,
+        "temp_min_f": null,
+        "temperature_c": null,
+        "temperature_day_date": null,
+        "temperature_day_mode": null,
+        "temperature_f": null,
+        "text_description": null,
+        "type": "observation",
+        "wind_chill": null,
+        "wind_direction": null,
+        "wind_gust": null,
+        "wind_speed": null,
+        "wu_current_temp_c": null,
+        "wu_current_temp_f": null,
+        "wu_daily_high_c": null,
+        "wu_daily_high_f": null,
+        "wu_daily_low_c": null,
+        "wu_daily_low_f": null,
+        "wu_day_date": null,
+        "wu_day_mode": null,
+        "wu_fetched_at": null,
+        "wu_observation_time": null
+      },
+      "id": "direct-Observation-timestamp-formatting",
+      "rust_type": "Observation",
+      "wire": {
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "Observation"
+      ],
+      "evidence": {
+        "Observation": [
+          "defaults",
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "omission"
+      ],
+      "expected": {
+        "city_sequence": null,
+        "dewpoint": null,
+        "emitted_at": null,
+        "event_id": null,
+        "heat_index": null,
+        "is_from_report": false,
+        "lag_seconds": null,
+        "observed_at": null,
+        "preliminary": false,
+        "relative_humidity": null,
+        "report_type": null,
+        "sequence": 9007199254740991,
+        "slug": "",
+        "source_report_id": null,
+        "station_id": "value",
+        "temp_max_c": null,
+        "temp_max_f": null,
+        "temp_min_c": null,
+        "temp_min_f": null,
+        "temperature_c": null,
+        "temperature_day_date": null,
+        "temperature_day_mode": null,
+        "temperature_f": null,
+        "text_description": null,
+        "type": "observation",
+        "wind_chill": null,
+        "wind_direction": null,
+        "wind_gust": null,
+        "wind_speed": null,
+        "wu_current_temp_c": null,
+        "wu_current_temp_f": null,
+        "wu_daily_high_c": null,
+        "wu_daily_high_f": null,
+        "wu_daily_low_c": null,
+        "wu_daily_low_f": null,
+        "wu_day_date": null,
+        "wu_day_mode": null,
+        "wu_fetched_at": null,
+        "wu_observation_time": null
+      },
+      "id": "direct-Observation-numeric-boundaries",
+      "rust_type": "Observation",
+      "wire": {
+        "sequence": 9007199254740991,
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "OracleModelScore"
+      ],
+      "evidence": {
+        "OracleModelScore": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "combined_mae": null,
+        "day_count": null,
+        "high_bias": null,
+        "high_mae": null,
+        "is_public": null,
+        "low_bias": null,
+        "low_mae": null,
+        "model_id": "non-default",
+        "model_name": ""
+      },
+      "id": "direct-OracleModelScore-non-default",
+      "rust_type": "OracleModelScore",
+      "wire": {
+        "model_id": "non-default"
+      }
+    },
+    {
+      "covers": [
+        "OracleModelScore"
+      ],
+      "evidence": {
+        "OracleModelScore": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "combined_mae": null,
+        "day_count": null,
+        "high_bias": null,
+        "high_mae": null,
+        "is_public": null,
+        "low_bias": null,
+        "low_mae": null,
+        "model_id": "value",
+        "model_name": ""
+      },
+      "id": "direct-OracleModelScore-defaults",
+      "rust_type": "OracleModelScore",
+      "wire": {
+        "model_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "OracleModelScore"
+      ],
+      "evidence": {
+        "OracleModelScore": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "combined_mae": null,
+        "day_count": null,
+        "high_bias": null,
+        "high_mae": null,
+        "is_public": null,
+        "low_bias": null,
+        "low_mae": null,
+        "model_id": "value",
+        "model_name": ""
+      },
+      "id": "direct-OracleModelScore-explicit-null",
+      "rust_type": "OracleModelScore",
+      "wire": {
+        "combined_mae": null,
+        "model_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "OracleModelScore"
+      ],
+      "evidence": {
+        "OracleModelScore": [
+          "defaults",
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "omission"
+      ],
+      "expected": {
+        "combined_mae": -0.0,
+        "day_count": null,
+        "high_bias": null,
+        "high_mae": null,
+        "is_public": null,
+        "low_bias": null,
+        "low_mae": null,
+        "model_id": "value",
+        "model_name": ""
+      },
+      "id": "direct-OracleModelScore-numeric-boundaries",
+      "rust_type": "OracleModelScore",
+      "wire": {
+        "combined_mae": -0.0,
+        "model_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "OracleScoreRow"
+      ],
+      "evidence": {
+        "OracleScoreRow": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "combined_mae": null,
+        "day_count": null,
+        "high_bias": null,
+        "high_mae": null,
+        "is_public": null,
+        "low_bias": null,
+        "low_mae": null,
+        "model_id": "non-default",
+        "model_name": ""
+      },
+      "id": "direct-OracleScoreRow-non-default",
+      "rust_type": "OracleScoreRow",
+      "wire": {
+        "model_id": "non-default"
+      }
+    },
+    {
+      "covers": [
+        "OracleScoreRow"
+      ],
+      "evidence": {
+        "OracleScoreRow": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "combined_mae": null,
+        "day_count": null,
+        "high_bias": null,
+        "high_mae": null,
+        "is_public": null,
+        "low_bias": null,
+        "low_mae": null,
+        "model_id": "value",
+        "model_name": ""
+      },
+      "id": "direct-OracleScoreRow-defaults",
+      "rust_type": "OracleScoreRow",
+      "wire": {
+        "model_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "OracleScoreRow"
+      ],
+      "evidence": {
+        "OracleScoreRow": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "combined_mae": null,
+        "day_count": null,
+        "high_bias": null,
+        "high_mae": null,
+        "is_public": null,
+        "low_bias": null,
+        "low_mae": null,
+        "model_id": "value",
+        "model_name": ""
+      },
+      "id": "direct-OracleScoreRow-explicit-null",
+      "rust_type": "OracleScoreRow",
+      "wire": {
+        "is_public": null,
+        "model_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "OracleScoreRow"
+      ],
+      "evidence": {
+        "OracleScoreRow": [
+          "defaults",
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "omission"
+      ],
+      "expected": {
+        "combined_mae": -0.0,
+        "day_count": null,
+        "high_bias": null,
+        "high_mae": null,
+        "is_public": null,
+        "low_bias": null,
+        "low_mae": null,
+        "model_id": "value",
+        "model_name": ""
+      },
+      "id": "direct-OracleScoreRow-numeric-boundaries",
+      "rust_type": "OracleScoreRow",
+      "wire": {
+        "combined_mae": -0.0,
+        "model_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "OracleScoreTable"
+      ],
+      "evidence": {
+        "OracleScoreTable": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "all_time": null,
+        "days_requested": null,
+        "range_end": "",
+        "range_start": "",
+        "rank_by": "",
+        "score_mode": "",
+        "scores": [],
+        "station_id": "non-default"
+      },
+      "id": "direct-OracleScoreTable-non-default",
+      "rust_type": "OracleScoreTable",
+      "wire": {
+        "station_id": "non-default"
+      }
+    },
+    {
+      "covers": [
+        "OracleScoreTable"
+      ],
+      "evidence": {
+        "OracleScoreTable": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "all_time": null,
+        "days_requested": null,
+        "range_end": "",
+        "range_start": "",
+        "rank_by": "",
+        "score_mode": "",
+        "scores": [],
+        "station_id": "value"
+      },
+      "id": "direct-OracleScoreTable-defaults",
+      "rust_type": "OracleScoreTable",
+      "wire": {
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "OracleScoreTable"
+      ],
+      "evidence": {
+        "OracleScoreTable": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "all_time": null,
+        "days_requested": null,
+        "range_end": "",
+        "range_start": "",
+        "rank_by": "",
+        "score_mode": "",
+        "scores": [],
+        "station_id": "value"
+      },
+      "id": "direct-OracleScoreTable-explicit-null",
+      "rust_type": "OracleScoreTable",
+      "wire": {
+        "days_requested": null,
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "OracleScoreTable"
+      ],
+      "evidence": {
+        "OracleScoreTable": [
+          "defaults",
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "omission"
+      ],
+      "expected": {
+        "all_time": null,
+        "days_requested": 9007199254740991,
+        "range_end": "",
+        "range_start": "",
+        "rank_by": "",
+        "score_mode": "",
+        "scores": [],
+        "station_id": "value"
+      },
+      "id": "direct-OracleScoreTable-numeric-boundaries",
+      "rust_type": "OracleScoreTable",
+      "wire": {
+        "days_requested": 9007199254740991,
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "OracleScoresQuery"
+      ],
+      "evidence": {
+        "OracleScoresQuery": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "days": "non-default",
+        "mode": "day_ahead",
+        "rank_by": "high",
+        "refresh": false
+      },
+      "id": "direct-OracleScoresQuery-non-default",
+      "rust_type": "OracleScoresQuery",
+      "wire": {
+        "days": "non-default"
+      }
+    },
+    {
+      "covers": [
+        "OracleScoresQuery"
+      ],
+      "evidence": {
+        "OracleScoresQuery": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
+      "expected": {
+        "days": "7",
+        "mode": "day_ahead",
+        "rank_by": "high",
+        "refresh": false
+      },
+      "id": "direct-OracleScoresQuery-defaults",
+      "rust_type": "OracleScoresQuery",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "OracleScoresUpdated"
+      ],
+      "evidence": {
+        "OracleScoresUpdated": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "day_ahead": null,
+        "day_of": null,
+        "emitted_at": null,
+        "event_id": "non-default",
+        "modes": [],
+        "overall": null,
+        "sequence": null,
+        "slug": "",
+        "station_id": "value",
+        "type": "oracle_scores_updated",
+        "updated_at": null
+      },
+      "id": "direct-OracleScoresUpdated-non-default",
+      "rust_type": "OracleScoresUpdated",
+      "wire": {
+        "event_id": "non-default",
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "OracleScoresUpdated"
+      ],
+      "evidence": {
+        "OracleScoresUpdated": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "day_ahead": null,
+        "day_of": null,
+        "emitted_at": null,
+        "event_id": null,
+        "modes": [],
+        "overall": null,
+        "sequence": null,
+        "slug": "",
+        "station_id": "value",
+        "type": "oracle_scores_updated",
+        "updated_at": null
+      },
+      "id": "direct-OracleScoresUpdated-defaults",
+      "rust_type": "OracleScoresUpdated",
+      "wire": {
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "OracleScoresUpdated"
+      ],
+      "evidence": {
+        "OracleScoresUpdated": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "day_ahead": null,
+        "day_of": null,
+        "emitted_at": null,
+        "event_id": null,
+        "modes": [],
+        "overall": null,
+        "sequence": null,
+        "slug": "",
+        "station_id": "value",
+        "type": "oracle_scores_updated",
+        "updated_at": null
+      },
+      "id": "direct-OracleScoresUpdated-explicit-null",
+      "rust_type": "OracleScoresUpdated",
+      "wire": {
+        "event_id": null,
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "OracleScoresUpdated"
+      ],
+      "evidence": {
+        "OracleScoresUpdated": [
+          "defaults",
+          "non_default_round_trip",
+          "omission",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "day_ahead": null,
+        "day_of": null,
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "event_id": null,
+        "modes": [],
+        "overall": null,
+        "sequence": null,
+        "slug": "",
+        "station_id": "value",
+        "type": "oracle_scores_updated",
+        "updated_at": null
+      },
+      "id": "direct-OracleScoresUpdated-timestamp-formatting",
+      "rust_type": "OracleScoresUpdated",
+      "wire": {
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "OracleScoresUpdated"
+      ],
+      "evidence": {
+        "OracleScoresUpdated": [
+          "defaults",
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "omission"
+      ],
+      "expected": {
+        "day_ahead": null,
+        "day_of": null,
+        "emitted_at": null,
+        "event_id": null,
+        "modes": [],
+        "overall": null,
+        "sequence": 9007199254740991,
+        "slug": "",
+        "station_id": "value",
+        "type": "oracle_scores_updated",
+        "updated_at": null
+      },
+      "id": "direct-OracleScoresUpdated-numeric-boundaries",
+      "rust_type": "OracleScoresUpdated",
+      "wire": {
+        "sequence": 9007199254740991,
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "OrderIntent"
+      ],
+      "evidence": {
+        "OrderIntent": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "action": "buy",
+        "client_order_id": null,
+        "contract_side": "yes",
+        "execution_style": null,
+        "expires_after_ms": null,
+        "limit_price": null,
+        "max_cost": null,
+        "max_price": null,
+        "order_type": "market",
+        "post_only": false,
+        "quantity": 1,
+        "reduce_only": false,
+        "signal_metadata": null,
+        "signal_type": null,
+        "ticker": "non-default",
+        "time_policy": null
+      },
+      "id": "direct-OrderIntent-non-default",
+      "rust_type": "OrderIntent",
+      "wire": {
+        "action": "buy",
+        "contract_side": "yes",
+        "order_type": "market",
+        "quantity": 1,
+        "ticker": "non-default"
+      }
+    },
+    {
+      "covers": [
+        "OrderIntent"
+      ],
+      "evidence": {
+        "OrderIntent": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "action": "buy",
+        "client_order_id": null,
+        "contract_side": "yes",
+        "execution_style": null,
+        "expires_after_ms": null,
+        "limit_price": null,
+        "max_cost": null,
+        "max_price": null,
+        "order_type": "market",
+        "post_only": false,
+        "quantity": 1,
+        "reduce_only": false,
+        "signal_metadata": null,
+        "signal_type": null,
+        "ticker": "value",
+        "time_policy": null
+      },
+      "id": "direct-OrderIntent-defaults",
+      "rust_type": "OrderIntent",
+      "wire": {
+        "action": "buy",
+        "contract_side": "yes",
+        "order_type": "market",
+        "quantity": 1,
+        "ticker": "value"
+      }
+    },
+    {
+      "covers": [
+        "OrderIntent"
+      ],
+      "evidence": {
+        "OrderIntent": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "action": "buy",
+        "client_order_id": null,
+        "contract_side": "yes",
+        "execution_style": null,
+        "expires_after_ms": null,
+        "limit_price": null,
+        "max_cost": null,
+        "max_price": null,
+        "order_type": "market",
+        "post_only": false,
+        "quantity": 1,
+        "reduce_only": false,
+        "signal_metadata": null,
+        "signal_type": null,
+        "ticker": "value",
+        "time_policy": null
+      },
+      "id": "direct-OrderIntent-explicit-null",
+      "rust_type": "OrderIntent",
+      "wire": {
+        "action": "buy",
+        "contract_side": "yes",
+        "limit_price": null,
+        "order_type": "market",
+        "quantity": 1,
+        "ticker": "value"
+      }
+    },
+    {
+      "covers": [
+        "OrderIntent"
+      ],
+      "evidence": {
+        "OrderIntent": [
+          "defaults",
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "omission"
+      ],
+      "expected": {
+        "action": "buy",
+        "client_order_id": null,
+        "contract_side": "yes",
+        "execution_style": null,
+        "expires_after_ms": null,
+        "limit_price": null,
+        "max_cost": null,
+        "max_price": null,
+        "order_type": "market",
+        "post_only": false,
+        "quantity": 9007199254740991,
+        "reduce_only": false,
+        "signal_metadata": null,
+        "signal_type": null,
+        "ticker": "value",
+        "time_policy": null
+      },
+      "id": "direct-OrderIntent-numeric-boundaries",
+      "rust_type": "OrderIntent",
+      "wire": {
+        "action": "buy",
+        "contract_side": "yes",
+        "order_type": "market",
+        "quantity": 9007199254740991,
+        "ticker": "value"
+      }
+    },
+    {
+      "covers": [
+        "OrderResult"
+      ],
+      "evidence": {
+        "OrderResult": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "fee_cost": 0.0,
+        "fill_price": 0.0,
+        "filled_quantity": 0,
+        "order_id": "non-default",
+        "reason": "",
+        "sleeve_id": "value",
+        "status": "filled"
+      },
+      "id": "direct-OrderResult-non-default",
+      "rust_type": "OrderResult",
+      "wire": {
+        "order_id": "non-default",
+        "sleeve_id": "value",
+        "status": "filled"
+      }
+    },
+    {
+      "covers": [
+        "OrderResult"
+      ],
+      "evidence": {
+        "OrderResult": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "fee_cost": 0.0,
+        "fill_price": 0.0,
+        "filled_quantity": 0,
+        "order_id": "value",
+        "reason": "",
+        "sleeve_id": "value",
+        "status": "filled"
+      },
+      "id": "direct-OrderResult-defaults",
+      "rust_type": "OrderResult",
+      "wire": {
+        "order_id": "value",
+        "sleeve_id": "value",
+        "status": "filled"
+      }
+    },
+    {
+      "covers": [
+        "OrderResult"
+      ],
+      "evidence": {
+        "OrderResult": [
+          "defaults",
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "omission"
+      ],
+      "expected": {
+        "fee_cost": 0.0,
+        "fill_price": 0.0,
+        "filled_quantity": 9007199254740991,
+        "order_id": "value",
+        "reason": "",
+        "sleeve_id": "value",
+        "status": "filled"
+      },
+      "id": "direct-OrderResult-numeric-boundaries",
+      "rust_type": "OrderResult",
+      "wire": {
+        "filled_quantity": 9007199254740991,
+        "order_id": "value",
+        "sleeve_id": "value",
+        "status": "filled"
+      }
+    },
+    {
+      "covers": [
+        "PendingOrder"
+      ],
+      "evidence": {
+        "PendingOrder": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "action": "buy",
+        "client_order_id": null,
+        "contract_side": "yes",
+        "created_at": "",
+        "expires_at": null,
+        "fee_accumulator": 0.0,
+        "fee_multiplier": null,
+        "fee_type": "",
+        "filled_quantity": 0,
+        "limit_price": 1.0,
+        "order_id": "non-default",
+        "requested_quantity": 1,
+        "reserved_global": 0.0,
+        "reserved_sleeve": 0.0,
+        "signal_metadata": null,
+        "signal_type": null,
+        "sleeve_id": "value",
+        "ticker": "value"
+      },
+      "id": "direct-PendingOrder-non-default",
+      "rust_type": "PendingOrder",
+      "wire": {
+        "action": "buy",
+        "contract_side": "yes",
+        "limit_price": 1.0,
+        "order_id": "non-default",
+        "requested_quantity": 1,
+        "sleeve_id": "value",
+        "ticker": "value"
+      }
+    },
+    {
+      "covers": [
+        "PendingOrder"
+      ],
+      "evidence": {
+        "PendingOrder": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "action": "buy",
+        "client_order_id": null,
+        "contract_side": "yes",
+        "created_at": "",
+        "expires_at": null,
+        "fee_accumulator": 0.0,
+        "fee_multiplier": null,
+        "fee_type": "",
+        "filled_quantity": 0,
+        "limit_price": 1.0,
+        "order_id": "value",
+        "requested_quantity": 1,
+        "reserved_global": 0.0,
+        "reserved_sleeve": 0.0,
+        "signal_metadata": null,
+        "signal_type": null,
+        "sleeve_id": "value",
+        "ticker": "value"
+      },
+      "id": "direct-PendingOrder-defaults",
+      "rust_type": "PendingOrder",
+      "wire": {
+        "action": "buy",
+        "contract_side": "yes",
+        "limit_price": 1.0,
+        "order_id": "value",
+        "requested_quantity": 1,
+        "sleeve_id": "value",
+        "ticker": "value"
+      }
+    },
+    {
+      "covers": [
+        "PendingOrder"
+      ],
+      "evidence": {
+        "PendingOrder": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "action": "buy",
+        "client_order_id": null,
+        "contract_side": "yes",
+        "created_at": "",
+        "expires_at": null,
+        "fee_accumulator": 0.0,
+        "fee_multiplier": null,
+        "fee_type": "",
+        "filled_quantity": 0,
+        "limit_price": 1.0,
+        "order_id": "value",
+        "requested_quantity": 1,
+        "reserved_global": 0.0,
+        "reserved_sleeve": 0.0,
+        "signal_metadata": null,
+        "signal_type": null,
+        "sleeve_id": "value",
+        "ticker": "value"
+      },
+      "id": "direct-PendingOrder-explicit-null",
+      "rust_type": "PendingOrder",
+      "wire": {
+        "action": "buy",
+        "contract_side": "yes",
+        "fee_multiplier": null,
+        "limit_price": 1.0,
+        "order_id": "value",
+        "requested_quantity": 1,
+        "sleeve_id": "value",
+        "ticker": "value"
+      }
+    },
+    {
+      "covers": [
+        "PendingOrder"
+      ],
+      "evidence": {
+        "PendingOrder": [
+          "defaults",
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "omission"
+      ],
+      "expected": {
+        "action": "buy",
+        "client_order_id": null,
+        "contract_side": "yes",
+        "created_at": "",
+        "expires_at": null,
+        "fee_accumulator": 0.0,
+        "fee_multiplier": null,
+        "fee_type": "",
+        "filled_quantity": 0,
+        "limit_price": -0.0,
+        "order_id": "value",
+        "requested_quantity": 1,
+        "reserved_global": 0.0,
+        "reserved_sleeve": 0.0,
+        "signal_metadata": null,
+        "signal_type": null,
+        "sleeve_id": "value",
+        "ticker": "value"
+      },
+      "id": "direct-PendingOrder-numeric-boundaries",
+      "rust_type": "PendingOrder",
+      "wire": {
+        "action": "buy",
+        "contract_side": "yes",
+        "limit_price": -0.0,
+        "order_id": "value",
+        "requested_quantity": 1,
+        "sleeve_id": "value",
+        "ticker": "value"
+      }
+    },
+    {
+      "covers": [
+        "Position"
+      ],
+      "evidence": {
+        "Position": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
+      "expected": {
+        "avg_price": 1.0,
+        "quantity": 1,
+        "side": "yes",
+        "ticker": "non-default"
+      },
+      "id": "direct-Position-non-default",
+      "rust_type": "Position",
+      "wire": {
+        "avg_price": 1.0,
+        "quantity": 1,
+        "side": "yes",
+        "ticker": "non-default"
+      }
+    },
+    {
+      "covers": [
+        "Position"
+      ],
+      "evidence": {
+        "Position": [
+          "non_default_round_trip",
+          "numeric_boundaries"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "numeric_boundaries"
+      ],
+      "expected": {
+        "avg_price": 1.0,
+        "quantity": 9007199254740991,
+        "side": "yes",
+        "ticker": "value"
+      },
+      "id": "direct-Position-numeric-boundaries",
+      "rust_type": "Position",
+      "wire": {
+        "avg_price": 1.0,
+        "quantity": 9007199254740991,
+        "side": "yes",
+        "ticker": "value"
+      }
+    },
+    {
+      "covers": [
+        "PriceUpdate"
+      ],
+      "evidence": {
+        "PriceUpdate": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "city_id": "",
+        "city_sequence": null,
+        "emitted_at": null,
+        "event_id": "non-default",
+        "markets": [],
+        "sequence": null,
+        "slug": "",
+        "source": "value",
+        "station_id": "value",
+        "timestamp": null,
+        "type": "price_update"
+      },
+      "id": "direct-PriceUpdate-non-default",
+      "rust_type": "PriceUpdate",
+      "wire": {
+        "event_id": "non-default",
+        "source": "value",
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "PriceUpdate"
+      ],
+      "evidence": {
+        "PriceUpdate": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "city_id": "",
+        "city_sequence": null,
+        "emitted_at": null,
+        "event_id": null,
+        "markets": [],
+        "sequence": null,
+        "slug": "",
+        "source": "value",
+        "station_id": "value",
+        "timestamp": null,
+        "type": "price_update"
+      },
+      "id": "direct-PriceUpdate-defaults",
+      "rust_type": "PriceUpdate",
+      "wire": {
+        "source": "value",
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "PriceUpdate"
+      ],
+      "evidence": {
+        "PriceUpdate": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "city_id": "",
+        "city_sequence": null,
+        "emitted_at": null,
+        "event_id": null,
+        "markets": [],
+        "sequence": null,
+        "slug": "",
+        "source": "value",
+        "station_id": "value",
+        "timestamp": null,
+        "type": "price_update"
+      },
+      "id": "direct-PriceUpdate-explicit-null",
+      "rust_type": "PriceUpdate",
+      "wire": {
+        "event_id": null,
+        "source": "value",
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "PriceUpdate"
+      ],
+      "evidence": {
+        "PriceUpdate": [
+          "defaults",
+          "non_default_round_trip",
+          "omission",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "city_id": "",
+        "city_sequence": null,
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "event_id": null,
+        "markets": [],
+        "sequence": null,
+        "slug": "",
+        "source": "value",
+        "station_id": "value",
+        "timestamp": null,
+        "type": "price_update"
+      },
+      "id": "direct-PriceUpdate-timestamp-formatting",
+      "rust_type": "PriceUpdate",
+      "wire": {
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "source": "value",
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "PriceUpdate"
+      ],
+      "evidence": {
+        "PriceUpdate": [
+          "defaults",
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "omission"
+      ],
+      "expected": {
+        "city_id": "",
+        "city_sequence": null,
+        "emitted_at": null,
+        "event_id": null,
+        "markets": [],
+        "sequence": 9007199254740991,
+        "slug": "",
+        "source": "value",
+        "station_id": "value",
+        "timestamp": null,
+        "type": "price_update"
+      },
+      "id": "direct-PriceUpdate-numeric-boundaries",
+      "rust_type": "PriceUpdate",
+      "wire": {
+        "sequence": 9007199254740991,
+        "source": "value",
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "ReportHistoryQuery"
+      ],
+      "evidence": {
+        "ReportHistoryQuery": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "cursor": null,
+        "end": null,
+        "limit": null,
+        "refresh": false,
+        "report_type": "metar_6hr",
+        "start": null
+      },
+      "id": "direct-ReportHistoryQuery-non-default",
+      "rust_type": "ReportHistoryQuery",
+      "wire": {
+        "report_type": "metar_6hr"
+      }
+    },
+    {
+      "covers": [
+        "ReportHistoryQuery"
+      ],
+      "evidence": {
+        "ReportHistoryQuery": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
+      "expected": {
+        "cursor": null,
+        "end": null,
+        "limit": null,
+        "refresh": false,
+        "report_type": null,
+        "start": null
+      },
+      "id": "direct-ReportHistoryQuery-defaults",
+      "rust_type": "ReportHistoryQuery",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "ReportHistoryQuery"
+      ],
+      "evidence": {
+        "ReportHistoryQuery": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "cursor": null,
+        "end": null,
+        "limit": null,
+        "refresh": false,
+        "report_type": null,
+        "start": null
+      },
+      "id": "direct-ReportHistoryQuery-explicit-null",
+      "rust_type": "ReportHistoryQuery",
+      "wire": {
+        "report_type": null
+      }
+    },
+    {
+      "covers": [
+        "ReportHistoryQuery"
+      ],
+      "evidence": {
+        "ReportHistoryQuery": [
+          "defaults",
+          "non_default_round_trip",
+          "omission",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "cursor": null,
+        "end": null,
+        "limit": null,
+        "refresh": false,
+        "report_type": null,
+        "start": "2026-07-13"
+      },
+      "id": "direct-ReportHistoryQuery-timestamp-formatting",
+      "rust_type": "ReportHistoryQuery",
+      "wire": {
+        "start": "2026-07-13"
+      }
+    },
+    {
+      "covers": [
+        "ReportHistoryQuery"
+      ],
+      "evidence": {
+        "ReportHistoryQuery": [
+          "defaults",
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "omission"
+      ],
+      "expected": {
+        "cursor": null,
+        "end": null,
+        "limit": 9007199254740991,
+        "refresh": false,
+        "report_type": null,
+        "start": null
+      },
+      "id": "direct-ReportHistoryQuery-numeric-boundaries",
+      "rust_type": "ReportHistoryQuery",
+      "wire": {
+        "limit": 9007199254740991
+      }
+    },
+    {
+      "covers": [
+        "ReportsQuery"
+      ],
+      "evidence": {
+        "ReportsQuery": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "date": null,
+        "refresh": false,
+        "report_type": "metar_6hr"
+      },
+      "id": "direct-ReportsQuery-non-default",
+      "rust_type": "ReportsQuery",
+      "wire": {
+        "report_type": "metar_6hr"
+      }
+    },
+    {
+      "covers": [
+        "ReportsQuery"
+      ],
+      "evidence": {
+        "ReportsQuery": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
+      "expected": {
+        "date": null,
+        "refresh": false,
+        "report_type": null
+      },
+      "id": "direct-ReportsQuery-defaults",
+      "rust_type": "ReportsQuery",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "ReportsQuery"
+      ],
+      "evidence": {
+        "ReportsQuery": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "date": null,
+        "refresh": false,
+        "report_type": null
+      },
+      "id": "direct-ReportsQuery-explicit-null",
+      "rust_type": "ReportsQuery",
+      "wire": {
+        "report_type": null
+      }
+    },
+    {
+      "covers": [
+        "ReportsQuery"
+      ],
+      "evidence": {
+        "ReportsQuery": [
+          "defaults",
+          "non_default_round_trip",
+          "omission",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "date": "2026-07-13",
+        "refresh": false,
+        "report_type": null
+      },
+      "id": "direct-ReportsQuery-timestamp-formatting",
+      "rust_type": "ReportsQuery",
+      "wire": {
+        "date": "2026-07-13"
+      }
+    },
+    {
+      "covers": [
+        "RuntimeCapabilities"
+      ],
+      "evidence": {
+        "RuntimeCapabilities": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "event_delivery": "wake",
+        "queue_is_durable": false,
+        "replay_controls_event_progression": false,
+        "supports_data_queries": true,
+        "supports_http": true,
+        "supports_native_kernels": false,
+        "supports_one_shot_timers": false,
+        "supports_recurring_timers": false
+      },
+      "id": "direct-RuntimeCapabilities-non-default",
+      "rust_type": "RuntimeCapabilities",
+      "wire": {
+        "supports_http": true
+      }
+    },
+    {
+      "covers": [
+        "RuntimeCapabilities"
+      ],
+      "evidence": {
+        "RuntimeCapabilities": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
+      "expected": {
+        "event_delivery": "wake",
+        "queue_is_durable": false,
+        "replay_controls_event_progression": false,
+        "supports_data_queries": true,
+        "supports_http": false,
+        "supports_native_kernels": false,
+        "supports_one_shot_timers": false,
+        "supports_recurring_timers": false
+      },
+      "id": "direct-RuntimeCapabilities-defaults",
+      "rust_type": "RuntimeCapabilities",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "ShutdownEvent"
+      ],
+      "evidence": {
+        "ShutdownEvent": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "reason": "non-default",
+        "type": "shutdown"
+      },
+      "id": "direct-ShutdownEvent-non-default",
+      "rust_type": "ShutdownEvent",
+      "wire": {
+        "reason": "non-default"
+      }
+    },
+    {
+      "covers": [
+        "ShutdownEvent"
+      ],
+      "evidence": {
+        "ShutdownEvent": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
+      "expected": {
+        "reason": "",
+        "type": "shutdown"
+      },
+      "id": "direct-ShutdownEvent-defaults",
+      "rust_type": "ShutdownEvent",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "StationForecast"
+      ],
+      "evidence": {
+        "StationForecast": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "model_forecasts": {
+          "key": {
+            "hourly": [],
+            "model_id": "non-default",
+            "run_issued_at": null,
+            "updated_at": null,
+            "value": 1.0,
+            "version": ""
+          }
+        },
+        "updated_at": null
+      },
+      "id": "direct-StationForecast-non-default",
+      "rust_type": "StationForecast",
+      "wire": {
+        "model_forecasts": {
+          "key": {
+            "model_id": "non-default",
+            "value": 1.0
+          }
+        }
+      }
+    },
+    {
+      "covers": [
+        "StationForecast"
+      ],
+      "evidence": {
+        "StationForecast": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
+      "expected": {
+        "model_forecasts": {},
+        "updated_at": null
+      },
+      "id": "direct-StationForecast-defaults",
+      "rust_type": "StationForecast",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "StationForecast"
+      ],
+      "evidence": {
+        "StationForecast": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "model_forecasts": {},
+        "updated_at": null
+      },
+      "id": "direct-StationForecast-explicit-null",
+      "rust_type": "StationForecast",
+      "wire": {
+        "updated_at": null
+      }
+    },
+    {
+      "covers": [
+        "StationForecast"
+      ],
+      "evidence": {
+        "StationForecast": [
+          "defaults",
+          "non_default_round_trip",
+          "omission",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "model_forecasts": {},
+        "updated_at": "2026-07-13T12:34:56.123456Z"
+      },
+      "id": "direct-StationForecast-timestamp-formatting",
+      "rust_type": "StationForecast",
+      "wire": {
+        "updated_at": "2026-07-13T12:34:56.123456Z"
+      }
+    },
+    {
+      "covers": [
+        "StationOracleScores"
+      ],
+      "evidence": {
+        "StationOracleScores": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "days_requested": "",
+        "range_end": "",
+        "range_start": "",
+        "rank_by": "",
+        "score_mode": "",
+        "scores": [],
+        "station_id": "non-default",
+        "updated_at": null
+      },
+      "id": "direct-StationOracleScores-non-default",
+      "rust_type": "StationOracleScores",
+      "wire": {
+        "station_id": "non-default"
+      }
+    },
+    {
+      "covers": [
+        "StationOracleScores"
+      ],
+      "evidence": {
+        "StationOracleScores": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "days_requested": "",
+        "range_end": "",
+        "range_start": "",
+        "rank_by": "",
+        "score_mode": "",
+        "scores": [],
+        "station_id": "value",
+        "updated_at": null
+      },
+      "id": "direct-StationOracleScores-defaults",
+      "rust_type": "StationOracleScores",
+      "wire": {
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "StationOracleScores"
+      ],
+      "evidence": {
+        "StationOracleScores": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "days_requested": "",
+        "range_end": "",
+        "range_start": "",
+        "rank_by": "",
+        "score_mode": "",
+        "scores": [],
+        "station_id": "value",
+        "updated_at": null
+      },
+      "id": "direct-StationOracleScores-explicit-null",
+      "rust_type": "StationOracleScores",
+      "wire": {
+        "station_id": "value",
+        "updated_at": null
+      }
+    },
+    {
+      "covers": [
+        "StationOracleScores"
+      ],
+      "evidence": {
+        "StationOracleScores": [
+          "defaults",
+          "non_default_round_trip",
+          "omission",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "days_requested": "",
+        "range_end": "",
+        "range_start": "",
+        "rank_by": "",
+        "score_mode": "",
+        "scores": [],
+        "station_id": "value",
+        "updated_at": "2026-07-13T12:34:56.123456Z"
+      },
+      "id": "direct-StationOracleScores-timestamp-formatting",
+      "rust_type": "StationOracleScores",
+      "wire": {
+        "station_id": "value",
+        "updated_at": "2026-07-13T12:34:56.123456Z"
+      }
+    },
+    {
+      "covers": [
+        "StationReport"
+      ],
+      "evidence": {
+        "StationReport": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "city_sequence": null,
+        "emitted_at": null,
+        "event_id": "non-default",
+        "fetched_at": null,
+        "issuance_time": null,
+        "max_temp_c": null,
+        "max_temp_f": null,
+        "max_temp_time_utc": null,
+        "min_temp_c": null,
+        "min_temp_f": null,
+        "min_temp_time_utc": null,
+        "provider": "",
+        "report_date": "",
+        "report_id": "value",
+        "report_revision": 0,
+        "report_type": "",
+        "report_updated_at": null,
+        "sequence": null,
+        "slug": "",
+        "source_url": "",
+        "station_id": "value",
+        "temp_c": null,
+        "temp_f": null,
+        "type": "station_report"
+      },
+      "id": "direct-StationReport-non-default",
+      "rust_type": "StationReport",
+      "wire": {
+        "event_id": "non-default",
+        "report_id": "value",
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "StationReport"
+      ],
+      "evidence": {
+        "StationReport": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "city_sequence": null,
+        "emitted_at": null,
+        "event_id": null,
+        "fetched_at": null,
+        "issuance_time": null,
+        "max_temp_c": null,
+        "max_temp_f": null,
+        "max_temp_time_utc": null,
+        "min_temp_c": null,
+        "min_temp_f": null,
+        "min_temp_time_utc": null,
+        "provider": "",
+        "report_date": "",
+        "report_id": "value",
+        "report_revision": 0,
+        "report_type": "",
+        "report_updated_at": null,
+        "sequence": null,
+        "slug": "",
+        "source_url": "",
+        "station_id": "value",
+        "temp_c": null,
+        "temp_f": null,
+        "type": "station_report"
+      },
+      "id": "direct-StationReport-defaults",
+      "rust_type": "StationReport",
+      "wire": {
+        "report_id": "value",
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "StationReport"
+      ],
+      "evidence": {
+        "StationReport": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "city_sequence": null,
+        "emitted_at": null,
+        "event_id": null,
+        "fetched_at": null,
+        "issuance_time": null,
+        "max_temp_c": null,
+        "max_temp_f": null,
+        "max_temp_time_utc": null,
+        "min_temp_c": null,
+        "min_temp_f": null,
+        "min_temp_time_utc": null,
+        "provider": "",
+        "report_date": "",
+        "report_id": "value",
+        "report_revision": 0,
+        "report_type": "",
+        "report_updated_at": null,
+        "sequence": null,
+        "slug": "",
+        "source_url": "",
+        "station_id": "value",
+        "temp_c": null,
+        "temp_f": null,
+        "type": "station_report"
+      },
+      "id": "direct-StationReport-explicit-null",
+      "rust_type": "StationReport",
+      "wire": {
+        "event_id": null,
+        "report_id": "value",
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "StationReport"
+      ],
+      "evidence": {
+        "StationReport": [
+          "defaults",
+          "non_default_round_trip",
+          "omission",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "city_sequence": null,
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "event_id": null,
+        "fetched_at": null,
+        "issuance_time": null,
+        "max_temp_c": null,
+        "max_temp_f": null,
+        "max_temp_time_utc": null,
+        "min_temp_c": null,
+        "min_temp_f": null,
+        "min_temp_time_utc": null,
+        "provider": "",
+        "report_date": "",
+        "report_id": "value",
+        "report_revision": 0,
+        "report_type": "",
+        "report_updated_at": null,
+        "sequence": null,
+        "slug": "",
+        "source_url": "",
+        "station_id": "value",
+        "temp_c": null,
+        "temp_f": null,
+        "type": "station_report"
+      },
+      "id": "direct-StationReport-timestamp-formatting",
+      "rust_type": "StationReport",
+      "wire": {
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "report_id": "value",
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "StationReport"
+      ],
+      "evidence": {
+        "StationReport": [
+          "defaults",
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "omission"
+      ],
+      "expected": {
+        "city_sequence": null,
+        "emitted_at": null,
+        "event_id": null,
+        "fetched_at": null,
+        "issuance_time": null,
+        "max_temp_c": null,
+        "max_temp_f": null,
+        "max_temp_time_utc": null,
+        "min_temp_c": null,
+        "min_temp_f": null,
+        "min_temp_time_utc": null,
+        "provider": "",
+        "report_date": "",
+        "report_id": "value",
+        "report_revision": 0,
+        "report_type": "",
+        "report_updated_at": null,
+        "sequence": 9007199254740991,
+        "slug": "",
+        "source_url": "",
+        "station_id": "value",
+        "temp_c": null,
+        "temp_f": null,
+        "type": "station_report"
+      },
+      "id": "direct-StationReport-numeric-boundaries",
+      "rust_type": "StationReport",
+      "wire": {
+        "report_id": "value",
+        "sequence": 9007199254740991,
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "StationWeather"
+      ],
+      "evidence": {
+        "StationWeather": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "asos_daily_high_f": null,
+        "asos_daily_low_f": null,
+        "current_temp": 1.5,
+        "dewpoint": null,
+        "dsm_high": null,
+        "dsm_high_time": null,
+        "dsm_low": null,
+        "dsm_low_time": null,
+        "heat_index": null,
+        "lag_seconds": null,
+        "last_dsm_time": null,
+        "last_metar_time": null,
+        "last_six_hr_time": null,
+        "preliminary": false,
+        "relative_humidity": null,
+        "running_high": null,
+        "running_low": null,
+        "six_hr_high": null,
+        "six_hr_low": null,
+        "temp_max_c": null,
+        "temp_max_f": null,
+        "temp_min_c": null,
+        "temp_min_f": null,
+        "text_description": null,
+        "wind_chill": null,
+        "wind_direction": null,
+        "wind_gust": null,
+        "wind_speed": null,
+        "wu_current_temp_c": null,
+        "wu_current_temp_f": null,
+        "wu_daily_high_c": null,
+        "wu_daily_high_f": null,
+        "wu_daily_low_c": null,
+        "wu_daily_low_f": null,
+        "wu_fetched_at": null,
+        "wu_observation_time": null
+      },
+      "id": "direct-StationWeather-non-default",
+      "rust_type": "StationWeather",
+      "wire": {
+        "current_temp": 1.5
+      }
+    },
+    {
+      "covers": [
+        "StationWeather"
+      ],
+      "evidence": {
+        "StationWeather": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
+      "expected": {
+        "asos_daily_high_f": null,
+        "asos_daily_low_f": null,
+        "current_temp": null,
+        "dewpoint": null,
+        "dsm_high": null,
+        "dsm_high_time": null,
+        "dsm_low": null,
+        "dsm_low_time": null,
+        "heat_index": null,
+        "lag_seconds": null,
+        "last_dsm_time": null,
+        "last_metar_time": null,
+        "last_six_hr_time": null,
+        "preliminary": false,
+        "relative_humidity": null,
+        "running_high": null,
+        "running_low": null,
+        "six_hr_high": null,
+        "six_hr_low": null,
+        "temp_max_c": null,
+        "temp_max_f": null,
+        "temp_min_c": null,
+        "temp_min_f": null,
+        "text_description": null,
+        "wind_chill": null,
+        "wind_direction": null,
+        "wind_gust": null,
+        "wind_speed": null,
+        "wu_current_temp_c": null,
+        "wu_current_temp_f": null,
+        "wu_daily_high_c": null,
+        "wu_daily_high_f": null,
+        "wu_daily_low_c": null,
+        "wu_daily_low_f": null,
+        "wu_fetched_at": null,
+        "wu_observation_time": null
+      },
+      "id": "direct-StationWeather-defaults",
+      "rust_type": "StationWeather",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "StationWeather"
+      ],
+      "evidence": {
+        "StationWeather": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "asos_daily_high_f": null,
+        "asos_daily_low_f": null,
+        "current_temp": null,
+        "dewpoint": null,
+        "dsm_high": null,
+        "dsm_high_time": null,
+        "dsm_low": null,
+        "dsm_low_time": null,
+        "heat_index": null,
+        "lag_seconds": null,
+        "last_dsm_time": null,
+        "last_metar_time": null,
+        "last_six_hr_time": null,
+        "preliminary": false,
+        "relative_humidity": null,
+        "running_high": null,
+        "running_low": null,
+        "six_hr_high": null,
+        "six_hr_low": null,
+        "temp_max_c": null,
+        "temp_max_f": null,
+        "temp_min_c": null,
+        "temp_min_f": null,
+        "text_description": null,
+        "wind_chill": null,
+        "wind_direction": null,
+        "wind_gust": null,
+        "wind_speed": null,
+        "wu_current_temp_c": null,
+        "wu_current_temp_f": null,
+        "wu_daily_high_c": null,
+        "wu_daily_high_f": null,
+        "wu_daily_low_c": null,
+        "wu_daily_low_f": null,
+        "wu_fetched_at": null,
+        "wu_observation_time": null
+      },
+      "id": "direct-StationWeather-explicit-null",
+      "rust_type": "StationWeather",
+      "wire": {
+        "current_temp": null
+      }
+    },
+    {
+      "covers": [
+        "StationWeather"
+      ],
+      "evidence": {
+        "StationWeather": [
+          "defaults",
+          "non_default_round_trip",
+          "omission",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "asos_daily_high_f": null,
+        "asos_daily_low_f": null,
+        "current_temp": null,
+        "dewpoint": null,
+        "dsm_high": null,
+        "dsm_high_time": null,
+        "dsm_low": null,
+        "dsm_low_time": null,
+        "heat_index": null,
+        "lag_seconds": null,
+        "last_dsm_time": null,
+        "last_metar_time": "2026-07-13T12:34:56.123456Z",
+        "last_six_hr_time": null,
+        "preliminary": false,
+        "relative_humidity": null,
+        "running_high": null,
+        "running_low": null,
+        "six_hr_high": null,
+        "six_hr_low": null,
+        "temp_max_c": null,
+        "temp_max_f": null,
+        "temp_min_c": null,
+        "temp_min_f": null,
+        "text_description": null,
+        "wind_chill": null,
+        "wind_direction": null,
+        "wind_gust": null,
+        "wind_speed": null,
+        "wu_current_temp_c": null,
+        "wu_current_temp_f": null,
+        "wu_daily_high_c": null,
+        "wu_daily_high_f": null,
+        "wu_daily_low_c": null,
+        "wu_daily_low_f": null,
+        "wu_fetched_at": null,
+        "wu_observation_time": null
+      },
+      "id": "direct-StationWeather-timestamp-formatting",
+      "rust_type": "StationWeather",
+      "wire": {
+        "last_metar_time": "2026-07-13T12:34:56.123456Z"
+      }
+    },
+    {
+      "covers": [
+        "StationWeather"
+      ],
+      "evidence": {
+        "StationWeather": [
+          "defaults",
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "omission"
+      ],
+      "expected": {
+        "asos_daily_high_f": null,
+        "asos_daily_low_f": null,
+        "current_temp": -0.0,
+        "dewpoint": null,
+        "dsm_high": null,
+        "dsm_high_time": null,
+        "dsm_low": null,
+        "dsm_low_time": null,
+        "heat_index": null,
+        "lag_seconds": null,
+        "last_dsm_time": null,
+        "last_metar_time": null,
+        "last_six_hr_time": null,
+        "preliminary": false,
+        "relative_humidity": null,
+        "running_high": null,
+        "running_low": null,
+        "six_hr_high": null,
+        "six_hr_low": null,
+        "temp_max_c": null,
+        "temp_max_f": null,
+        "temp_min_c": null,
+        "temp_min_f": null,
+        "text_description": null,
+        "wind_chill": null,
+        "wind_direction": null,
+        "wind_gust": null,
+        "wind_speed": null,
+        "wu_current_temp_c": null,
+        "wu_current_temp_f": null,
+        "wu_daily_high_c": null,
+        "wu_daily_high_f": null,
+        "wu_daily_low_c": null,
+        "wu_daily_low_f": null,
+        "wu_fetched_at": null,
+        "wu_observation_time": null
+      },
+      "id": "direct-StationWeather-numeric-boundaries",
+      "rust_type": "StationWeather",
+      "wire": {
+        "current_temp": -0.0
+      }
+    },
+    {
+      "covers": [
+        "StrategyScope"
+      ],
+      "evidence": {
+        "StrategyScope": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "event_date": null,
+        "event_ticker": null,
+        "market_type": null,
+        "sleeve_id": "non-default",
+        "station_id": null,
+        "strategy_name": "value",
+        "tickers": []
+      },
+      "id": "direct-StrategyScope-non-default",
+      "rust_type": "StrategyScope",
+      "wire": {
+        "sleeve_id": "non-default",
+        "strategy_name": "value"
+      }
+    },
+    {
+      "covers": [
+        "StrategyScope"
+      ],
+      "evidence": {
+        "StrategyScope": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "event_date": null,
+        "event_ticker": null,
+        "market_type": null,
+        "sleeve_id": "value",
+        "station_id": null,
+        "strategy_name": "value",
+        "tickers": []
+      },
+      "id": "direct-StrategyScope-defaults",
+      "rust_type": "StrategyScope",
+      "wire": {
+        "sleeve_id": "value",
+        "strategy_name": "value"
+      }
+    },
+    {
+      "covers": [
+        "StrategyScope"
+      ],
+      "evidence": {
+        "StrategyScope": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "event_date": null,
+        "event_ticker": null,
+        "market_type": null,
+        "sleeve_id": "value",
+        "station_id": null,
+        "strategy_name": "value",
+        "tickers": []
+      },
+      "id": "direct-StrategyScope-explicit-null",
+      "rust_type": "StrategyScope",
+      "wire": {
+        "sleeve_id": "value",
+        "station_id": null,
+        "strategy_name": "value"
+      }
+    },
+    {
+      "covers": [
+        "StrategyScope"
+      ],
+      "evidence": {
+        "StrategyScope": [
+          "defaults",
+          "non_default_round_trip",
+          "omission",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "event_date": "2026-07-13",
+        "event_ticker": null,
+        "market_type": null,
+        "sleeve_id": "value",
+        "station_id": null,
+        "strategy_name": "value",
+        "tickers": []
+      },
+      "id": "direct-StrategyScope-timestamp-formatting",
+      "rust_type": "StrategyScope",
+      "wire": {
+        "event_date": "2026-07-13",
+        "sleeve_id": "value",
+        "strategy_name": "value"
+      }
+    },
+    {
+      "covers": [
+        "TickerPrices"
+      ],
+      "evidence": {
+        "TickerPrices": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "cap_strike": null,
+        "event_date": "",
+        "event_ticker": "",
+        "fee_multiplier": null,
+        "fee_type": "",
+        "floor_strike": null,
+        "last_update": null,
+        "no_ask": null,
+        "no_ask_depth": null,
+        "no_ask_levels": [],
+        "no_bid": null,
+        "no_bid_depth": null,
+        "no_bid_levels": [],
+        "no_price": 0.0,
+        "orderbook_depth": null,
+        "peak_yes_ask": null,
+        "series_ticker": "",
+        "source": "",
+        "strike_type": "",
+        "ticker": "non-default",
+        "volume": null,
+        "yes_ask": null,
+        "yes_ask_depth": null,
+        "yes_ask_levels": [],
+        "yes_bid": null,
+        "yes_bid_depth": null,
+        "yes_bid_levels": [],
+        "yes_price": 0.0
+      },
+      "id": "direct-TickerPrices-non-default",
+      "rust_type": "TickerPrices",
+      "wire": {
+        "ticker": "non-default"
+      }
+    },
+    {
+      "covers": [
+        "TickerPrices"
+      ],
+      "evidence": {
+        "TickerPrices": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
+      "expected": {
+        "cap_strike": null,
+        "event_date": "",
+        "event_ticker": "",
+        "fee_multiplier": null,
+        "fee_type": "",
+        "floor_strike": null,
+        "last_update": null,
+        "no_ask": null,
+        "no_ask_depth": null,
+        "no_ask_levels": [],
+        "no_bid": null,
+        "no_bid_depth": null,
+        "no_bid_levels": [],
+        "no_price": 0.0,
+        "orderbook_depth": null,
+        "peak_yes_ask": null,
+        "series_ticker": "",
+        "source": "",
+        "strike_type": "",
+        "ticker": "",
+        "volume": null,
+        "yes_ask": null,
+        "yes_ask_depth": null,
+        "yes_ask_levels": [],
+        "yes_bid": null,
+        "yes_bid_depth": null,
+        "yes_bid_levels": [],
+        "yes_price": 0.0
+      },
+      "id": "direct-TickerPrices-defaults",
+      "rust_type": "TickerPrices",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "TickerPrices"
+      ],
+      "evidence": {
+        "TickerPrices": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "cap_strike": null,
+        "event_date": "",
+        "event_ticker": "",
+        "fee_multiplier": null,
+        "fee_type": "",
+        "floor_strike": null,
+        "last_update": null,
+        "no_ask": null,
+        "no_ask_depth": null,
+        "no_ask_levels": [],
+        "no_bid": null,
+        "no_bid_depth": null,
+        "no_bid_levels": [],
+        "no_price": 0.0,
+        "orderbook_depth": null,
+        "peak_yes_ask": null,
+        "series_ticker": "",
+        "source": "",
+        "strike_type": "",
+        "ticker": "",
+        "volume": null,
+        "yes_ask": null,
+        "yes_ask_depth": null,
+        "yes_ask_levels": [],
+        "yes_bid": null,
+        "yes_bid_depth": null,
+        "yes_bid_levels": [],
+        "yes_price": 0.0
+      },
+      "id": "direct-TickerPrices-explicit-null",
+      "rust_type": "TickerPrices",
+      "wire": {
+        "fee_multiplier": null
+      }
+    },
+    {
+      "covers": [
+        "TickerPrices"
+      ],
+      "evidence": {
+        "TickerPrices": [
+          "defaults",
+          "non_default_round_trip",
+          "omission",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "cap_strike": null,
+        "event_date": "",
+        "event_ticker": "",
+        "fee_multiplier": null,
+        "fee_type": "",
+        "floor_strike": null,
+        "last_update": "2026-07-13T12:34:56.123456Z",
+        "no_ask": null,
+        "no_ask_depth": null,
+        "no_ask_levels": [],
+        "no_bid": null,
+        "no_bid_depth": null,
+        "no_bid_levels": [],
+        "no_price": 0.0,
+        "orderbook_depth": null,
+        "peak_yes_ask": null,
+        "series_ticker": "",
+        "source": "",
+        "strike_type": "",
+        "ticker": "",
+        "volume": null,
+        "yes_ask": null,
+        "yes_ask_depth": null,
+        "yes_ask_levels": [],
+        "yes_bid": null,
+        "yes_bid_depth": null,
+        "yes_bid_levels": [],
+        "yes_price": 0.0
+      },
+      "id": "direct-TickerPrices-timestamp-formatting",
+      "rust_type": "TickerPrices",
+      "wire": {
+        "last_update": "2026-07-13T12:34:56.123456Z"
+      }
+    },
+    {
+      "covers": [
+        "TickerPrices"
+      ],
+      "evidence": {
+        "TickerPrices": [
+          "defaults",
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "omission"
+      ],
+      "expected": {
+        "cap_strike": null,
+        "event_date": "",
+        "event_ticker": "",
+        "fee_multiplier": -0.0,
+        "fee_type": "",
+        "floor_strike": null,
+        "last_update": null,
+        "no_ask": null,
+        "no_ask_depth": null,
+        "no_ask_levels": [],
+        "no_bid": null,
+        "no_bid_depth": null,
+        "no_bid_levels": [],
+        "no_price": 0.0,
+        "orderbook_depth": null,
+        "peak_yes_ask": null,
+        "series_ticker": "",
+        "source": "",
+        "strike_type": "",
+        "ticker": "",
+        "volume": null,
+        "yes_ask": null,
+        "yes_ask_depth": null,
+        "yes_ask_levels": [],
+        "yes_bid": null,
+        "yes_bid_depth": null,
+        "yes_bid_levels": [],
+        "yes_price": 0.0
+      },
+      "id": "direct-TickerPrices-numeric-boundaries",
+      "rust_type": "TickerPrices",
+      "wire": {
+        "fee_multiplier": -0.0
+      }
+    },
+    {
+      "covers": [
+        "TimerWake"
+      ],
+      "evidence": {
+        "TimerWake": [
+          "defaults",
+          "non_default_round_trip",
+          "omission",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "fired_at": "2026-07-13T12:34:56.123456Z",
+        "name": "",
+        "scheduled_for": "2026-07-13T12:34:56.123456Z",
+        "type": "timer_wake"
+      },
+      "id": "direct-TimerWake-non-default",
+      "rust_type": "TimerWake",
+      "wire": {
+        "fired_at": "2026-07-13T12:34:56.123456Z",
+        "scheduled_for": "2026-07-13T12:34:56.123456Z"
+      }
+    },
+    {
+      "covers": [
+        "TimerWake"
+      ],
+      "evidence": {
+        "TimerWake": [
+          "defaults",
+          "non_default_round_trip",
+          "omission",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "fired_at": null,
+        "name": "",
+        "scheduled_for": "2026-07-13T12:34:56.123456Z",
+        "type": "timer_wake"
+      },
+      "id": "direct-TimerWake-defaults",
+      "rust_type": "TimerWake",
+      "wire": {
+        "scheduled_for": "2026-07-13T12:34:56.123456Z"
+      }
+    },
+    {
+      "covers": [
+        "TimerWake"
+      ],
+      "evidence": {
+        "TimerWake": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "fired_at": null,
+        "name": "",
+        "scheduled_for": "2026-07-13T12:34:56.123456Z",
+        "type": "timer_wake"
+      },
+      "id": "direct-TimerWake-explicit-null",
+      "rust_type": "TimerWake",
+      "wire": {
+        "fired_at": null,
+        "scheduled_for": "2026-07-13T12:34:56.123456Z"
+      }
+    },
+    {
+      "covers": [
+        "TimerWake"
+      ],
+      "evidence": {
+        "TimerWake": [
+          "defaults",
+          "non_default_round_trip",
+          "omission",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "fired_at": null,
+        "name": "",
+        "scheduled_for": "2026-07-13T12:34:56.123456Z",
+        "type": "timer_wake"
+      },
+      "id": "direct-TimerWake-timestamp-formatting",
+      "rust_type": "TimerWake",
+      "wire": {
+        "scheduled_for": "2026-07-13T12:34:56.123456Z"
+      }
+    },
+    {
+      "covers": [
+        "WeatherEvent"
+      ],
+      "evidence": {
+        "WeatherEvent": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "badge": "",
+        "city_sequence": null,
+        "detail": "",
+        "emitted_at": null,
+        "ended_at": null,
+        "event_id": "non-default",
+        "event_type": "value",
+        "id": "value",
+        "last_confirmed_at": null,
+        "name": "",
+        "sequence": null,
+        "slug": "",
+        "source": null,
+        "started_at": null,
+        "state": "",
+        "station_id": "value",
+        "summary": "",
+        "tier": "",
+        "type": "weather_event"
+      },
+      "id": "direct-WeatherEvent-non-default",
+      "rust_type": "WeatherEvent",
+      "wire": {
+        "event_id": "non-default",
+        "event_type": "value",
+        "id": "value",
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "WeatherEvent"
+      ],
+      "evidence": {
+        "WeatherEvent": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "badge": "",
+        "city_sequence": null,
+        "detail": "",
+        "emitted_at": null,
+        "ended_at": null,
+        "event_id": null,
+        "event_type": "value",
+        "id": "value",
+        "last_confirmed_at": null,
+        "name": "",
+        "sequence": null,
+        "slug": "",
+        "source": null,
+        "started_at": null,
+        "state": "",
+        "station_id": "value",
+        "summary": "",
+        "tier": "",
+        "type": "weather_event"
+      },
+      "id": "direct-WeatherEvent-defaults",
+      "rust_type": "WeatherEvent",
+      "wire": {
+        "event_type": "value",
+        "id": "value",
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "WeatherEvent"
+      ],
+      "evidence": {
+        "WeatherEvent": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "badge": "",
+        "city_sequence": null,
+        "detail": "",
+        "emitted_at": null,
+        "ended_at": null,
+        "event_id": null,
+        "event_type": "value",
+        "id": "value",
+        "last_confirmed_at": null,
+        "name": "",
+        "sequence": null,
+        "slug": "",
+        "source": null,
+        "started_at": null,
+        "state": "",
+        "station_id": "value",
+        "summary": "",
+        "tier": "",
+        "type": "weather_event"
+      },
+      "id": "direct-WeatherEvent-explicit-null",
+      "rust_type": "WeatherEvent",
+      "wire": {
+        "event_id": null,
+        "event_type": "value",
+        "id": "value",
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "WeatherEvent"
+      ],
+      "evidence": {
+        "WeatherEvent": [
+          "defaults",
+          "non_default_round_trip",
+          "omission",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "badge": "",
+        "city_sequence": null,
+        "detail": "",
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "ended_at": null,
+        "event_id": null,
+        "event_type": "value",
+        "id": "value",
+        "last_confirmed_at": null,
+        "name": "",
+        "sequence": null,
+        "slug": "",
+        "source": null,
+        "started_at": null,
+        "state": "",
+        "station_id": "value",
+        "summary": "",
+        "tier": "",
+        "type": "weather_event"
+      },
+      "id": "direct-WeatherEvent-timestamp-formatting",
+      "rust_type": "WeatherEvent",
+      "wire": {
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "event_type": "value",
+        "id": "value",
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "WeatherEvent"
+      ],
+      "evidence": {
+        "WeatherEvent": [
+          "defaults",
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "omission"
+      ],
+      "expected": {
+        "badge": "",
+        "city_sequence": null,
+        "detail": "",
+        "emitted_at": null,
+        "ended_at": null,
+        "event_id": null,
+        "event_type": "value",
+        "id": "value",
+        "last_confirmed_at": null,
+        "name": "",
+        "sequence": 9007199254740991,
+        "slug": "",
+        "source": null,
+        "started_at": null,
+        "state": "",
+        "station_id": "value",
+        "summary": "",
+        "tier": "",
+        "type": "weather_event"
+      },
+      "id": "direct-WeatherEvent-numeric-boundaries",
+      "rust_type": "WeatherEvent",
+      "wire": {
+        "event_type": "value",
+        "id": "value",
+        "sequence": 9007199254740991,
+        "station_id": "value"
+      }
+    },
+    {
+      "covers": [
+        "WeatherEventSource"
+      ],
+      "evidence": {
+        "WeatherEventSource": [
+          "defaults",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "cb_location": null,
+        "flight_category": null,
+        "metar_type": "non-default",
+        "peak_wind_direction": null,
+        "peak_wind_kt": null,
+        "visibility_mi": null,
+        "wind_gust_kt": null,
+        "wind_speed_kt": null,
+        "wx_string": null,
+        "wx_token": null
+      },
+      "id": "direct-WeatherEventSource-non-default",
+      "rust_type": "WeatherEventSource",
+      "wire": {
+        "metar_type": "non-default"
+      }
+    },
+    {
+      "covers": [
+        "WeatherEventSource"
+      ],
+      "evidence": {
+        "WeatherEventSource": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
+      "expected": {
+        "cb_location": null,
+        "flight_category": null,
+        "metar_type": null,
+        "peak_wind_direction": null,
+        "peak_wind_kt": null,
+        "visibility_mi": null,
+        "wind_gust_kt": null,
+        "wind_speed_kt": null,
+        "wx_string": null,
+        "wx_token": null
+      },
+      "id": "direct-WeatherEventSource-defaults",
+      "rust_type": "WeatherEventSource",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "WeatherEventSource"
+      ],
+      "evidence": {
+        "WeatherEventSource": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "cb_location": null,
+        "flight_category": null,
+        "metar_type": null,
+        "peak_wind_direction": null,
+        "peak_wind_kt": null,
+        "visibility_mi": null,
+        "wind_gust_kt": null,
+        "wind_speed_kt": null,
+        "wx_string": null,
+        "wx_token": null
+      },
+      "id": "direct-WeatherEventSource-explicit-null",
+      "rust_type": "WeatherEventSource",
+      "wire": {
+        "metar_type": null
+      }
+    },
+    {
+      "covers": [
+        "WeatherEventSource"
+      ],
+      "evidence": {
+        "WeatherEventSource": [
+          "defaults",
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "omission"
+      ],
+      "expected": {
+        "cb_location": null,
+        "flight_category": null,
+        "metar_type": null,
+        "peak_wind_direction": null,
+        "peak_wind_kt": null,
+        "visibility_mi": null,
+        "wind_gust_kt": null,
+        "wind_speed_kt": -0.0,
+        "wx_string": null,
+        "wx_token": null
+      },
+      "id": "direct-WeatherEventSource-numeric-boundaries",
+      "rust_type": "WeatherEventSource",
+      "wire": {
+        "wind_speed_kt": -0.0
+      }
     }
   ],
   "wire_policy": {
     "non_finite_numbers": "excluded because they are not JSON-compatible values",
     "optional_fields": "omitted inputs resolve through defaults; explicit null is retained when nullable",
-    "portable_integer_domain": "signed 64-bit",
+    "portable_integer_domain": "IEEE-754 exactly represented signed integers (-9007199254740991 through 9007199254740991)",
+    "scalar_coercions": "disabled at the declared JSON wire boundary",
     "unknown_object_fields": "ignored and absent from canonical output"
   }
 }

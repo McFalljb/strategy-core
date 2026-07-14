@@ -5,6 +5,17 @@
   "invalid": [
     {
       "category": "enum",
+      "covers": [
+        "FreshnessSnapshot"
+      ],
+      "evidence": {
+        "FreshnessSnapshot": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
       "id": "unknown-freshness-status",
       "rust_type": "FreshnessSnapshot",
       "wire": {
@@ -22,6 +33,17 @@
     },
     {
       "category": "format",
+      "covers": [
+        "FreshnessSummary"
+      ],
+      "evidence": {
+        "FreshnessSummary": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
       "id": "malformed-freshness-count",
       "rust_type": "FreshnessSummary",
       "wire": {
@@ -31,6 +53,17 @@
     },
     {
       "category": "type",
+      "covers": [
+        "StationForecast"
+      ],
+      "evidence": {
+        "StationForecast": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
       "id": "wrong-hourly-shape",
       "rust_type": "StationForecast",
       "wire": {
@@ -45,6 +78,22 @@
         "FreshnessSnapshot",
         "FreshnessDomain",
         "FreshnessStatus"
+      ],
+      "evidence": {
+        "FreshnessDomain": [
+          "non_default_round_trip"
+        ],
+        "FreshnessSnapshot": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ],
+        "FreshnessStatus": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
       ],
       "expected": {
         "age_seconds": 31.25,
@@ -77,6 +126,19 @@
       "covers": [
         "FreshnessSummary",
         "FreshnessDomainSummary"
+      ],
+      "evidence": {
+        "FreshnessDomainSummary": [
+          "non_default_round_trip"
+        ],
+        "FreshnessSummary": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
       ],
       "expected": {
         "as_of": "2026-07-13T12:35:01.987654Z",
@@ -124,6 +186,22 @@
         "StationForecast",
         "ModelForecast",
         "ForecastHourly"
+      ],
+      "evidence": {
+        "ForecastHourly": [
+          "non_default_round_trip"
+        ],
+        "ModelForecast": [
+          "non_default_round_trip"
+        ],
+        "StationForecast": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
       ],
       "expected": {
         "model_forecasts": {
@@ -189,6 +267,21 @@
         "StationOracleScores",
         "OracleModelScore"
       ],
+      "evidence": {
+        "OracleModelScore": [
+          "non_default_round_trip"
+        ],
+        "StationOracleScores": [
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "timestamp_formatting"
+      ],
       "expected": {
         "days_requested": "30",
         "range_end": "2026-07-12",
@@ -239,6 +332,18 @@
     {
       "covers": [
         "StationWeather"
+      ],
+      "evidence": {
+        "StationWeather": [
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "timestamp_formatting"
       ],
       "expected": {
         "asos_daily_high_f": 91.0,
@@ -323,6 +428,16 @@
       "covers": [
         "StationWeather"
       ],
+      "evidence": {
+        "StationWeather": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
       "expected": {
         "asos_daily_high_f": null,
         "asos_daily_low_f": null,
@@ -370,6 +485,22 @@
         "TickerPrices",
         "PriceLevel",
         "FeeType"
+      ],
+      "evidence": {
+        "FeeType": [
+          "non_default_round_trip"
+        ],
+        "PriceLevel": [
+          "non_default_round_trip"
+        ],
+        "TickerPrices": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
       ],
       "expected": {
         "cap_strike": 90.5,
@@ -468,6 +599,16 @@
       "covers": [
         "TickerPrices"
       ],
+      "evidence": {
+        "TickerPrices": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
       "expected": {
         "cap_strike": null,
         "event_date": "",
@@ -506,6 +647,16 @@
       "covers": [
         "FreshnessStatus"
       ],
+      "evidence": {
+        "FreshnessStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
       "expected": "fresh",
       "id": "freshness-status-fresh",
       "rust_type": "FreshnessStatus",
@@ -514,6 +665,16 @@
     {
       "covers": [
         "FreshnessStatus"
+      ],
+      "evidence": {
+        "FreshnessStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
       ],
       "expected": "stale",
       "id": "freshness-status-stale",
@@ -524,6 +685,16 @@
       "covers": [
         "FreshnessStatus"
       ],
+      "evidence": {
+        "FreshnessStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
       "expected": "missing",
       "id": "freshness-status-missing",
       "rust_type": "FreshnessStatus",
@@ -532,6 +703,16 @@
     {
       "covers": [
         "FreshnessDomain"
+      ],
+      "evidence": {
+        "FreshnessDomain": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
       ],
       "expected": "weather",
       "id": "freshness-domain-weather",
@@ -542,6 +723,16 @@
       "covers": [
         "FreshnessDomain"
       ],
+      "evidence": {
+        "FreshnessDomain": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
       "expected": "forecast",
       "id": "freshness-domain-forecast",
       "rust_type": "FreshnessDomain",
@@ -550,6 +741,16 @@
     {
       "covers": [
         "FreshnessDomain"
+      ],
+      "evidence": {
+        "FreshnessDomain": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
       ],
       "expected": "oracle",
       "id": "freshness-domain-oracle",
@@ -560,6 +761,16 @@
       "covers": [
         "FreshnessDomain"
       ],
+      "evidence": {
+        "FreshnessDomain": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
       "expected": "price",
       "id": "freshness-domain-price",
       "rust_type": "FreshnessDomain",
@@ -568,6 +779,16 @@
     {
       "covers": [
         "FeeType"
+      ],
+      "evidence": {
+        "FeeType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
       ],
       "expected": "quadratic",
       "id": "fee-type-quadratic",
@@ -578,6 +799,16 @@
       "covers": [
         "FeeType"
       ],
+      "evidence": {
+        "FeeType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
       "expected": "quadratic_with_maker_fees",
       "id": "fee-type-quadratic_with_maker_fees",
       "rust_type": "FeeType",
@@ -586,6 +817,16 @@
     {
       "covers": [
         "FeeType"
+      ],
+      "evidence": {
+        "FeeType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
       ],
       "expected": "flat",
       "id": "fee-type-flat",
@@ -596,7 +837,8 @@
   "wire_policy": {
     "non_finite_numbers": "excluded because they are not JSON-compatible values",
     "optional_fields": "omitted inputs resolve through defaults; explicit null is retained when nullable",
-    "portable_integer_domain": "signed 64-bit",
+    "portable_integer_domain": "IEEE-754 exactly represented signed integers (-9007199254740991 through 9007199254740991)",
+    "scalar_coercions": "disabled at the declared JSON wire boundary",
     "unknown_object_fields": "ignored and absent from canonical output"
   }
 }

@@ -5,6 +5,17 @@
   "invalid": [
     {
       "category": "type",
+      "covers": [
+        "LimitsQuery"
+      ],
+      "evidence": {
+        "LimitsQuery": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
       "id": "wrong-refresh-type",
       "rust_type": "LimitsQuery",
       "wire": {
@@ -13,6 +24,17 @@
     },
     {
       "category": "required_field",
+      "covers": [
+        "ForecastRunQuery"
+      ],
+      "evidence": {
+        "ForecastRunQuery": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
       "id": "missing-run-id",
       "rust_type": "ForecastRunQuery",
       "wire": {
@@ -21,10 +43,40 @@
     },
     {
       "category": "type",
+      "covers": [
+        "ForecastRunsQuery"
+      ],
+      "evidence": {
+        "ForecastRunsQuery": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
       "id": "wrong-limit-type",
       "rust_type": "ForecastRunsQuery",
       "wire": {
         "limit": []
+      }
+    },
+    {
+      "category": "type",
+      "covers": [
+        "ForecastRunsQuery"
+      ],
+      "evidence": {
+        "ForecastRunsQuery": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "coerced-limit-type",
+      "rust_type": "ForecastRunsQuery",
+      "wire": {
+        "limit": "10"
       }
     }
   ],
@@ -33,6 +85,16 @@
     {
       "covers": [
         "LimitsQuery"
+      ],
+      "evidence": {
+        "LimitsQuery": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
       ],
       "expected": {
         "refresh": false
@@ -44,6 +106,14 @@
     {
       "covers": [
         "ForecastQuery"
+      ],
+      "evidence": {
+        "ForecastQuery": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
       ],
       "expected": {
         "model_id": "ncep_hrrr_conus",
@@ -60,6 +130,16 @@
       "covers": [
         "ForecastQuery"
       ],
+      "evidence": {
+        "ForecastQuery": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
       "expected": {
         "model_id": null,
         "refresh": false
@@ -71,6 +151,14 @@
     {
       "covers": [
         "OracleScoresQuery"
+      ],
+      "evidence": {
+        "OracleScoresQuery": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
       ],
       "expected": {
         "days": "30",
@@ -91,6 +179,16 @@
       "covers": [
         "OracleScoresQuery"
       ],
+      "evidence": {
+        "OracleScoresQuery": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
       "expected": {
         "days": "7",
         "mode": "day_ahead",
@@ -105,6 +203,19 @@
       "covers": [
         "ForecastRunsQuery",
         "DateLike"
+      ],
+      "evidence": {
+        "DateLike": [
+          "non_default_round_trip"
+        ],
+        "ForecastRunsQuery": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
       ],
       "expected": {
         "cursor": "cursor-1",
@@ -129,6 +240,16 @@
       "covers": [
         "ForecastRunsQuery"
       ],
+      "evidence": {
+        "ForecastRunsQuery": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
       "expected": {
         "cursor": null,
         "end": null,
@@ -145,6 +266,14 @@
       "covers": [
         "ForecastRunQuery"
       ],
+      "evidence": {
+        "ForecastRunQuery": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
       "expected": {
         "refresh": true,
         "run_id": "run-1"
@@ -160,6 +289,16 @@
       "covers": [
         "LatestReportsQuery"
       ],
+      "evidence": {
+        "LatestReportsQuery": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
       "expected": {
         "refresh": false
       },
@@ -171,6 +310,19 @@
       "covers": [
         "ReportsQuery",
         "LocalDateLike"
+      ],
+      "evidence": {
+        "LocalDateLike": [
+          "non_default_round_trip"
+        ],
+        "ReportsQuery": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
       ],
       "expected": {
         "date": "2026-07-13",
@@ -189,6 +341,16 @@
       "covers": [
         "ReportsQuery"
       ],
+      "evidence": {
+        "ReportsQuery": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
       "expected": {
         "date": null,
         "refresh": false,
@@ -202,6 +364,19 @@
       "covers": [
         "ReportHistoryQuery",
         "LocalDateLike"
+      ],
+      "evidence": {
+        "LocalDateLike": [
+          "non_default_round_trip"
+        ],
+        "ReportHistoryQuery": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
       ],
       "expected": {
         "cursor": "cursor-2",
@@ -226,6 +401,16 @@
       "covers": [
         "ReportHistoryQuery"
       ],
+      "evidence": {
+        "ReportHistoryQuery": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
       "expected": {
         "cursor": null,
         "end": null,
@@ -243,6 +428,17 @@
         "LatestObservationQuery",
         "TemperatureDayMode"
       ],
+      "evidence": {
+        "LatestObservationQuery": [
+          "non_default_round_trip"
+        ],
+        "TemperatureDayMode": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
       "expected": {
         "day_mode": "nws_climate_day",
         "refresh": true
@@ -258,6 +454,16 @@
       "covers": [
         "LatestObservationQuery"
       ],
+      "evidence": {
+        "LatestObservationQuery": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
       "expected": {
         "day_mode": null,
         "refresh": false
@@ -270,7 +476,8 @@
   "wire_policy": {
     "non_finite_numbers": "excluded because they are not JSON-compatible values",
     "optional_fields": "omitted inputs resolve through defaults; explicit null is retained when nullable",
-    "portable_integer_domain": "signed 64-bit",
+    "portable_integer_domain": "IEEE-754 exactly represented signed integers (-9007199254740991 through 9007199254740991)",
+    "scalar_coercions": "disabled at the declared JSON wire boundary",
     "unknown_object_fields": "ignored and absent from canonical output"
   }
 }

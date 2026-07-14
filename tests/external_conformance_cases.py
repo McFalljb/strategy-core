@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import TypeAdapter, ValidationError
 
+import strategy_core as strategy_contract
 from strategy_core.climate_day import (
     climate_day_date,
     climate_day_end,
@@ -19,6 +20,7 @@ from strategy_core.climate_day import (
 from strategy_core.fees import apply_fee_rounding, calculate_fill_fee, calculate_trade_fee
 from strategy_core.http import HttpMethod, HttpRequest, HttpResponse
 from strategy_core.kalshi import (
+    KalshiCollateralReturnType,
     KalshiCreateOrderResponse,
     KalshiEventLifecycleMessage,
     KalshiGetMarketResponse,
@@ -26,28 +28,41 @@ from strategy_core.kalshi import (
     KalshiGetOrderbooksResponse,
     KalshiGetOrderResponse,
     KalshiGetOrdersResponse,
+    KalshiImmediateTimeInForce,
     KalshiListSubscriptionsCommand,
     KalshiMarket,
+    KalshiMarketLifecycleEventType,
     KalshiMarketLifecycleMessage,
     KalshiMarketLifecycleMetadata,
     KalshiMarketOrderbook,
     KalshiMarketPositionMessage,
+    KalshiMarketResult,
+    KalshiMarketSide,
     KalshiMarketsPage,
+    KalshiMarketStatus,
     KalshiMveSelectedLeg,
     KalshiOrder,
+    KalshiOrderAction,
     KalshiOrderbook,
     KalshiOrderbookDeltaMessage,
     KalshiOrderbookLevel,
     KalshiOrderbookSnapshotMessage,
     KalshiOrderCreateRequest,
+    KalshiOrderStatus,
+    KalshiOrderType,
+    KalshiPriceLevelStructure,
     KalshiPriceRange,
+    KalshiSelfTradePreventionType,
     KalshiSubscribeCommand,
+    KalshiSubscriptionUpdateAction,
     KalshiTickerMessage,
+    KalshiTimeInForce,
     KalshiTradeMessage,
     KalshiUnsubscribeCommand,
     KalshiUpdateSubscriptionCommand,
     KalshiUserFillMessage,
     KalshiUserOrderMessage,
+    KalshiWsChannel,
     KalshiWsMessage,
 )
 from strategy_core.minutetemp import (
@@ -66,15 +81,20 @@ from strategy_core.minutetemp import (
     LatestReportsData,
     ObservationRecord,
     OracleModelScoreRecord,
+    OracleRankBy,
     OracleScoreData,
+    PlanTier,
     ReportClockSchedule,
     ReportIntervalSchedule,
     ReportMultiHourSchedule,
+    ReportScheduleBasis,
+    ReportType,
     StationForecastData,
     StationInfo,
     StationReportHistoryPage,
     StationReportRecord,
     StationReportsData,
+    TemperatureUnit,
 )
 from strategy_core.models import JSONValue
 from strategy_core.signals import SIGNAL_DSM_REACTION, SIGNAL_METAR_6HR_LOW, SIGNAL_METAR_6HR_NEW_LOW
@@ -90,12 +110,81 @@ from strategy_core.stations import (
     station_from_event_ticker,
     ticker_prefixes_for_station,
 )
-from tests.conformance_cases import FIXTURE_ROOT, _document, _invalid, _json_value, _raw, _valid
+from tests.conformance_cases import (
+    FIXTURE_ROOT,
+    _document,
+    _invalid,
+    _json_value,
+    _raw,
+    _valid,
+    _validate_wire,
+    _validation_category,
+    direct_model_cases,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
 EXTERNAL_FIXTURE_NAMES = ("helpers", "minutetemp", "kalshi", "http-data")
+EXTERNAL_DIRECT_MODEL_NAMES = (
+    "CityInfo",
+    "CursorPage",
+    "EffectiveLimits",
+    "ForecastBundle",
+    "ForecastBundleRun",
+    "ForecastRunData",
+    "ForecastRunSummary",
+    "ForecastRunsPage",
+    "HourlyForecastRecord",
+    "HttpRequest",
+    "HttpResponse",
+    "IpGuardLimits",
+    "KalshiCreateOrderResponse",
+    "KalshiEventLifecycleMessage",
+    "KalshiGetMarketResponse",
+    "KalshiGetOrderResponse",
+    "KalshiGetOrderbookResponse",
+    "KalshiGetOrderbooksResponse",
+    "KalshiGetOrdersResponse",
+    "KalshiListSubscriptionsCommand",
+    "KalshiMarket",
+    "KalshiMarketLifecycleMessage",
+    "KalshiMarketLifecycleMetadata",
+    "KalshiMarketOrderbook",
+    "KalshiMarketPositionMessage",
+    "KalshiMarketsPage",
+    "KalshiMveSelectedLeg",
+    "KalshiOrder",
+    "KalshiOrderCreateRequest",
+    "KalshiOrderbook",
+    "KalshiOrderbookDeltaMessage",
+    "KalshiOrderbookLevel",
+    "KalshiOrderbookSnapshotMessage",
+    "KalshiPriceRange",
+    "KalshiSubscribeCommand",
+    "KalshiTickerMessage",
+    "KalshiTradeMessage",
+    "KalshiUnsubscribeCommand",
+    "KalshiUpdateSubscriptionCommand",
+    "KalshiUserFillMessage",
+    "KalshiUserOrderMessage",
+    "LatestObservationData",
+    "LatestReportsData",
+    "ObservationRecord",
+    "OracleModelScoreRecord",
+    "OracleScoreData",
+    "ReportClockSchedule",
+    "ReportIntervalSchedule",
+    "ReportMultiHourSchedule",
+    "StationForecastData",
+    "StationInfo",
+    "StationReportHistoryPage",
+    "StationReportRecord",
+    "StationReportsData",
+)
+EXTERNAL_DIRECT_MODELS = {
+    name: cast("type[object]", getattr(strategy_contract, name)) for name in EXTERNAL_DIRECT_MODEL_NAMES
+}
 
 _T0 = datetime(2026, 7, 13, 12, 34, 56, 123456, tzinfo=UTC)
 _T1 = datetime(2026, 7, 13, 13, 45, 1, 987654, tzinfo=UTC)
@@ -104,7 +193,22 @@ _T1 = datetime(2026, 7, 13, 13, 45, 1, 987654, tzinfo=UTC)
 def _with_coverage(case: dict[str, Any], paths: dict[str, list[str | int]]) -> dict[str, Any]:
     case.pop("covers", None)
     case["coverage_paths"] = paths
+    root_type = cast("str", case["rust_type"])
+    root_dimensions = cast("list[str]", case["evidence_dimensions"])
+    case["evidence"] = {
+        surface: root_dimensions if surface == root_type else ["non_default_round_trip"] for surface in paths
+    }
     return case
+
+
+def _direct_enum_cases(rust_type: str, values: tuple[str, ...]) -> list[dict[str, Any]]:
+    return [
+        _with_coverage(
+            _raw(f"{rust_type}-{value or 'empty'}", rust_type, [], value),
+            {rust_type: []},
+        )
+        for value in values
+    ]
 
 
 def _minute_temp_fixture() -> dict[str, Any]:
@@ -379,24 +483,40 @@ def _minute_temp_fixture() -> dict[str, Any]:
             {"EffectiveLimits": [], "IpGuardLimits": ["ip_guard"], "PlanTier": ["tier"]},
         ),
         _with_coverage(
-            _valid("latest-observation-defaults", "LatestObservationData", [], LatestObservationData()),
+            _valid(
+                "latest-observation-defaults",
+                "LatestObservationData",
+                [],
+                LatestObservationData(),
+                wire={},
+            ),
             {"LatestObservationData": []},
         ),
         _with_coverage(
-            _valid("forecast-runs-empty-page", "ForecastRunsPage", [], ForecastRunsPage()),
+            _valid("forecast-runs-empty-page", "ForecastRunsPage", [], ForecastRunsPage(), wire={}),
             {"ForecastRunsPage": []},
         ),
         _with_coverage(
-            _valid("limits-defaults", "EffectiveLimits", [], EffectiveLimits()),
+            _valid("limits-defaults", "EffectiveLimits", [], EffectiveLimits(), wire={}),
             {"EffectiveLimits": []},
         ),
-        _with_coverage(_raw("data-resolution", "DataResolution", [], "5m"), {"DataResolution": []}),
     ]
+    enum_values = {
+        "DataResolution": ("1m", "5m", "10m"),
+        "OracleRankBy": ("combined", "high", "low"),
+        "PlanTier": ("starter", "pro", "clanker"),
+        "ReportScheduleBasis": ("utc", "local"),
+        "ReportType": ("cli", "dsm", "metar_tgroup", "metar_6hr"),
+        "TemperatureUnit": ("F", "C"),
+    }
+    for rust_type, values in enum_values.items():
+        valid.extend(_direct_enum_cases(rust_type, values))
     invalid = [
         _invalid("interval-missing-minutes", "ReportIntervalSchedule", "required_field", {"label": "bad"}),
         _invalid("observation-invalid-time", "ObservationRecord", "format", {"observation_time": "bad"}),
         _invalid("limits-invalid-ip-guard", "EffectiveLimits", "type", {"ip_guard": []}),
     ]
+    invalid.extend(_invalid(f"unknown-{rust_type}", rust_type, "enum", "unknown") for rust_type in enum_values)
     document = _document("minutetemp", valid, invalid)
     document["wire_policy"]["enum_strings"] = (
         "Literal aliases are exercised through fields that intentionally also accept strings for upstream extension."
@@ -901,6 +1021,45 @@ def _kalshi_fixture() -> dict[str, Any]:
             {"KalshiOrderCreateRequest": []},
         ),
     ]
+    enum_values = {
+        "KalshiCollateralReturnType": ("MECNET", "DIRECNET", ""),
+        "KalshiImmediateTimeInForce": ("fill_or_kill", "immediate_or_cancel"),
+        "KalshiMarketLifecycleEventType": (
+            "created",
+            "deactivated",
+            "activated",
+            "close_date_updated",
+            "determined",
+            "settled",
+            "fractional_trading_updated",
+            "price_level_structure_updated",
+        ),
+        "KalshiMarketResult": ("yes", "no", "scalar", ""),
+        "KalshiMarketSide": ("yes", "no"),
+        "KalshiMarketStatus": ("unopened", "open", "paused", "closed", "settled"),
+        "KalshiOrderAction": ("buy", "sell"),
+        "KalshiOrderStatus": ("resting", "canceled", "executed"),
+        "KalshiOrderType": ("limit",),
+        "KalshiPriceLevelStructure": ("linear_cent", "deci_cent", "tapered_deci_cent"),
+        "KalshiSelfTradePreventionType": ("taker_at_cross", "maker"),
+        "KalshiSubscriptionUpdateAction": ("add_markets", "delete_markets"),
+        "KalshiTimeInForce": ("fill_or_kill", "good_till_canceled", "immediate_or_cancel"),
+        "KalshiWsChannel": (
+            "orderbook_delta",
+            "ticker",
+            "trade",
+            "fill",
+            "market_positions",
+            "market_lifecycle_v2",
+            "multivariate_market_lifecycle",
+            "multivariate",
+            "communications",
+            "order_group_updates",
+            "user_orders",
+        ),
+    }
+    for rust_type, values in enum_values.items():
+        valid.extend(_direct_enum_cases(rust_type, values))
     invalid = [
         _invalid(
             "create-order-missing-ticker",
@@ -917,6 +1076,7 @@ def _kalshi_fixture() -> dict[str, Any]:
         ),
         _invalid("unrecognized-websocket-shape", "KalshiWsMessage", "type", {"sid": 1}),
     ]
+    invalid.extend(_invalid(f"unknown-{rust_type}", rust_type, "enum", "unknown") for rust_type in enum_values)
     document = _document("kalshi", valid, invalid)
     document["wire_policy"]["enum_strings"] = (
         "Fields annotated as Literal | str intentionally retain unknown upstream strings; required shapes still reject."
@@ -926,7 +1086,6 @@ def _kalshi_fixture() -> dict[str, Any]:
 
 def _http_data_fixture() -> dict[str, Any]:
     valid = [
-        _with_coverage(_raw("http-method", "HttpMethod", [], "PATCH"), {"HttpMethod": []}),
         _with_coverage(
             _valid(
                 "http-request-full",
@@ -972,6 +1131,7 @@ def _http_data_fixture() -> dict[str, Any]:
             {"HttpResponse": []},
         ),
     ]
+    valid.extend(_direct_enum_cases("HttpMethod", ("GET", "POST", "PUT", "PATCH", "DELETE")))
     invalid = [
         _invalid("invalid-http-method", "HttpMethod", "enum", "TRACE"),
         _invalid("request-missing-url", "HttpRequest", "required_field", {"method": "GET"}),
@@ -998,6 +1158,33 @@ def _helper_case(
 ) -> dict[str, Any]:
     case = {"id": case_id, "helper": helper, "covers": covers, "input": input_value}
     case["expected"] = evaluate_python_helper_case(case)
+    dimensions = {"helper_or_trait_behavior"}
+    if case_id in {
+        "fee-rounding-boundary",
+        "fee-rounding-signed",
+        "fee-negative-multiplier",
+        "fee-negative-quantity",
+        "fill-fee-sell",
+        "fee-invalid-decimal",
+        "fee-rounding-invalid-revenue",
+        "fee-rounding-invalid-trade-fee",
+        "fee-rounding-invalid-accumulator",
+        "fee-positive-infinity",
+        "fee-negative-infinity",
+        "fee-invalid-multiplier",
+        "fee-invalid-multiplier-and-type",
+        "fill-fee-invalid-price",
+        "fill-fee-invalid-accumulator",
+        "fill-fee-invalid-multiplier",
+        "fill-fee-invalid-price-and-role",
+    }:
+        dimensions.add("numeric_boundaries")
+    if "error" in case["expected"]:
+        dimensions.add("invalid_input")
+    if helper == "climate_day_end":
+        dimensions.add("timestamp_formatting")
+    case["evidence_dimensions"] = sorted(dimensions)
+    case["evidence"] = {surface: sorted(dimensions) for surface in covers}
     return case
 
 
@@ -1013,12 +1200,24 @@ def evaluate_python_helper_case(case: Mapping[str, Any]) -> dict[str, Any]:
                 quantity=inputs["quantity"],
                 liquidity_role=inputs["liquidity_role"],
                 fee_type=inputs.get("fee_type"),
-                fee_multiplier=inputs.get("fee_multiplier"),
+                fee_multiplier=cast("float | None", _special_float(inputs.get("fee_multiplier"))),
             )
         elif helper == "apply_fee_rounding":
-            result = apply_fee_rounding(**inputs)
+            result = apply_fee_rounding(
+                revenue=cast("float", _special_float(inputs["revenue"])),
+                trade_fee=cast("float", _special_float(inputs["trade_fee"])),
+                fee_accumulator=cast("float", _special_float(inputs["fee_accumulator"])),
+            )
         elif helper == "calculate_fill_fee":
-            result = calculate_fill_fee(**inputs)
+            result = calculate_fill_fee(
+                action=inputs["action"],
+                price=cast("float", _special_float(inputs["price"])),
+                quantity=inputs["quantity"],
+                liquidity_role=inputs["liquidity_role"],
+                fee_accumulator=cast("float", _special_float(inputs["fee_accumulator"])),
+                fee_type=inputs.get("fee_type"),
+                fee_multiplier=cast("float | None", _special_float(inputs.get("fee_multiplier"))),
+            )
         elif helper == "station_constants":
             result = {
                 "icao_to_city_codes": ICAO_TO_CITY_CODES,
@@ -1079,6 +1278,10 @@ def evaluate_python_helper_case(case: Mapping[str, Any]) -> dict[str, Any]:
             return {"error": "invalid_decimal"}
         if "unknown Kalshi fee type" in message:
             return {"error": "unknown_fee_type"}
+        if "unknown order action" in message:
+            return {"error": "unknown_action"}
+        if "unknown liquidity role" in message:
+            return {"error": "unknown_liquidity_role"}
         if "unknown market_type" in message:
             return {"error": "unknown_market_type"}
         if "timezone" in message:
@@ -1114,6 +1317,29 @@ def _helpers_fixture() -> dict[str, Any]:
             {"revenue": -0.055, "trade_fee": 0.0085, "fee_accumulator": 0.0065},
         ),
         _helper_case(
+            "fee-negative-quantity",
+            "calculate_trade_fee",
+            ["calculate_trade_fee"],
+            {"price": 0.25, "quantity": -1, "liquidity_role": "taker"},
+        ),
+        _helper_case(
+            "fee-negative-multiplier",
+            "calculate_trade_fee",
+            ["calculate_trade_fee"],
+            {
+                "price": 0.25,
+                "quantity": 1,
+                "liquidity_role": "taker",
+                "fee_multiplier": -1.0,
+            },
+        ),
+        _helper_case(
+            "fee-rounding-signed",
+            "apply_fee_rounding",
+            ["apply_fee_rounding", "FeeCalculation"],
+            {"revenue": -0.055, "trade_fee": -0.00851, "fee_accumulator": -0.0065},
+        ),
+        _helper_case(
             "fill-fee-sell",
             "calculate_fill_fee",
             ["calculate_fill_fee"],
@@ -1134,6 +1360,48 @@ def _helpers_fixture() -> dict[str, Any]:
             {"price": 0.5, "quantity": 1, "liquidity_role": "taker", "fee_type": "unknown"},
         ),
         _helper_case(
+            "fee-unknown-liquidity-role",
+            "calculate_trade_fee",
+            ["calculate_trade_fee", "LiquidityRole"],
+            {"price": 0.5, "quantity": 1, "liquidity_role": "passive"},
+        ),
+        _helper_case(
+            "fee-invalid-role-and-type",
+            "calculate_trade_fee",
+            ["calculate_trade_fee", "LiquidityRole"],
+            {
+                "price": 0.5,
+                "quantity": 1,
+                "liquidity_role": "passive",
+                "fee_type": "unknown",
+            },
+        ),
+        _helper_case(
+            "fill-fee-unknown-action",
+            "calculate_fill_fee",
+            ["calculate_fill_fee"],
+            {
+                "action": "hold",
+                "price": 0.5,
+                "quantity": 1,
+                "liquidity_role": "taker",
+                "fee_accumulator": 0.0,
+            },
+        ),
+        _helper_case(
+            "fill-fee-multiple-invalid-literals",
+            "calculate_fill_fee",
+            ["calculate_fill_fee"],
+            {
+                "action": "hold",
+                "price": 0.5,
+                "quantity": 1,
+                "liquidity_role": "passive",
+                "fee_accumulator": 0.0,
+                "fee_type": "unknown",
+            },
+        ),
+        _helper_case(
             "fee-invalid-decimal",
             "calculate_trade_fee",
             ["calculate_trade_fee"],
@@ -1150,6 +1418,96 @@ def _helpers_fixture() -> dict[str, Any]:
             "calculate_trade_fee",
             ["calculate_trade_fee"],
             {"price": {"non_finite": "-inf"}, "quantity": 1, "liquidity_role": "taker"},
+        ),
+        _helper_case(
+            "fee-invalid-multiplier",
+            "calculate_trade_fee",
+            ["calculate_trade_fee"],
+            {
+                "price": 0.5,
+                "quantity": 1,
+                "liquidity_role": "taker",
+                "fee_multiplier": {"non_finite": "nan"},
+            },
+        ),
+        _helper_case(
+            "fee-invalid-multiplier-and-type",
+            "calculate_trade_fee",
+            ["calculate_trade_fee"],
+            {
+                "price": 0.5,
+                "quantity": 1,
+                "liquidity_role": "taker",
+                "fee_type": "unknown",
+                "fee_multiplier": {"non_finite": "nan"},
+            },
+        ),
+        _helper_case(
+            "fill-fee-invalid-price",
+            "calculate_fill_fee",
+            ["calculate_fill_fee"],
+            {
+                "action": "buy",
+                "price": {"non_finite": "nan"},
+                "quantity": 1,
+                "liquidity_role": "taker",
+                "fee_accumulator": 0.0,
+            },
+        ),
+        _helper_case(
+            "fill-fee-invalid-accumulator",
+            "calculate_fill_fee",
+            ["calculate_fill_fee"],
+            {
+                "action": "buy",
+                "price": 0.5,
+                "quantity": 1,
+                "liquidity_role": "taker",
+                "fee_accumulator": {"non_finite": "inf"},
+            },
+        ),
+        _helper_case(
+            "fill-fee-invalid-multiplier",
+            "calculate_fill_fee",
+            ["calculate_fill_fee"],
+            {
+                "action": "buy",
+                "price": 0.5,
+                "quantity": 1,
+                "liquidity_role": "taker",
+                "fee_accumulator": 0.0,
+                "fee_multiplier": {"non_finite": "-inf"},
+            },
+        ),
+        _helper_case(
+            "fill-fee-invalid-price-and-role",
+            "calculate_fill_fee",
+            ["calculate_fill_fee", "LiquidityRole"],
+            {
+                "action": "buy",
+                "price": {"non_finite": "nan"},
+                "quantity": 1,
+                "liquidity_role": "passive",
+                "fee_accumulator": 0.0,
+            },
+        ),
+        _helper_case(
+            "fee-rounding-invalid-revenue",
+            "apply_fee_rounding",
+            ["apply_fee_rounding", "FeeCalculation"],
+            {"revenue": {"non_finite": "nan"}, "trade_fee": 0.0, "fee_accumulator": 0.0},
+        ),
+        _helper_case(
+            "fee-rounding-invalid-trade-fee",
+            "apply_fee_rounding",
+            ["apply_fee_rounding", "FeeCalculation"],
+            {"revenue": 0.0, "trade_fee": {"non_finite": "inf"}, "fee_accumulator": 0.0},
+        ),
+        _helper_case(
+            "fee-rounding-invalid-accumulator",
+            "apply_fee_rounding",
+            ["apply_fee_rounding", "FeeCalculation"],
+            {"revenue": 0.0, "trade_fee": 0.0, "fee_accumulator": {"non_finite": "-inf"}},
         ),
         _helper_case(
             "station-constants",
@@ -1240,10 +1598,22 @@ def _helpers_fixture() -> dict[str, Any]:
             {"station": "KMIA", "now": "2026-07-13T05:00:00Z"},
         ),
         _helper_case(
+            "climate-date-unknown-station",
+            "climate_day_date",
+            ["climate_day_date"],
+            {"station": "EGLL", "now": "2026-07-13T05:00:00Z"},
+        ),
+        _helper_case(
             "climate-day-end-dst",
             "climate_day_end",
             ["climate_day_end"],
             {"station": "KMIA", "event_date": "2026-07-13"},
+        ),
+        _helper_case(
+            "climate-day-end-unknown-station",
+            "climate_day_end",
+            ["climate_day_end"],
+            {"station": "EGLL", "event_date": "2026-07-13"},
         ),
         _helper_case(
             "climate-day-open",
@@ -1256,6 +1626,12 @@ def _helpers_fixture() -> dict[str, Any]:
             "climate_day_has_ended",
             ["climate_day_has_ended"],
             {"station": "KMIA", "event_date": "2026-07-13", "now": "2026-07-14T05:00:00Z"},
+        ),
+        _helper_case(
+            "climate-day-ended-unknown-station",
+            "climate_day_has_ended",
+            ["climate_day_has_ended"],
+            {"station": "EGLL", "event_date": "2026-07-13", "now": "2026-07-14T05:00:00Z"},
         ),
     ]
     return {
@@ -1270,12 +1646,18 @@ def _helpers_fixture() -> dict[str, Any]:
 def build_external_fixtures() -> dict[str, dict[str, Any]]:
     """Build the canonical external-model and helper corpus."""
 
-    return {
+    documents = {
         "helpers": _helpers_fixture(),
         "minutetemp": _minute_temp_fixture(),
         "kalshi": _kalshi_fixture(),
         "http-data": _http_data_fixture(),
     }
+    direct_valid, direct_invalid = direct_model_cases(EXTERNAL_DIRECT_MODELS)
+    documents["minutetemp"]["valid"].extend(
+        _with_coverage(case, {cast("str", case["rust_type"]): []}) for case in direct_valid
+    )
+    documents["minutetemp"]["invalid"].extend(direct_invalid)
+    return documents
 
 
 def load_external_fixture(name: str) -> dict[str, Any]:
@@ -1287,6 +1669,7 @@ def load_external_fixture(name: str) -> dict[str, Any]:
 
 
 _PYTHON_EXTERNAL_TYPES: dict[str, object] = {
+    "CityInfo": CityInfo,
     "DataResolution": DataResolution,
     "EffectiveLimits": EffectiveLimits,
     "ForecastRunData": ForecastRunData,
@@ -1294,6 +1677,7 @@ _PYTHON_EXTERNAL_TYPES: dict[str, object] = {
     "HttpMethod": HttpMethod,
     "HttpRequest": HttpRequest,
     "HttpResponse": HttpResponse,
+    "KalshiCollateralReturnType": KalshiCollateralReturnType,
     "KalshiCreateOrderResponse": KalshiCreateOrderResponse,
     "KalshiEventLifecycleMessage": KalshiEventLifecycleMessage,
     "KalshiGetMarketResponse": KalshiGetMarketResponse,
@@ -1303,30 +1687,49 @@ _PYTHON_EXTERNAL_TYPES: dict[str, object] = {
     "KalshiGetOrdersResponse": KalshiGetOrdersResponse,
     "KalshiListSubscriptionsCommand": KalshiListSubscriptionsCommand,
     "KalshiMarket": KalshiMarket,
+    "KalshiMarketLifecycleEventType": KalshiMarketLifecycleEventType,
     "KalshiMarketLifecycleMessage": KalshiMarketLifecycleMessage,
     "KalshiMarketPositionMessage": KalshiMarketPositionMessage,
+    "KalshiMarketResult": KalshiMarketResult,
+    "KalshiMarketSide": KalshiMarketSide,
+    "KalshiMarketStatus": KalshiMarketStatus,
     "KalshiMarketsPage": KalshiMarketsPage,
     "KalshiOrder": KalshiOrder,
+    "KalshiOrderAction": KalshiOrderAction,
     "KalshiOrderCreateRequest": KalshiOrderCreateRequest,
+    "KalshiOrderStatus": KalshiOrderStatus,
+    "KalshiOrderType": KalshiOrderType,
     "KalshiOrderbookDeltaMessage": KalshiOrderbookDeltaMessage,
     "KalshiOrderbookSnapshotMessage": KalshiOrderbookSnapshotMessage,
+    "KalshiPriceLevelStructure": KalshiPriceLevelStructure,
+    "KalshiSelfTradePreventionType": KalshiSelfTradePreventionType,
     "KalshiSubscribeCommand": KalshiSubscribeCommand,
+    "KalshiSubscriptionUpdateAction": KalshiSubscriptionUpdateAction,
     "KalshiTickerMessage": KalshiTickerMessage,
+    "KalshiTimeInForce": KalshiTimeInForce,
     "KalshiTradeMessage": KalshiTradeMessage,
+    "KalshiImmediateTimeInForce": KalshiImmediateTimeInForce,
     "KalshiUnsubscribeCommand": KalshiUnsubscribeCommand,
     "KalshiUpdateSubscriptionCommand": KalshiUpdateSubscriptionCommand,
     "KalshiUserFillMessage": KalshiUserFillMessage,
     "KalshiUserOrderMessage": KalshiUserOrderMessage,
+    "KalshiWsChannel": KalshiWsChannel,
     "KalshiWsMessage": KalshiWsMessage,
     "LatestObservationData": LatestObservationData,
     "LatestReportsData": LatestReportsData,
     "ObservationRecord": ObservationRecord,
+    "OracleRankBy": OracleRankBy,
     "OracleScoreData": OracleScoreData,
+    "PlanTier": PlanTier,
     "ReportIntervalSchedule": ReportIntervalSchedule,
+    "ReportScheduleBasis": ReportScheduleBasis,
+    "ReportType": ReportType,
     "StationForecastData": StationForecastData,
     "StationReportHistoryPage": StationReportHistoryPage,
     "StationReportsData": StationReportsData,
+    "TemperatureUnit": TemperatureUnit,
 }
+_PYTHON_EXTERNAL_TYPES.update(EXTERNAL_DIRECT_MODELS)
 _TYPE_NAMESPACE = {"JSONValue": JSONValue, "Mapping": collections.abc.Mapping}
 
 
@@ -1339,25 +1742,18 @@ def _external_wire_adapter(rust_type: str) -> TypeAdapter[Any]:
 def python_external_round_trip_valid_case(case: Mapping[str, Any]) -> Any:
     """Decode and canonicalize an external valid case through Python."""
 
-    return _json_value(_external_wire_adapter(cast("str", case["rust_type"])).validate_python(case["wire"]))
+    return _json_value(_validate_wire(_external_wire_adapter(cast("str", case["rust_type"])), case["wire"]))
 
 
 def python_external_invalid_category(case: Mapping[str, Any]) -> str | None:
     """Return Python's normalized rejection category for an invalid external case."""
 
     try:
-        _external_wire_adapter(cast("str", case["rust_type"])).validate_python(case["wire"])
+        _validate_wire(_external_wire_adapter(cast("str", case["rust_type"])), case["wire"])
     except ValidationError as error:
         if case["rust_type"] == "KalshiWsMessage":
             return "type"
-        error_type = error.errors()[0]["type"]
-        if error_type in {"missing", "union_tag_not_found"}:
-            return "required_field"
-        if error_type in {"enum", "literal_error", "union_tag_invalid"}:
-            return "enum"
-        if "parsing" in error_type:
-            return "format"
-        return "type"
+        return _validation_category(error)
     return None
 
 

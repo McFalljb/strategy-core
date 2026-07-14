@@ -6,6 +6,17 @@
         "calculate_trade_fee",
         "LiquidityRole"
       ],
+      "evidence": {
+        "LiquidityRole": [
+          "helper_or_trait_behavior"
+        ],
+        "calculate_trade_fee": [
+          "helper_or_trait_behavior"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior"
+      ],
       "expected": {
         "ok": 1.75
       },
@@ -20,6 +31,14 @@
     {
       "covers": [
         "calculate_trade_fee"
+      ],
+      "evidence": {
+        "calculate_trade_fee": [
+          "helper_or_trait_behavior"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior"
       ],
       "expected": {
         "ok": 0.0
@@ -36,6 +55,14 @@
     {
       "covers": [
         "calculate_trade_fee"
+      ],
+      "evidence": {
+        "calculate_trade_fee": [
+          "helper_or_trait_behavior"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior"
       ],
       "expected": {
         "ok": 1.47
@@ -54,6 +81,20 @@
       "covers": [
         "apply_fee_rounding",
         "FeeCalculation"
+      ],
+      "evidence": {
+        "FeeCalculation": [
+          "helper_or_trait_behavior",
+          "numeric_boundaries"
+        ],
+        "apply_fee_rounding": [
+          "helper_or_trait_behavior",
+          "numeric_boundaries"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior",
+        "numeric_boundaries"
       ],
       "expected": {
         "ok": {
@@ -75,7 +116,105 @@
     },
     {
       "covers": [
+        "calculate_trade_fee"
+      ],
+      "evidence": {
+        "calculate_trade_fee": [
+          "helper_or_trait_behavior",
+          "numeric_boundaries"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior",
+        "numeric_boundaries"
+      ],
+      "expected": {
+        "ok": -0.0131
+      },
+      "helper": "calculate_trade_fee",
+      "id": "fee-negative-quantity",
+      "input": {
+        "liquidity_role": "taker",
+        "price": 0.25,
+        "quantity": -1
+      }
+    },
+    {
+      "covers": [
+        "calculate_trade_fee"
+      ],
+      "evidence": {
+        "calculate_trade_fee": [
+          "helper_or_trait_behavior",
+          "numeric_boundaries"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior",
+        "numeric_boundaries"
+      ],
+      "expected": {
+        "ok": -0.0131
+      },
+      "helper": "calculate_trade_fee",
+      "id": "fee-negative-multiplier",
+      "input": {
+        "fee_multiplier": -1.0,
+        "liquidity_role": "taker",
+        "price": 0.25,
+        "quantity": 1
+      }
+    },
+    {
+      "covers": [
+        "apply_fee_rounding",
+        "FeeCalculation"
+      ],
+      "evidence": {
+        "FeeCalculation": [
+          "helper_or_trait_behavior",
+          "numeric_boundaries"
+        ],
+        "apply_fee_rounding": [
+          "helper_or_trait_behavior",
+          "numeric_boundaries"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior",
+        "numeric_boundaries"
+      ],
+      "expected": {
+        "ok": {
+          "fee_accumulator": 0.007,
+          "net_fee": 0.005,
+          "posted_balance_change": -0.06,
+          "rebate": -0.01,
+          "rounding_fee": 0.0035,
+          "trade_fee": -0.0085
+        }
+      },
+      "helper": "apply_fee_rounding",
+      "id": "fee-rounding-signed",
+      "input": {
+        "fee_accumulator": -0.0065,
+        "revenue": -0.055,
+        "trade_fee": -0.00851
+      }
+    },
+    {
+      "covers": [
         "calculate_fill_fee"
+      ],
+      "evidence": {
+        "calculate_fill_fee": [
+          "helper_or_trait_behavior",
+          "numeric_boundaries"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior",
+        "numeric_boundaries"
       ],
       "expected": {
         "ok": {
@@ -103,6 +242,16 @@
       "covers": [
         "calculate_trade_fee"
       ],
+      "evidence": {
+        "calculate_trade_fee": [
+          "helper_or_trait_behavior",
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior",
+        "invalid_input"
+      ],
       "expected": {
         "error": "unknown_fee_type"
       },
@@ -117,7 +266,135 @@
     },
     {
       "covers": [
+        "calculate_trade_fee",
+        "LiquidityRole"
+      ],
+      "evidence": {
+        "LiquidityRole": [
+          "helper_or_trait_behavior",
+          "invalid_input"
+        ],
+        "calculate_trade_fee": [
+          "helper_or_trait_behavior",
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior",
+        "invalid_input"
+      ],
+      "expected": {
+        "error": "unknown_liquidity_role"
+      },
+      "helper": "calculate_trade_fee",
+      "id": "fee-unknown-liquidity-role",
+      "input": {
+        "liquidity_role": "passive",
+        "price": 0.5,
+        "quantity": 1
+      }
+    },
+    {
+      "covers": [
+        "calculate_trade_fee",
+        "LiquidityRole"
+      ],
+      "evidence": {
+        "LiquidityRole": [
+          "helper_or_trait_behavior",
+          "invalid_input"
+        ],
+        "calculate_trade_fee": [
+          "helper_or_trait_behavior",
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior",
+        "invalid_input"
+      ],
+      "expected": {
+        "error": "unknown_liquidity_role"
+      },
+      "helper": "calculate_trade_fee",
+      "id": "fee-invalid-role-and-type",
+      "input": {
+        "fee_type": "unknown",
+        "liquidity_role": "passive",
+        "price": 0.5,
+        "quantity": 1
+      }
+    },
+    {
+      "covers": [
+        "calculate_fill_fee"
+      ],
+      "evidence": {
+        "calculate_fill_fee": [
+          "helper_or_trait_behavior",
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior",
+        "invalid_input"
+      ],
+      "expected": {
+        "error": "unknown_action"
+      },
+      "helper": "calculate_fill_fee",
+      "id": "fill-fee-unknown-action",
+      "input": {
+        "action": "hold",
+        "fee_accumulator": 0.0,
+        "liquidity_role": "taker",
+        "price": 0.5,
+        "quantity": 1
+      }
+    },
+    {
+      "covers": [
+        "calculate_fill_fee"
+      ],
+      "evidence": {
+        "calculate_fill_fee": [
+          "helper_or_trait_behavior",
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior",
+        "invalid_input"
+      ],
+      "expected": {
+        "error": "unknown_action"
+      },
+      "helper": "calculate_fill_fee",
+      "id": "fill-fee-multiple-invalid-literals",
+      "input": {
+        "action": "hold",
+        "fee_accumulator": 0.0,
+        "fee_type": "unknown",
+        "liquidity_role": "passive",
+        "price": 0.5,
+        "quantity": 1
+      }
+    },
+    {
+      "covers": [
         "calculate_trade_fee"
+      ],
+      "evidence": {
+        "calculate_trade_fee": [
+          "helper_or_trait_behavior",
+          "invalid_input",
+          "numeric_boundaries"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior",
+        "invalid_input",
+        "numeric_boundaries"
       ],
       "expected": {
         "error": "invalid_decimal"
@@ -136,6 +413,18 @@
       "covers": [
         "calculate_trade_fee"
       ],
+      "evidence": {
+        "calculate_trade_fee": [
+          "helper_or_trait_behavior",
+          "invalid_input",
+          "numeric_boundaries"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior",
+        "invalid_input",
+        "numeric_boundaries"
+      ],
       "expected": {
         "error": "invalid_decimal"
       },
@@ -153,6 +442,18 @@
       "covers": [
         "calculate_trade_fee"
       ],
+      "evidence": {
+        "calculate_trade_fee": [
+          "helper_or_trait_behavior",
+          "invalid_input",
+          "numeric_boundaries"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior",
+        "invalid_input",
+        "numeric_boundaries"
+      ],
       "expected": {
         "error": "invalid_decimal"
       },
@@ -168,11 +469,328 @@
     },
     {
       "covers": [
+        "calculate_trade_fee"
+      ],
+      "evidence": {
+        "calculate_trade_fee": [
+          "helper_or_trait_behavior",
+          "invalid_input",
+          "numeric_boundaries"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior",
+        "invalid_input",
+        "numeric_boundaries"
+      ],
+      "expected": {
+        "error": "invalid_decimal"
+      },
+      "helper": "calculate_trade_fee",
+      "id": "fee-invalid-multiplier",
+      "input": {
+        "fee_multiplier": {
+          "non_finite": "nan"
+        },
+        "liquidity_role": "taker",
+        "price": 0.5,
+        "quantity": 1
+      }
+    },
+    {
+      "covers": [
+        "calculate_trade_fee"
+      ],
+      "evidence": {
+        "calculate_trade_fee": [
+          "helper_or_trait_behavior",
+          "invalid_input",
+          "numeric_boundaries"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior",
+        "invalid_input",
+        "numeric_boundaries"
+      ],
+      "expected": {
+        "error": "invalid_decimal"
+      },
+      "helper": "calculate_trade_fee",
+      "id": "fee-invalid-multiplier-and-type",
+      "input": {
+        "fee_multiplier": {
+          "non_finite": "nan"
+        },
+        "fee_type": "unknown",
+        "liquidity_role": "taker",
+        "price": 0.5,
+        "quantity": 1
+      }
+    },
+    {
+      "covers": [
+        "calculate_fill_fee"
+      ],
+      "evidence": {
+        "calculate_fill_fee": [
+          "helper_or_trait_behavior",
+          "invalid_input",
+          "numeric_boundaries"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior",
+        "invalid_input",
+        "numeric_boundaries"
+      ],
+      "expected": {
+        "error": "invalid_decimal"
+      },
+      "helper": "calculate_fill_fee",
+      "id": "fill-fee-invalid-price",
+      "input": {
+        "action": "buy",
+        "fee_accumulator": 0.0,
+        "liquidity_role": "taker",
+        "price": {
+          "non_finite": "nan"
+        },
+        "quantity": 1
+      }
+    },
+    {
+      "covers": [
+        "calculate_fill_fee"
+      ],
+      "evidence": {
+        "calculate_fill_fee": [
+          "helper_or_trait_behavior",
+          "invalid_input",
+          "numeric_boundaries"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior",
+        "invalid_input",
+        "numeric_boundaries"
+      ],
+      "expected": {
+        "error": "invalid_decimal"
+      },
+      "helper": "calculate_fill_fee",
+      "id": "fill-fee-invalid-accumulator",
+      "input": {
+        "action": "buy",
+        "fee_accumulator": {
+          "non_finite": "inf"
+        },
+        "liquidity_role": "taker",
+        "price": 0.5,
+        "quantity": 1
+      }
+    },
+    {
+      "covers": [
+        "calculate_fill_fee"
+      ],
+      "evidence": {
+        "calculate_fill_fee": [
+          "helper_or_trait_behavior",
+          "invalid_input",
+          "numeric_boundaries"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior",
+        "invalid_input",
+        "numeric_boundaries"
+      ],
+      "expected": {
+        "error": "invalid_decimal"
+      },
+      "helper": "calculate_fill_fee",
+      "id": "fill-fee-invalid-multiplier",
+      "input": {
+        "action": "buy",
+        "fee_accumulator": 0.0,
+        "fee_multiplier": {
+          "non_finite": "-inf"
+        },
+        "liquidity_role": "taker",
+        "price": 0.5,
+        "quantity": 1
+      }
+    },
+    {
+      "covers": [
+        "calculate_fill_fee",
+        "LiquidityRole"
+      ],
+      "evidence": {
+        "LiquidityRole": [
+          "helper_or_trait_behavior",
+          "invalid_input",
+          "numeric_boundaries"
+        ],
+        "calculate_fill_fee": [
+          "helper_or_trait_behavior",
+          "invalid_input",
+          "numeric_boundaries"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior",
+        "invalid_input",
+        "numeric_boundaries"
+      ],
+      "expected": {
+        "error": "invalid_decimal"
+      },
+      "helper": "calculate_fill_fee",
+      "id": "fill-fee-invalid-price-and-role",
+      "input": {
+        "action": "buy",
+        "fee_accumulator": 0.0,
+        "liquidity_role": "passive",
+        "price": {
+          "non_finite": "nan"
+        },
+        "quantity": 1
+      }
+    },
+    {
+      "covers": [
+        "apply_fee_rounding",
+        "FeeCalculation"
+      ],
+      "evidence": {
+        "FeeCalculation": [
+          "helper_or_trait_behavior",
+          "invalid_input",
+          "numeric_boundaries"
+        ],
+        "apply_fee_rounding": [
+          "helper_or_trait_behavior",
+          "invalid_input",
+          "numeric_boundaries"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior",
+        "invalid_input",
+        "numeric_boundaries"
+      ],
+      "expected": {
+        "error": "invalid_decimal"
+      },
+      "helper": "apply_fee_rounding",
+      "id": "fee-rounding-invalid-revenue",
+      "input": {
+        "fee_accumulator": 0.0,
+        "revenue": {
+          "non_finite": "nan"
+        },
+        "trade_fee": 0.0
+      }
+    },
+    {
+      "covers": [
+        "apply_fee_rounding",
+        "FeeCalculation"
+      ],
+      "evidence": {
+        "FeeCalculation": [
+          "helper_or_trait_behavior",
+          "invalid_input",
+          "numeric_boundaries"
+        ],
+        "apply_fee_rounding": [
+          "helper_or_trait_behavior",
+          "invalid_input",
+          "numeric_boundaries"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior",
+        "invalid_input",
+        "numeric_boundaries"
+      ],
+      "expected": {
+        "error": "invalid_decimal"
+      },
+      "helper": "apply_fee_rounding",
+      "id": "fee-rounding-invalid-trade-fee",
+      "input": {
+        "fee_accumulator": 0.0,
+        "revenue": 0.0,
+        "trade_fee": {
+          "non_finite": "inf"
+        }
+      }
+    },
+    {
+      "covers": [
+        "apply_fee_rounding",
+        "FeeCalculation"
+      ],
+      "evidence": {
+        "FeeCalculation": [
+          "helper_or_trait_behavior",
+          "invalid_input",
+          "numeric_boundaries"
+        ],
+        "apply_fee_rounding": [
+          "helper_or_trait_behavior",
+          "invalid_input",
+          "numeric_boundaries"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior",
+        "invalid_input",
+        "numeric_boundaries"
+      ],
+      "expected": {
+        "error": "invalid_decimal"
+      },
+      "helper": "apply_fee_rounding",
+      "id": "fee-rounding-invalid-accumulator",
+      "input": {
+        "fee_accumulator": {
+          "non_finite": "-inf"
+        },
+        "revenue": 0.0,
+        "trade_fee": 0.0
+      }
+    },
+    {
+      "covers": [
         "CITY_TO_ICAO",
         "ICAO_TO_CITY_CODES",
         "MARKET_TYPE_PREFIX",
         "STATION_TIMEZONES",
         "TICKER_PREFIXES"
+      ],
+      "evidence": {
+        "CITY_TO_ICAO": [
+          "helper_or_trait_behavior"
+        ],
+        "ICAO_TO_CITY_CODES": [
+          "helper_or_trait_behavior"
+        ],
+        "MARKET_TYPE_PREFIX": [
+          "helper_or_trait_behavior"
+        ],
+        "STATION_TIMEZONES": [
+          "helper_or_trait_behavior"
+        ],
+        "TICKER_PREFIXES": [
+          "helper_or_trait_behavior"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior"
       ],
       "expected": {
         "ok": {
@@ -362,6 +980,20 @@
         "SIGNAL_METAR_6HR_LOW",
         "SIGNAL_METAR_6HR_NEW_LOW"
       ],
+      "evidence": {
+        "SIGNAL_DSM_REACTION": [
+          "helper_or_trait_behavior"
+        ],
+        "SIGNAL_METAR_6HR_LOW": [
+          "helper_or_trait_behavior"
+        ],
+        "SIGNAL_METAR_6HR_NEW_LOW": [
+          "helper_or_trait_behavior"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior"
+      ],
       "expected": {
         "ok": {
           "dsm_reaction": "dsm_reaction",
@@ -377,6 +1009,14 @@
       "covers": [
         "primary_city_code_for_series"
       ],
+      "evidence": {
+        "primary_city_code_for_series": [
+          "helper_or_trait_behavior"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior"
+      ],
       "expected": {
         "ok": "TDAL"
       },
@@ -390,6 +1030,14 @@
       "covers": [
         "primary_city_code_for_series"
       ],
+      "evidence": {
+        "primary_city_code_for_series": [
+          "helper_or_trait_behavior"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior"
+      ],
       "expected": {
         "ok": "XYZ"
       },
@@ -402,6 +1050,14 @@
     {
       "covers": [
         "city_codes_for_market_type"
+      ],
+      "evidence": {
+        "city_codes_for_market_type": [
+          "helper_or_trait_behavior"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior"
       ],
       "expected": {
         "ok": [
@@ -421,6 +1077,14 @@
       "covers": [
         "city_codes_for_market_type"
       ],
+      "evidence": {
+        "city_codes_for_market_type": [
+          "helper_or_trait_behavior"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior"
+      ],
       "expected": {
         "ok": [
           "DAL",
@@ -438,6 +1102,14 @@
       "covers": [
         "primary_city_code_for_market_type"
       ],
+      "evidence": {
+        "primary_city_code_for_market_type": [
+          "helper_or_trait_behavior"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior"
+      ],
       "expected": {
         "ok": "DAL"
       },
@@ -451,6 +1123,14 @@
     {
       "covers": [
         "ticker_prefixes_for_station"
+      ],
+      "evidence": {
+        "ticker_prefixes_for_station": [
+          "helper_or_trait_behavior"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior"
       ],
       "expected": {
         "ok": [
@@ -469,6 +1149,16 @@
       "covers": [
         "ticker_prefixes_for_station"
       ],
+      "evidence": {
+        "ticker_prefixes_for_station": [
+          "helper_or_trait_behavior",
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior",
+        "invalid_input"
+      ],
       "expected": {
         "error": "unknown_market_type"
       },
@@ -483,6 +1173,14 @@
       "covers": [
         "station_from_event_ticker"
       ],
+      "evidence": {
+        "station_from_event_ticker": [
+          "helper_or_trait_behavior"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior"
+      ],
       "expected": {
         "ok": "KDFW"
       },
@@ -495,6 +1193,14 @@
     {
       "covers": [
         "station_from_event_ticker"
+      ],
+      "evidence": {
+        "station_from_event_ticker": [
+          "helper_or_trait_behavior"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior"
       ],
       "expected": {
         "ok": null
@@ -509,6 +1215,14 @@
       "covers": [
         "station_timezone"
       ],
+      "evidence": {
+        "station_timezone": [
+          "helper_or_trait_behavior"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior"
+      ],
       "expected": {
         "ok": "America/New_York"
       },
@@ -522,6 +1236,14 @@
       "covers": [
         "station_timezone"
       ],
+      "evidence": {
+        "station_timezone": [
+          "helper_or_trait_behavior"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior"
+      ],
       "expected": {
         "ok": "UTC"
       },
@@ -534,6 +1256,14 @@
     {
       "covers": [
         "station_timezone"
+      ],
+      "evidence": {
+        "station_timezone": [
+          "helper_or_trait_behavior"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior"
       ],
       "expected": {
         "ok": "Europe/London"
@@ -551,6 +1281,16 @@
       "covers": [
         "station_timezone"
       ],
+      "evidence": {
+        "station_timezone": [
+          "helper_or_trait_behavior",
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior",
+        "invalid_input"
+      ],
       "expected": {
         "error": "timezone"
       },
@@ -563,6 +1303,14 @@
     {
       "covers": [
         "parse_climate_date"
+      ],
+      "evidence": {
+        "parse_climate_date": [
+          "helper_or_trait_behavior"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior"
       ],
       "expected": {
         "ok": "2026-07-13"
@@ -577,6 +1325,14 @@
       "covers": [
         "parse_climate_date"
       ],
+      "evidence": {
+        "parse_climate_date": [
+          "helper_or_trait_behavior"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior"
+      ],
       "expected": {
         "ok": "2026-07-13"
       },
@@ -589,6 +1345,14 @@
     {
       "covers": [
         "parse_climate_date"
+      ],
+      "evidence": {
+        "parse_climate_date": [
+          "helper_or_trait_behavior"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior"
       ],
       "expected": {
         "ok": "2026-07-13"
@@ -603,6 +1367,14 @@
       "covers": [
         "parse_climate_date"
       ],
+      "evidence": {
+        "parse_climate_date": [
+          "helper_or_trait_behavior"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior"
+      ],
       "expected": {
         "ok": null
       },
@@ -615,6 +1387,14 @@
     {
       "covers": [
         "climate_day_date"
+      ],
+      "evidence": {
+        "climate_day_date": [
+          "helper_or_trait_behavior"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior"
       ],
       "expected": {
         "ok": "2026-07-12"
@@ -630,6 +1410,14 @@
       "covers": [
         "climate_day_date"
       ],
+      "evidence": {
+        "climate_day_date": [
+          "helper_or_trait_behavior"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior"
+      ],
       "expected": {
         "ok": "2026-07-13"
       },
@@ -642,7 +1430,41 @@
     },
     {
       "covers": [
+        "climate_day_date"
+      ],
+      "evidence": {
+        "climate_day_date": [
+          "helper_or_trait_behavior",
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior",
+        "invalid_input"
+      ],
+      "expected": {
+        "error": "timezone"
+      },
+      "helper": "climate_day_date",
+      "id": "climate-date-unknown-station",
+      "input": {
+        "now": "2026-07-13T05:00:00Z",
+        "station": "EGLL"
+      }
+    },
+    {
+      "covers": [
         "climate_day_end"
+      ],
+      "evidence": {
+        "climate_day_end": [
+          "helper_or_trait_behavior",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior",
+        "timestamp_formatting"
       ],
       "expected": {
         "ok": "2026-07-14T05:00:00Z"
@@ -656,7 +1478,41 @@
     },
     {
       "covers": [
+        "climate_day_end"
+      ],
+      "evidence": {
+        "climate_day_end": [
+          "helper_or_trait_behavior",
+          "invalid_input",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior",
+        "invalid_input",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "error": "timezone"
+      },
+      "helper": "climate_day_end",
+      "id": "climate-day-end-unknown-station",
+      "input": {
+        "event_date": "2026-07-13",
+        "station": "EGLL"
+      }
+    },
+    {
+      "covers": [
         "climate_day_has_ended"
+      ],
+      "evidence": {
+        "climate_day_has_ended": [
+          "helper_or_trait_behavior"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior"
       ],
       "expected": {
         "ok": false
@@ -673,6 +1529,14 @@
       "covers": [
         "climate_day_has_ended"
       ],
+      "evidence": {
+        "climate_day_has_ended": [
+          "helper_or_trait_behavior"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior"
+      ],
       "expected": {
         "ok": true
       },
@@ -682,6 +1546,31 @@
         "event_date": "2026-07-13",
         "now": "2026-07-14T05:00:00Z",
         "station": "KMIA"
+      }
+    },
+    {
+      "covers": [
+        "climate_day_has_ended"
+      ],
+      "evidence": {
+        "climate_day_has_ended": [
+          "helper_or_trait_behavior",
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior",
+        "invalid_input"
+      ],
+      "expected": {
+        "error": "timezone"
+      },
+      "helper": "climate_day_has_ended",
+      "id": "climate-day-ended-unknown-station",
+      "input": {
+        "event_date": "2026-07-13",
+        "now": "2026-07-14T05:00:00Z",
+        "station": "EGLL"
       }
     }
   ],

@@ -10,7 +10,7 @@ use strategy_core::{
     ForecastRunLookup, FreshnessDomain, FreshnessDomainSummary, FreshnessSnapshot, FreshnessStatus,
     FreshnessSummary, HttpClient, HttpMethod, HttpRequest, HttpResponse, LatestObservationQuery,
     MarketStateView, OracleModelScore, OracleScoreDays, OrderExecutionStyle, OrderIntent,
-    OrderResult, OrderStatus, OrderTimePolicy, OrderType, PendingOrder, Position,
+    OrderResult, OrderStatus, OrderTimePolicy, OrderType, PendingOrder, Position, ReportType,
     RuntimeCapabilities, RuntimeMode, SIGNAL_DSM_REACTION, SIGNAL_METAR_6HR_LOW,
     SIGNAL_METAR_6HR_NEW_LOW, StationOracleScores, StrategyContext, StrategyDataClient,
     StrategyEvent, StrategyLogger, StrategyRuntime, StrategyScope, Telemetry, TelemetryField,
@@ -40,7 +40,7 @@ fn query_objects_match_python_defaults_and_json_names() {
         "refresh": true
     }))
     .unwrap();
-    assert_eq!(reports.report_type, Some("cli".to_string()));
+    assert_eq!(reports.report_type, Some(ReportType::Cli));
     assert!(reports.refresh);
 }
 
@@ -203,6 +203,9 @@ fn market_state_oracle_selectors_match_python_contract() {
         oracle_scores: [("KMIA".to_string(), scores)].into_iter().collect(),
     };
 
+    assert!(state.get_oracle_scores("KMIA").is_some());
+    assert!(state.get_oracle_scores("KORD").is_none());
+
     for (case_id, station, days, mode, rank_by, expected) in [
         ("omitted", "KMIA", None, None, None, true),
         (
@@ -256,7 +259,7 @@ fn market_state_oracle_selectors_match_python_contract() {
     ] {
         assert_eq!(
             state
-                .get_oracle_scores(station, days, mode, rank_by,)
+                .get_oracle_scores_matching(station, days, mode, rank_by)
                 .is_some(),
             expected,
             "{case_id}",
@@ -713,17 +716,8 @@ impl MarketStateView for FakeState {
         None
     }
 
-    fn get_oracle_scores(
-        &self,
-        station: &str,
-        days: Option<OracleScoreDays<'_>>,
-        mode: Option<&str>,
-        rank_by: Option<&str>,
-    ) -> Option<&strategy_core::StationOracleScores> {
-        let scores = self.oracle_scores.get(station)?;
-        scores
-            .matches_selectors(days, mode, rank_by)
-            .then_some(scores)
+    fn get_oracle_scores(&self, station: &str) -> Option<&strategy_core::StationOracleScores> {
+        self.oracle_scores.get(station)
     }
 
     fn get_prices(&self, _ticker: &str) -> Option<&TickerPrices> {

@@ -1,6 +1,8 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::minutetemp::ReportType;
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum DateLike {
@@ -77,7 +79,7 @@ pub struct LatestReportsQuery {
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ReportsQuery {
-    pub report_type: Option<String>,
+    pub report_type: Option<ReportType>,
     pub date: Option<LocalDateLike>,
     #[serde(default)]
     pub refresh: bool,
@@ -85,7 +87,7 @@ pub struct ReportsQuery {
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ReportHistoryQuery {
-    pub report_type: Option<String>,
+    pub report_type: Option<ReportType>,
     pub start: Option<LocalDateLike>,
     pub end: Option<LocalDateLike>,
     pub limit: Option<i64>,

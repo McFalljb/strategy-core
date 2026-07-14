@@ -94,6 +94,10 @@ def calculate_fill_fee(
     fee_multiplier: float | None = None,
 ) -> FeeCalculation:
     """Return the fully rounded fee/cash impact for one Kalshi fill."""
+    if action not in {"buy", "sell"}:
+        msg = f"unknown order action: {action}"
+        raise ValueError(msg)
+
     price_decimal = _decimal_from_float(price)
     quantity_decimal = Decimal(quantity)
     revenue = price_decimal * quantity_decimal
@@ -119,6 +123,10 @@ def _resolve_fee_multiplier(
     fee_type: FeeType | str | None,
     fee_multiplier: float | None,
 ) -> Decimal:
+    if liquidity_role not in {"maker", "taker"}:
+        msg = f"unknown liquidity role: {liquidity_role}"
+        raise ValueError(msg)
+
     normalized_fee_type = fee_type or "quadratic_with_maker_fees"
     multiplier = _decimal_from_float(fee_multiplier) if fee_multiplier is not None else Decimal("1")
 

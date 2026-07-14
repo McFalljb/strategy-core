@@ -5,6 +5,17 @@
   "invalid": [
     {
       "category": "required_field",
+      "covers": [
+        "KalshiOrderCreateRequest"
+      ],
+      "evidence": {
+        "KalshiOrderCreateRequest": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
       "id": "create-order-missing-ticker",
       "rust_type": "KalshiOrderCreateRequest",
       "wire": {
@@ -14,12 +25,34 @@
     },
     {
       "category": "required_field",
+      "covers": [
+        "KalshiGetOrderbookResponse"
+      ],
+      "evidence": {
+        "KalshiGetOrderbookResponse": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
       "id": "orderbook-missing-required",
       "rust_type": "KalshiGetOrderbookResponse",
       "wire": {}
     },
     {
       "category": "type",
+      "covers": [
+        "KalshiOrderbookSnapshotMessage"
+      ],
+      "evidence": {
+        "KalshiOrderbookSnapshotMessage": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
       "id": "snapshot-bad-level",
       "rust_type": "KalshiOrderbookSnapshotMessage",
       "wire": {
@@ -34,11 +67,260 @@
     },
     {
       "category": "type",
+      "covers": [
+        "KalshiWsMessage"
+      ],
+      "evidence": {
+        "KalshiWsMessage": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
       "id": "unrecognized-websocket-shape",
       "rust_type": "KalshiWsMessage",
       "wire": {
         "sid": 1
       }
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "KalshiCollateralReturnType"
+      ],
+      "evidence": {
+        "KalshiCollateralReturnType": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unknown-KalshiCollateralReturnType",
+      "rust_type": "KalshiCollateralReturnType",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "KalshiImmediateTimeInForce"
+      ],
+      "evidence": {
+        "KalshiImmediateTimeInForce": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unknown-KalshiImmediateTimeInForce",
+      "rust_type": "KalshiImmediateTimeInForce",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "KalshiMarketLifecycleEventType"
+      ],
+      "evidence": {
+        "KalshiMarketLifecycleEventType": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unknown-KalshiMarketLifecycleEventType",
+      "rust_type": "KalshiMarketLifecycleEventType",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "KalshiMarketResult"
+      ],
+      "evidence": {
+        "KalshiMarketResult": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unknown-KalshiMarketResult",
+      "rust_type": "KalshiMarketResult",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "KalshiMarketSide"
+      ],
+      "evidence": {
+        "KalshiMarketSide": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unknown-KalshiMarketSide",
+      "rust_type": "KalshiMarketSide",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "KalshiMarketStatus"
+      ],
+      "evidence": {
+        "KalshiMarketStatus": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unknown-KalshiMarketStatus",
+      "rust_type": "KalshiMarketStatus",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "KalshiOrderAction"
+      ],
+      "evidence": {
+        "KalshiOrderAction": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unknown-KalshiOrderAction",
+      "rust_type": "KalshiOrderAction",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "KalshiOrderStatus"
+      ],
+      "evidence": {
+        "KalshiOrderStatus": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unknown-KalshiOrderStatus",
+      "rust_type": "KalshiOrderStatus",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "KalshiOrderType"
+      ],
+      "evidence": {
+        "KalshiOrderType": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unknown-KalshiOrderType",
+      "rust_type": "KalshiOrderType",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "KalshiPriceLevelStructure"
+      ],
+      "evidence": {
+        "KalshiPriceLevelStructure": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unknown-KalshiPriceLevelStructure",
+      "rust_type": "KalshiPriceLevelStructure",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "KalshiSelfTradePreventionType"
+      ],
+      "evidence": {
+        "KalshiSelfTradePreventionType": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unknown-KalshiSelfTradePreventionType",
+      "rust_type": "KalshiSelfTradePreventionType",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "KalshiSubscriptionUpdateAction"
+      ],
+      "evidence": {
+        "KalshiSubscriptionUpdateAction": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unknown-KalshiSubscriptionUpdateAction",
+      "rust_type": "KalshiSubscriptionUpdateAction",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "KalshiTimeInForce"
+      ],
+      "evidence": {
+        "KalshiTimeInForce": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unknown-KalshiTimeInForce",
+      "rust_type": "KalshiTimeInForce",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "KalshiWsChannel"
+      ],
+      "evidence": {
+        "KalshiWsChannel": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unknown-KalshiWsChannel",
+      "rust_type": "KalshiWsChannel",
+      "wire": "unknown"
     }
   ],
   "schema_version": 1,
@@ -68,6 +350,35 @@
           "time_in_force"
         ]
       },
+      "evidence": {
+        "KalshiFixedCount": [
+          "non_default_round_trip"
+        ],
+        "KalshiFixedPrice": [
+          "non_default_round_trip"
+        ],
+        "KalshiImmediateTimeInForce": [
+          "non_default_round_trip"
+        ],
+        "KalshiMarketSide": [
+          "non_default_round_trip"
+        ],
+        "KalshiOrderAction": [
+          "non_default_round_trip"
+        ],
+        "KalshiOrderCreateRequest": [
+          "non_default_round_trip"
+        ],
+        "KalshiSelfTradePreventionType": [
+          "non_default_round_trip"
+        ],
+        "KalshiTimeInForce": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
       "expected": {
         "action": "buy",
         "buy_max_cost": 610,
@@ -125,6 +436,22 @@
           "type"
         ]
       },
+      "evidence": {
+        "KalshiOrder": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ],
+        "KalshiOrderStatus": [
+          "non_default_round_trip"
+        ],
+        "KalshiOrderType": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
+      ],
       "expected": {
         "action": "buy",
         "cancel_order_on_pause": true,
@@ -187,6 +514,19 @@
           "order"
         ]
       },
+      "evidence": {
+        "KalshiCreateOrderResponse": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ],
+        "KalshiOrder": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
+      ],
       "expected": {
         "order": {
           "action": "buy",
@@ -250,6 +590,16 @@
       "coverage_paths": {
         "KalshiGetOrderResponse": []
       },
+      "evidence": {
+        "KalshiGetOrderResponse": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
+      ],
       "expected": {
         "order": {
           "action": "buy",
@@ -313,6 +663,16 @@
       "coverage_paths": {
         "KalshiGetOrdersResponse": []
       },
+      "evidence": {
+        "KalshiGetOrdersResponse": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
+      ],
       "expected": {
         "cursor": "next-order",
         "orders": [
@@ -390,6 +750,20 @@
           0
         ]
       },
+      "evidence": {
+        "KalshiGetOrderbookResponse": [
+          "non_default_round_trip"
+        ],
+        "KalshiOrderbook": [
+          "non_default_round_trip"
+        ],
+        "KalshiOrderbookLevel": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
       "expected": {
         "orderbook_fp": {
           "no_dollars": [
@@ -433,6 +807,17 @@
           0
         ]
       },
+      "evidence": {
+        "KalshiGetOrderbooksResponse": [
+          "non_default_round_trip"
+        ],
+        "KalshiMarketOrderbook": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
       "expected": {
         "orderbooks": [
           {
@@ -499,6 +884,31 @@
           0
         ]
       },
+      "evidence": {
+        "KalshiMarket": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ],
+        "KalshiMarketResult": [
+          "non_default_round_trip"
+        ],
+        "KalshiMarketStatus": [
+          "non_default_round_trip"
+        ],
+        "KalshiMveSelectedLeg": [
+          "non_default_round_trip"
+        ],
+        "KalshiPriceLevelStructure": [
+          "non_default_round_trip"
+        ],
+        "KalshiPriceRange": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
+      ],
       "expected": {
         "can_close_early": true,
         "cap_strike": 91,
@@ -652,6 +1062,16 @@
       "coverage_paths": {
         "KalshiGetMarketResponse": []
       },
+      "evidence": {
+        "KalshiGetMarketResponse": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
+      ],
       "expected": {
         "market": {
           "can_close_early": true,
@@ -809,6 +1229,16 @@
       "coverage_paths": {
         "KalshiMarketsPage": []
       },
+      "evidence": {
+        "KalshiMarketsPage": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
+      ],
       "expected": {
         "cursor": "next",
         "markets": [
@@ -976,6 +1406,17 @@
           0
         ]
       },
+      "evidence": {
+        "KalshiSubscribeCommand": [
+          "non_default_round_trip"
+        ],
+        "KalshiWsChannel": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
       "expected": {
         "channels": [
           "orderbook_delta",
@@ -1013,6 +1454,14 @@
       "coverage_paths": {
         "KalshiUnsubscribeCommand": []
       },
+      "evidence": {
+        "KalshiUnsubscribeCommand": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
       "expected": {
         "id": 2,
         "sids": [
@@ -1034,6 +1483,14 @@
       "coverage_paths": {
         "KalshiListSubscriptionsCommand": []
       },
+      "evidence": {
+        "KalshiListSubscriptionsCommand": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
       "expected": {
         "id": 3
       },
@@ -1050,6 +1507,17 @@
         ],
         "KalshiUpdateSubscriptionCommand": []
       },
+      "evidence": {
+        "KalshiSubscriptionUpdateAction": [
+          "non_default_round_trip"
+        ],
+        "KalshiUpdateSubscriptionCommand": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
       "expected": {
         "action": "add_markets",
         "id": 4,
@@ -1079,6 +1547,14 @@
       "coverage_paths": {
         "KalshiOrderbookSnapshotMessage": []
       },
+      "evidence": {
+        "KalshiOrderbookSnapshotMessage": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
       "expected": {
         "market_id": "market-1",
         "market_ticker": "KXHIGHMIA-26JUL13-B90.5",
@@ -1122,6 +1598,16 @@
       "coverage_paths": {
         "KalshiOrderbookDeltaMessage": []
       },
+      "evidence": {
+        "KalshiOrderbookDeltaMessage": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
+      ],
       "expected": {
         "client_order_id": "client-1",
         "delta_fp": "-2.00",
@@ -1153,6 +1639,16 @@
       "coverage_paths": {
         "KalshiTickerMessage": []
       },
+      "evidence": {
+        "KalshiTickerMessage": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
+      ],
       "expected": {
         "dollar_open_interest": 50,
         "dollar_volume": 100,
@@ -1194,6 +1690,14 @@
       "coverage_paths": {
         "KalshiTradeMessage": []
       },
+      "evidence": {
+        "KalshiTradeMessage": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
       "expected": {
         "count_fp": "2.00",
         "market_ticker": "KXHIGHMIA-26JUL13-B90.5",
@@ -1221,6 +1725,16 @@
       "coverage_paths": {
         "KalshiUserOrderMessage": []
       },
+      "evidence": {
+        "KalshiUserOrderMessage": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
+      ],
       "expected": {
         "client_order_id": "client-1",
         "created_time": "2026-07-13T12:34:56.123456Z",
@@ -1270,6 +1784,14 @@
       "coverage_paths": {
         "KalshiUserFillMessage": []
       },
+      "evidence": {
+        "KalshiUserFillMessage": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
       "expected": {
         "action": "buy",
         "client_order_id": "client-1",
@@ -1311,6 +1833,14 @@
       "coverage_paths": {
         "KalshiMarketPositionMessage": []
       },
+      "evidence": {
+        "KalshiMarketPositionMessage": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
       "expected": {
         "fees_paid_dollars": "0.0300",
         "market_ticker": "KXHIGHMIA-26JUL13-B90.5",
@@ -1346,6 +1876,20 @@
           "additional_metadata"
         ]
       },
+      "evidence": {
+        "KalshiMarketLifecycleEventType": [
+          "non_default_round_trip"
+        ],
+        "KalshiMarketLifecycleMessage": [
+          "non_default_round_trip"
+        ],
+        "KalshiMarketLifecycleMetadata": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
       "expected": {
         "additional_metadata": {
           "can_close_early": true,
@@ -1418,6 +1962,17 @@
         ],
         "KalshiEventLifecycleMessage": []
       },
+      "evidence": {
+        "KalshiCollateralReturnType": [
+          "non_default_round_trip"
+        ],
+        "KalshiEventLifecycleMessage": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
       "expected": {
         "collateral_return_type": "MECNET",
         "event_ticker": "KXHIGHMIA-26JUL13",
@@ -1445,6 +2000,16 @@
       "coverage_paths": {
         "KalshiWsMessage": []
       },
+      "evidence": {
+        "KalshiWsMessage": [
+          "explicit_null",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "explicit_null",
+        "non_default_round_trip"
+      ],
       "expected": {
         "client_order_id": null,
         "delta_fp": "1.00",
@@ -1476,6 +2041,16 @@
       "coverage_paths": {
         "KalshiOrder": []
       },
+      "evidence": {
+        "KalshiOrder": [
+          "explicit_null",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "explicit_null",
+        "non_default_round_trip"
+      ],
       "expected": {
         "action": "buy",
         "cancel_order_on_pause": null,
@@ -1535,6 +2110,16 @@
       "coverage_paths": {
         "KalshiGetOrdersResponse": []
       },
+      "evidence": {
+        "KalshiGetOrdersResponse": [
+          "explicit_null",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "explicit_null",
+        "non_default_round_trip"
+      ],
       "expected": {
         "cursor": null,
         "orders": []
@@ -1550,6 +2135,16 @@
       "coverage_paths": {
         "KalshiMarketsPage": []
       },
+      "evidence": {
+        "KalshiMarketsPage": [
+          "explicit_null",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "explicit_null",
+        "non_default_round_trip"
+      ],
       "expected": {
         "cursor": null,
         "markets": []
@@ -1565,6 +2160,16 @@
       "coverage_paths": {
         "KalshiOrderCreateRequest": []
       },
+      "evidence": {
+        "KalshiOrderCreateRequest": [
+          "explicit_null",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "explicit_null",
+        "non_default_round_trip"
+      ],
       "expected": {
         "action": "future-action",
         "buy_max_cost": null,
@@ -1611,13 +2216,983 @@
         "yes_price": null,
         "yes_price_dollars": null
       }
+    },
+    {
+      "coverage_paths": {
+        "KalshiCollateralReturnType": []
+      },
+      "evidence": {
+        "KalshiCollateralReturnType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "MECNET",
+      "id": "KalshiCollateralReturnType-MECNET",
+      "rust_type": "KalshiCollateralReturnType",
+      "wire": "MECNET"
+    },
+    {
+      "coverage_paths": {
+        "KalshiCollateralReturnType": []
+      },
+      "evidence": {
+        "KalshiCollateralReturnType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "DIRECNET",
+      "id": "KalshiCollateralReturnType-DIRECNET",
+      "rust_type": "KalshiCollateralReturnType",
+      "wire": "DIRECNET"
+    },
+    {
+      "coverage_paths": {
+        "KalshiCollateralReturnType": []
+      },
+      "evidence": {
+        "KalshiCollateralReturnType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "",
+      "id": "KalshiCollateralReturnType-empty",
+      "rust_type": "KalshiCollateralReturnType",
+      "wire": ""
+    },
+    {
+      "coverage_paths": {
+        "KalshiImmediateTimeInForce": []
+      },
+      "evidence": {
+        "KalshiImmediateTimeInForce": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "fill_or_kill",
+      "id": "KalshiImmediateTimeInForce-fill_or_kill",
+      "rust_type": "KalshiImmediateTimeInForce",
+      "wire": "fill_or_kill"
+    },
+    {
+      "coverage_paths": {
+        "KalshiImmediateTimeInForce": []
+      },
+      "evidence": {
+        "KalshiImmediateTimeInForce": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "immediate_or_cancel",
+      "id": "KalshiImmediateTimeInForce-immediate_or_cancel",
+      "rust_type": "KalshiImmediateTimeInForce",
+      "wire": "immediate_or_cancel"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketLifecycleEventType": []
+      },
+      "evidence": {
+        "KalshiMarketLifecycleEventType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "created",
+      "id": "KalshiMarketLifecycleEventType-created",
+      "rust_type": "KalshiMarketLifecycleEventType",
+      "wire": "created"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketLifecycleEventType": []
+      },
+      "evidence": {
+        "KalshiMarketLifecycleEventType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "deactivated",
+      "id": "KalshiMarketLifecycleEventType-deactivated",
+      "rust_type": "KalshiMarketLifecycleEventType",
+      "wire": "deactivated"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketLifecycleEventType": []
+      },
+      "evidence": {
+        "KalshiMarketLifecycleEventType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "activated",
+      "id": "KalshiMarketLifecycleEventType-activated",
+      "rust_type": "KalshiMarketLifecycleEventType",
+      "wire": "activated"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketLifecycleEventType": []
+      },
+      "evidence": {
+        "KalshiMarketLifecycleEventType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "close_date_updated",
+      "id": "KalshiMarketLifecycleEventType-close_date_updated",
+      "rust_type": "KalshiMarketLifecycleEventType",
+      "wire": "close_date_updated"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketLifecycleEventType": []
+      },
+      "evidence": {
+        "KalshiMarketLifecycleEventType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "determined",
+      "id": "KalshiMarketLifecycleEventType-determined",
+      "rust_type": "KalshiMarketLifecycleEventType",
+      "wire": "determined"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketLifecycleEventType": []
+      },
+      "evidence": {
+        "KalshiMarketLifecycleEventType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "settled",
+      "id": "KalshiMarketLifecycleEventType-settled",
+      "rust_type": "KalshiMarketLifecycleEventType",
+      "wire": "settled"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketLifecycleEventType": []
+      },
+      "evidence": {
+        "KalshiMarketLifecycleEventType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "fractional_trading_updated",
+      "id": "KalshiMarketLifecycleEventType-fractional_trading_updated",
+      "rust_type": "KalshiMarketLifecycleEventType",
+      "wire": "fractional_trading_updated"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketLifecycleEventType": []
+      },
+      "evidence": {
+        "KalshiMarketLifecycleEventType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "price_level_structure_updated",
+      "id": "KalshiMarketLifecycleEventType-price_level_structure_updated",
+      "rust_type": "KalshiMarketLifecycleEventType",
+      "wire": "price_level_structure_updated"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketResult": []
+      },
+      "evidence": {
+        "KalshiMarketResult": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "yes",
+      "id": "KalshiMarketResult-yes",
+      "rust_type": "KalshiMarketResult",
+      "wire": "yes"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketResult": []
+      },
+      "evidence": {
+        "KalshiMarketResult": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "no",
+      "id": "KalshiMarketResult-no",
+      "rust_type": "KalshiMarketResult",
+      "wire": "no"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketResult": []
+      },
+      "evidence": {
+        "KalshiMarketResult": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "scalar",
+      "id": "KalshiMarketResult-scalar",
+      "rust_type": "KalshiMarketResult",
+      "wire": "scalar"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketResult": []
+      },
+      "evidence": {
+        "KalshiMarketResult": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "",
+      "id": "KalshiMarketResult-empty",
+      "rust_type": "KalshiMarketResult",
+      "wire": ""
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketSide": []
+      },
+      "evidence": {
+        "KalshiMarketSide": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "yes",
+      "id": "KalshiMarketSide-yes",
+      "rust_type": "KalshiMarketSide",
+      "wire": "yes"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketSide": []
+      },
+      "evidence": {
+        "KalshiMarketSide": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "no",
+      "id": "KalshiMarketSide-no",
+      "rust_type": "KalshiMarketSide",
+      "wire": "no"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketStatus": []
+      },
+      "evidence": {
+        "KalshiMarketStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "unopened",
+      "id": "KalshiMarketStatus-unopened",
+      "rust_type": "KalshiMarketStatus",
+      "wire": "unopened"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketStatus": []
+      },
+      "evidence": {
+        "KalshiMarketStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "open",
+      "id": "KalshiMarketStatus-open",
+      "rust_type": "KalshiMarketStatus",
+      "wire": "open"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketStatus": []
+      },
+      "evidence": {
+        "KalshiMarketStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "paused",
+      "id": "KalshiMarketStatus-paused",
+      "rust_type": "KalshiMarketStatus",
+      "wire": "paused"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketStatus": []
+      },
+      "evidence": {
+        "KalshiMarketStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "closed",
+      "id": "KalshiMarketStatus-closed",
+      "rust_type": "KalshiMarketStatus",
+      "wire": "closed"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketStatus": []
+      },
+      "evidence": {
+        "KalshiMarketStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "settled",
+      "id": "KalshiMarketStatus-settled",
+      "rust_type": "KalshiMarketStatus",
+      "wire": "settled"
+    },
+    {
+      "coverage_paths": {
+        "KalshiOrderAction": []
+      },
+      "evidence": {
+        "KalshiOrderAction": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "buy",
+      "id": "KalshiOrderAction-buy",
+      "rust_type": "KalshiOrderAction",
+      "wire": "buy"
+    },
+    {
+      "coverage_paths": {
+        "KalshiOrderAction": []
+      },
+      "evidence": {
+        "KalshiOrderAction": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "sell",
+      "id": "KalshiOrderAction-sell",
+      "rust_type": "KalshiOrderAction",
+      "wire": "sell"
+    },
+    {
+      "coverage_paths": {
+        "KalshiOrderStatus": []
+      },
+      "evidence": {
+        "KalshiOrderStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "resting",
+      "id": "KalshiOrderStatus-resting",
+      "rust_type": "KalshiOrderStatus",
+      "wire": "resting"
+    },
+    {
+      "coverage_paths": {
+        "KalshiOrderStatus": []
+      },
+      "evidence": {
+        "KalshiOrderStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "canceled",
+      "id": "KalshiOrderStatus-canceled",
+      "rust_type": "KalshiOrderStatus",
+      "wire": "canceled"
+    },
+    {
+      "coverage_paths": {
+        "KalshiOrderStatus": []
+      },
+      "evidence": {
+        "KalshiOrderStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "executed",
+      "id": "KalshiOrderStatus-executed",
+      "rust_type": "KalshiOrderStatus",
+      "wire": "executed"
+    },
+    {
+      "coverage_paths": {
+        "KalshiOrderType": []
+      },
+      "evidence": {
+        "KalshiOrderType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "limit",
+      "id": "KalshiOrderType-limit",
+      "rust_type": "KalshiOrderType",
+      "wire": "limit"
+    },
+    {
+      "coverage_paths": {
+        "KalshiPriceLevelStructure": []
+      },
+      "evidence": {
+        "KalshiPriceLevelStructure": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "linear_cent",
+      "id": "KalshiPriceLevelStructure-linear_cent",
+      "rust_type": "KalshiPriceLevelStructure",
+      "wire": "linear_cent"
+    },
+    {
+      "coverage_paths": {
+        "KalshiPriceLevelStructure": []
+      },
+      "evidence": {
+        "KalshiPriceLevelStructure": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "deci_cent",
+      "id": "KalshiPriceLevelStructure-deci_cent",
+      "rust_type": "KalshiPriceLevelStructure",
+      "wire": "deci_cent"
+    },
+    {
+      "coverage_paths": {
+        "KalshiPriceLevelStructure": []
+      },
+      "evidence": {
+        "KalshiPriceLevelStructure": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "tapered_deci_cent",
+      "id": "KalshiPriceLevelStructure-tapered_deci_cent",
+      "rust_type": "KalshiPriceLevelStructure",
+      "wire": "tapered_deci_cent"
+    },
+    {
+      "coverage_paths": {
+        "KalshiSelfTradePreventionType": []
+      },
+      "evidence": {
+        "KalshiSelfTradePreventionType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "taker_at_cross",
+      "id": "KalshiSelfTradePreventionType-taker_at_cross",
+      "rust_type": "KalshiSelfTradePreventionType",
+      "wire": "taker_at_cross"
+    },
+    {
+      "coverage_paths": {
+        "KalshiSelfTradePreventionType": []
+      },
+      "evidence": {
+        "KalshiSelfTradePreventionType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "maker",
+      "id": "KalshiSelfTradePreventionType-maker",
+      "rust_type": "KalshiSelfTradePreventionType",
+      "wire": "maker"
+    },
+    {
+      "coverage_paths": {
+        "KalshiSubscriptionUpdateAction": []
+      },
+      "evidence": {
+        "KalshiSubscriptionUpdateAction": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "add_markets",
+      "id": "KalshiSubscriptionUpdateAction-add_markets",
+      "rust_type": "KalshiSubscriptionUpdateAction",
+      "wire": "add_markets"
+    },
+    {
+      "coverage_paths": {
+        "KalshiSubscriptionUpdateAction": []
+      },
+      "evidence": {
+        "KalshiSubscriptionUpdateAction": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "delete_markets",
+      "id": "KalshiSubscriptionUpdateAction-delete_markets",
+      "rust_type": "KalshiSubscriptionUpdateAction",
+      "wire": "delete_markets"
+    },
+    {
+      "coverage_paths": {
+        "KalshiTimeInForce": []
+      },
+      "evidence": {
+        "KalshiTimeInForce": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "fill_or_kill",
+      "id": "KalshiTimeInForce-fill_or_kill",
+      "rust_type": "KalshiTimeInForce",
+      "wire": "fill_or_kill"
+    },
+    {
+      "coverage_paths": {
+        "KalshiTimeInForce": []
+      },
+      "evidence": {
+        "KalshiTimeInForce": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "good_till_canceled",
+      "id": "KalshiTimeInForce-good_till_canceled",
+      "rust_type": "KalshiTimeInForce",
+      "wire": "good_till_canceled"
+    },
+    {
+      "coverage_paths": {
+        "KalshiTimeInForce": []
+      },
+      "evidence": {
+        "KalshiTimeInForce": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "immediate_or_cancel",
+      "id": "KalshiTimeInForce-immediate_or_cancel",
+      "rust_type": "KalshiTimeInForce",
+      "wire": "immediate_or_cancel"
+    },
+    {
+      "coverage_paths": {
+        "KalshiWsChannel": []
+      },
+      "evidence": {
+        "KalshiWsChannel": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "orderbook_delta",
+      "id": "KalshiWsChannel-orderbook_delta",
+      "rust_type": "KalshiWsChannel",
+      "wire": "orderbook_delta"
+    },
+    {
+      "coverage_paths": {
+        "KalshiWsChannel": []
+      },
+      "evidence": {
+        "KalshiWsChannel": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "ticker",
+      "id": "KalshiWsChannel-ticker",
+      "rust_type": "KalshiWsChannel",
+      "wire": "ticker"
+    },
+    {
+      "coverage_paths": {
+        "KalshiWsChannel": []
+      },
+      "evidence": {
+        "KalshiWsChannel": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "trade",
+      "id": "KalshiWsChannel-trade",
+      "rust_type": "KalshiWsChannel",
+      "wire": "trade"
+    },
+    {
+      "coverage_paths": {
+        "KalshiWsChannel": []
+      },
+      "evidence": {
+        "KalshiWsChannel": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "fill",
+      "id": "KalshiWsChannel-fill",
+      "rust_type": "KalshiWsChannel",
+      "wire": "fill"
+    },
+    {
+      "coverage_paths": {
+        "KalshiWsChannel": []
+      },
+      "evidence": {
+        "KalshiWsChannel": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "market_positions",
+      "id": "KalshiWsChannel-market_positions",
+      "rust_type": "KalshiWsChannel",
+      "wire": "market_positions"
+    },
+    {
+      "coverage_paths": {
+        "KalshiWsChannel": []
+      },
+      "evidence": {
+        "KalshiWsChannel": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "market_lifecycle_v2",
+      "id": "KalshiWsChannel-market_lifecycle_v2",
+      "rust_type": "KalshiWsChannel",
+      "wire": "market_lifecycle_v2"
+    },
+    {
+      "coverage_paths": {
+        "KalshiWsChannel": []
+      },
+      "evidence": {
+        "KalshiWsChannel": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "multivariate_market_lifecycle",
+      "id": "KalshiWsChannel-multivariate_market_lifecycle",
+      "rust_type": "KalshiWsChannel",
+      "wire": "multivariate_market_lifecycle"
+    },
+    {
+      "coverage_paths": {
+        "KalshiWsChannel": []
+      },
+      "evidence": {
+        "KalshiWsChannel": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "multivariate",
+      "id": "KalshiWsChannel-multivariate",
+      "rust_type": "KalshiWsChannel",
+      "wire": "multivariate"
+    },
+    {
+      "coverage_paths": {
+        "KalshiWsChannel": []
+      },
+      "evidence": {
+        "KalshiWsChannel": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "communications",
+      "id": "KalshiWsChannel-communications",
+      "rust_type": "KalshiWsChannel",
+      "wire": "communications"
+    },
+    {
+      "coverage_paths": {
+        "KalshiWsChannel": []
+      },
+      "evidence": {
+        "KalshiWsChannel": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "order_group_updates",
+      "id": "KalshiWsChannel-order_group_updates",
+      "rust_type": "KalshiWsChannel",
+      "wire": "order_group_updates"
+    },
+    {
+      "coverage_paths": {
+        "KalshiWsChannel": []
+      },
+      "evidence": {
+        "KalshiWsChannel": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "user_orders",
+      "id": "KalshiWsChannel-user_orders",
+      "rust_type": "KalshiWsChannel",
+      "wire": "user_orders"
     }
   ],
   "wire_policy": {
     "enum_strings": "Fields annotated as Literal | str intentionally retain unknown upstream strings; required shapes still reject.",
     "non_finite_numbers": "excluded because they are not JSON-compatible values",
     "optional_fields": "omitted inputs resolve through defaults; explicit null is retained when nullable",
-    "portable_integer_domain": "signed 64-bit",
+    "portable_integer_domain": "IEEE-754 exactly represented signed integers (-9007199254740991 through 9007199254740991)",
+    "scalar_coercions": "disabled at the declared JSON wire boundary",
     "unknown_object_fields": "ignored and absent from canonical output"
   }
 }

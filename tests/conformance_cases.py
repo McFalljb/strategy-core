@@ -6,24 +6,37 @@ The checked-in JSON files are build artifacts of these Python contract objects. 
 
 from __future__ import annotations
 
+import collections.abc
+import inspect
 import json
+import math
+import sys
+import types
 from collections.abc import Mapping
-from dataclasses import fields, is_dataclass
+from dataclasses import MISSING, fields, is_dataclass
 from datetime import UTC, date, datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, cast
+from typing import Annotated, Any, Literal, TypeAliasType, Union, cast, get_args, get_origin, get_type_hints
 
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
+import strategy_core as strategy_contract
 from strategy_core.broker import (
+    Action,
     BrokerOrderUpdate,
+    BrokerUpdateStatus,
+    ContractSide,
+    OrderExecutionStyle,
     OrderIntent,
     OrderResult,
+    OrderStatus,
+    OrderTimePolicy,
+    OrderType,
     PendingOrder,
     Position,
 )
-from strategy_core.capabilities import RuntimeCapabilities
+from strategy_core.capabilities import EventDelivery, RuntimeCapabilities
 from strategy_core.events import (
     ForecastUpdated,
     ForecastVersions,
@@ -34,6 +47,7 @@ from strategy_core.events import (
     OracleScoreRow,
     OracleScoresUpdated,
     OracleScoreTable,
+    PersistenceStatus,
     PriceUpdate,
     ShutdownEvent,
     StationReport,
@@ -41,10 +55,11 @@ from strategy_core.events import (
     TimerWake,
     WeatherEvent,
     WeatherEventSource,
+    WuDayMode,
 )
 from strategy_core.minutetemp import OracleRankBy, OracleScoreMode, ReportType, TemperatureDayMode
 from strategy_core.models import JSONValue, OrderId
-from strategy_core.native import NativeKernelResult
+from strategy_core.native import NativeKernelResult, NativeKernelStatus
 from strategy_core.queries import (
     ForecastQuery,
     ForecastRunQuery,
@@ -56,8 +71,9 @@ from strategy_core.queries import (
     ReportHistoryQuery,
     ReportsQuery,
 )
-from strategy_core.runtime import RuntimeMode, StrategyScope
+from strategy_core.runtime import MarketType, RuntimeMode, StrategyScope
 from strategy_core.state import (
+    FeeType,
     ForecastHourly,
     FreshnessDomain,
     FreshnessDomainSummary,
@@ -75,9 +91,179 @@ from strategy_core.state import (
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "conformance"
 CORE_FIXTURE_NAMES = ("events", "state", "broker", "runtime", "queries")
 
+CORE_DIRECT_MODEL_NAMES = (
+    "BrokerOrderUpdate",
+    "ForecastHourly",
+    "ForecastQuery",
+    "ForecastRunQuery",
+    "ForecastRunsQuery",
+    "ForecastUpdated",
+    "ForecastVersions",
+    "FreshnessDomainSummary",
+    "FreshnessSnapshot",
+    "FreshnessSummary",
+    "LatestObservationQuery",
+    "LatestReportsQuery",
+    "LimitsQuery",
+    "MarketBracket",
+    "ModelForecast",
+    "NativeKernelResult",
+    "NewHigh",
+    "NewLow",
+    "Observation",
+    "OracleModelScore",
+    "OracleScoreRow",
+    "OracleScoreTable",
+    "OracleScoresQuery",
+    "OracleScoresUpdated",
+    "OrderIntent",
+    "OrderResult",
+    "PendingOrder",
+    "Position",
+    "PriceUpdate",
+    "ReportHistoryQuery",
+    "ReportsQuery",
+    "RuntimeCapabilities",
+    "ShutdownEvent",
+    "StationForecast",
+    "StationOracleScores",
+    "StationReport",
+    "StationWeather",
+    "StrategyScope",
+    "TickerPrices",
+    "TimerWake",
+    "WeatherEvent",
+    "WeatherEventSource",
+)
+CORE_DIRECT_MODELS = {name: cast("type[object]", getattr(strategy_contract, name)) for name in CORE_DIRECT_MODEL_NAMES}
+CORE_DIRECT_ENUM_NAMES = (
+    "Action",
+    "BrokerUpdateStatus",
+    "ContractSide",
+    "EventDelivery",
+    "FeeType",
+    "FreshnessDomain",
+    "FreshnessStatus",
+    "MarketType",
+    "NativeKernelStatus",
+    "OracleScoreMode",
+    "OrderExecutionStyle",
+    "OrderStatus",
+    "OrderTimePolicy",
+    "OrderType",
+    "PersistenceStatus",
+    "RuntimeMode",
+    "TemperatureDayMode",
+    "WuDayMode",
+)
+CORE_DIRECT_ENUMS = {
+    "Action": Action,
+    "BrokerUpdateStatus": BrokerUpdateStatus,
+    "ContractSide": ContractSide,
+    "EventDelivery": EventDelivery,
+    "FeeType": FeeType,
+    "FreshnessDomain": FreshnessDomain,
+    "FreshnessStatus": FreshnessStatus,
+    "MarketType": MarketType,
+    "NativeKernelStatus": NativeKernelStatus,
+    "OracleScoreMode": OracleScoreMode,
+    "OrderExecutionStyle": OrderExecutionStyle,
+    "OrderStatus": OrderStatus,
+    "OrderTimePolicy": OrderTimePolicy,
+    "OrderType": OrderType,
+    "PersistenceStatus": PersistenceStatus,
+    "RuntimeMode": RuntimeMode,
+    "TemperatureDayMode": TemperatureDayMode,
+    "WuDayMode": WuDayMode,
+}
+
 _UTC = UTC
 _T0 = datetime(2026, 7, 13, 12, 34, 56, 123456, tzinfo=_UTC)
 _T1 = datetime(2026, 7, 13, 12, 35, 1, 987654, tzinfo=_UTC)
+
+_NON_DEFAULT_ROUND_TRIP = "non_default_round_trip"
+_PORTABLE_INTEGER_BOUNDARY = 9_007_199_254_740_991
+
+
+def _contains_explicit_null(value: object) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, Mapping):
+        return any(_contains_explicit_null(item) for item in value.values())
+    if isinstance(value, (tuple, list)):
+        return any(_contains_explicit_null(item) for item in value)
+    return False
+
+
+def _contains_timestamp(value: object) -> bool:
+    if isinstance(value, str):
+        try:
+            if "T" in value:
+                datetime.fromisoformat(value.replace("Z", "+00:00"))
+            else:
+                date.fromisoformat(value)
+        except ValueError:
+            pass
+        else:
+            return True
+    if isinstance(value, Mapping):
+        return any(_contains_timestamp(item) for item in value.values())
+    if isinstance(value, (tuple, list)):
+        return any(_contains_timestamp(item) for item in value)
+    return False
+
+
+def _contains_numeric_boundary(value: object) -> bool:
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return abs(value) >= 9_007_199_254_740_991
+    if isinstance(value, float):
+        return value == 0.0 and math.copysign(1.0, value) < 0.0
+    if isinstance(value, Mapping):
+        return any(_contains_numeric_boundary(item) for item in value.values())
+    if isinstance(value, (tuple, list)):
+        return any(_contains_numeric_boundary(item) for item in value)
+    return False
+
+
+def _contains_omission(wire: object, expected: object) -> bool:
+    if isinstance(wire, Mapping) and isinstance(expected, Mapping):
+        if set(expected) - set(wire):
+            return True
+        return any(_contains_omission(wire[key], expected[key]) for key in set(wire) & set(expected))
+    if isinstance(wire, (tuple, list)) and isinstance(expected, (tuple, list)):
+        return any(_contains_omission(left, right) for left, right in zip(wire, expected, strict=False))
+    return False
+
+
+def _case_evidence(
+    rust_type: str,
+    covers: list[str],
+    wire: object,
+    expected: object,
+    *,
+    enum_value: bool = False,
+) -> tuple[list[str], dict[str, list[str]]]:
+    dimensions: set[str] = set()
+    if wire not in ({}, [], (), None):
+        dimensions.add(_NON_DEFAULT_ROUND_TRIP)
+    if _contains_omission(wire, expected):
+        dimensions.update({"defaults", "omission"})
+    if _contains_explicit_null(wire):
+        dimensions.add("explicit_null")
+    if _contains_timestamp(expected):
+        dimensions.add("timestamp_formatting")
+    if _contains_numeric_boundary(expected):
+        dimensions.add("numeric_boundaries")
+    if enum_value:
+        dimensions.add("enum_values")
+
+    nested_dimensions = [_NON_DEFAULT_ROUND_TRIP] if _NON_DEFAULT_ROUND_TRIP in dimensions else []
+    per_surface = {surface: nested_dimensions for surface in covers}
+    if rust_type in per_surface:
+        per_surface[rust_type] = sorted(dimensions)
+    return sorted(dimensions), per_surface
 
 
 def _json_value(value: object) -> Any:
@@ -98,6 +284,12 @@ def _json_value(value: object) -> Any:
     return value
 
 
+def _validate_wire(adapter: TypeAdapter[Any], wire: object) -> Any:
+    """Validate the declared JSON boundary without Python scalar coercions."""
+
+    return adapter.validate_json(json.dumps(_json_value(wire)), strict=True)
+
+
 def _valid(
     case_id: str,
     rust_type: str,
@@ -107,17 +299,32 @@ def _valid(
     wire: object | None = None,
 ) -> dict[str, Any]:
     expected = _json_value(value)
+    normalized_wire = expected if wire is None else _json_value(wire)
+    dimensions, evidence = _case_evidence(rust_type, covers, normalized_wire, expected)
     return {
         "id": case_id,
         "rust_type": rust_type,
         "covers": covers,
-        "wire": expected if wire is None else _json_value(wire),
+        "wire": normalized_wire,
         "expected": expected,
+        "evidence_dimensions": dimensions,
+        "evidence": evidence,
     }
 
 
 def _raw(case_id: str, rust_type: str, covers: list[str], value: object) -> dict[str, Any]:
-    return _valid(case_id, rust_type, covers, value)
+    case = _valid(case_id, rust_type, covers, value)
+    if isinstance(value, str):
+        dimensions, evidence = _case_evidence(
+            rust_type,
+            covers,
+            case["wire"],
+            case["expected"],
+            enum_value=True,
+        )
+        case["evidence_dimensions"] = dimensions
+        case["evidence"] = evidence
+    return case
 
 
 def _invalid(
@@ -129,8 +336,11 @@ def _invalid(
     return {
         "id": case_id,
         "rust_type": rust_type,
+        "covers": [rust_type],
         "category": category,
         "wire": _json_value(value),
+        "evidence_dimensions": ["invalid_input"],
+        "evidence": {rust_type: ["invalid_input"]},
     }
 
 
@@ -147,12 +357,339 @@ def _document(
         "wire_policy": {
             "unknown_object_fields": "ignored and absent from canonical output",
             "non_finite_numbers": "excluded because they are not JSON-compatible values",
-            "portable_integer_domain": "signed 64-bit",
+            "portable_integer_domain": (
+                "IEEE-754 exactly represented signed integers (-9007199254740991 through 9007199254740991)"
+            ),
+            "scalar_coercions": "disabled at the declared JSON wire boundary",
             "optional_fields": "omitted inputs resolve through defaults; explicit null is retained when nullable",
         },
         "valid": valid,
         "invalid": invalid,
     }
+
+
+def _model_fields(model: type[object]) -> list[tuple[str, object, bool]]:
+    if issubclass(model, BaseModel):
+        return [(name, field.annotation, field.is_required()) for name, field in model.model_fields.items()]
+    module_globals = dict(vars(sys.modules[model.__module__]))
+    module_globals.update(vars(strategy_contract))
+    module_globals.update(
+        {
+            "Iterable": collections.abc.Iterable,
+            "Mapping": collections.abc.Mapping,
+            "date": date,
+            "datetime": datetime,
+        }
+    )
+    annotations = get_type_hints(model, globalns=module_globals, include_extras=True)
+    return [
+        (
+            field.name,
+            annotations[field.name],
+            field.default is MISSING and field.default_factory is MISSING,
+        )
+        for field in fields(cast("Any", model))
+    ]
+
+
+def _unwrap_annotated(annotation: object) -> object:
+    while True:
+        if isinstance(annotation, TypeAliasType):
+            annotation = annotation.__value__
+            continue
+        if get_origin(annotation) is Annotated:
+            annotation = get_args(annotation)[0]
+            continue
+        break
+    return annotation
+
+
+def _union_members(annotation: object) -> tuple[object, ...] | None:
+    annotation = _unwrap_annotated(annotation)
+    if get_origin(annotation) in {types.UnionType, Union}:
+        return get_args(annotation)
+    return None
+
+
+def _annotation_contains(
+    annotation: object,
+    targets: set[object],
+    seen: frozenset[int] = frozenset(),
+) -> bool:
+    marker = id(annotation)
+    if marker in seen:
+        return False
+    seen = seen | {marker}
+    annotation = _unwrap_annotated(annotation)
+    if annotation in targets:
+        return True
+    origin = get_origin(annotation)
+    if origin is Literal:
+        return any(type(value) in targets for value in get_args(annotation))
+    return any(_annotation_contains(argument, targets, seen) for argument in get_args(annotation))
+
+
+def _annotation_allows_none(annotation: object) -> bool:
+    members = _union_members(annotation)
+    return members is not None and type(None) in members
+
+
+def _annotation_has_closed_enum(annotation: object, seen: frozenset[int] = frozenset()) -> bool:
+    marker = id(annotation)
+    if marker in seen:
+        return False
+    seen = seen | {marker}
+    annotation = _unwrap_annotated(annotation)
+    if get_origin(annotation) is Literal:
+        return True
+    if inspect.isclass(annotation) and issubclass(annotation, Enum):
+        return True
+    return any(_annotation_has_closed_enum(argument, seen) for argument in get_args(annotation))
+
+
+def _annotation_has_model_or_mapping(annotation: object, seen: frozenset[int] = frozenset()) -> bool:
+    marker = id(annotation)
+    if marker in seen:
+        return False
+    seen = seen | {marker}
+    annotation = _unwrap_annotated(annotation)
+    origin = get_origin(annotation)
+    if origin in {dict, Mapping, collections.abc.Mapping}:
+        return True
+    if inspect.isclass(annotation) and (is_dataclass(annotation) or issubclass(annotation, BaseModel)):
+        return True
+    return any(_annotation_has_model_or_mapping(argument, seen) for argument in get_args(annotation))
+
+
+def direct_model_dimensions(model: type[object]) -> set[str]:
+    """Return minimum evidence dimensions implied by a public model's direct fields."""
+
+    model_fields = _model_fields(model)
+    dimensions = {_NON_DEFAULT_ROUND_TRIP, "invalid_input"}
+    if any(not required for _, _, required in model_fields):
+        dimensions.update({"defaults", "omission"})
+    if any(_annotation_allows_none(annotation) for _, annotation, _ in model_fields):
+        dimensions.add("explicit_null")
+    if any(_annotation_contains(annotation, {date, datetime}) for _, annotation, _ in model_fields):
+        dimensions.add("timestamp_formatting")
+    if any(_annotation_contains(annotation, {int, float}) for _, annotation, _ in model_fields):
+        dimensions.add("numeric_boundaries")
+    return dimensions
+
+
+def _minimal_wire_value(annotation: object) -> object:
+    annotation = _unwrap_annotated(annotation)
+    members = _union_members(annotation)
+    if members is not None:
+        return _minimal_wire_value(next(member for member in members if member is not type(None)))
+    origin = get_origin(annotation)
+    arguments = get_args(annotation)
+    if origin is Literal:
+        return arguments[0]
+    if origin in {list, set, frozenset, tuple, collections.abc.Sequence}:
+        return []
+    if origin in {dict, Mapping, collections.abc.Mapping}:
+        return {}
+    if annotation is str:
+        return "value"
+    if annotation is bool:
+        return False
+    if annotation is int:
+        return 1
+    if annotation is float:
+        return 1.0
+    if annotation is datetime:
+        return _T0.isoformat().replace("+00:00", "Z")
+    if annotation is date:
+        return _T0.date().isoformat()
+    if inspect.isclass(annotation) and issubclass(annotation, Enum):
+        return next(iter(annotation)).value
+    if inspect.isclass(annotation) and (is_dataclass(annotation) or issubclass(annotation, BaseModel)):
+        return _minimal_model_wire(annotation)
+    return {}
+
+
+def _minimal_model_wire(model: type[object]) -> dict[str, object]:
+    return {name: _minimal_wire_value(annotation) for name, annotation, required in _model_fields(model) if required}
+
+
+def _dimension_wire_value(annotation: object, dimension: str) -> object:
+    annotation = _unwrap_annotated(annotation)
+    members = _union_members(annotation)
+    if members is not None:
+        member = next(
+            candidate
+            for candidate in members
+            if candidate is not type(None) and _annotation_contains(candidate, {date, datetime, int, float})
+        )
+        return _dimension_wire_value(member, dimension)
+    origin = get_origin(annotation)
+    arguments = get_args(annotation)
+    if origin in {list, set, frozenset, tuple, collections.abc.Sequence}:
+        return [_dimension_wire_value(arguments[0], dimension)]
+    if origin in {dict, Mapping, collections.abc.Mapping}:
+        return {"key": _dimension_wire_value(arguments[-1], dimension)}
+    if dimension == "timestamp_formatting":
+        if annotation is datetime:
+            return _T0.isoformat().replace("+00:00", "Z")
+        if annotation is date:
+            return _T0.date().isoformat()
+    if annotation is float:
+        return -0.0
+    if annotation is int:
+        return _PORTABLE_INTEGER_BOUNDARY
+    raise AssertionError((annotation, dimension))
+
+
+def _non_default_wire_value(annotation: object) -> object:
+    annotation = _unwrap_annotated(annotation)
+    members = _union_members(annotation)
+    if members is not None:
+        return _non_default_wire_value(next(member for member in members if member is not type(None)))
+    origin = get_origin(annotation)
+    arguments = get_args(annotation)
+    if origin is Literal:
+        return arguments[-1]
+    if origin in {list, set, frozenset, tuple, collections.abc.Sequence}:
+        return [_non_default_wire_value(arguments[0])]
+    if origin in {dict, Mapping, collections.abc.Mapping}:
+        return {"key": _non_default_wire_value(arguments[-1])}
+    if annotation is str:
+        return "non-default"
+    if annotation is bool:
+        return True
+    if annotation is int:
+        return 2
+    if annotation is float:
+        return 1.5
+    if annotation is datetime:
+        return _T0.isoformat().replace("+00:00", "Z")
+    if annotation is date:
+        return _T0.date().isoformat()
+    if inspect.isclass(annotation) and issubclass(annotation, Enum):
+        return list(annotation)[-1].value
+    if inspect.isclass(annotation) and (is_dataclass(annotation) or issubclass(annotation, BaseModel)):
+        return _non_default_model_wire(annotation)
+    return {"value": True}
+
+
+def _non_default_model_wire(model: type[object]) -> dict[str, object]:
+    wire = _minimal_model_wire(model)
+    for name, annotation, _ in _model_fields(model):
+        candidate = _non_default_wire_value(annotation)
+        if name not in wire or wire[name] != candidate:
+            return {**wire, name: candidate}
+    return wire
+
+
+def _validation_category(error: ValidationError) -> str:
+    error_types = {item["type"] for item in error.errors()}
+    if error_types & {"missing", "union_tag_not_found"}:
+        return "required_field"
+    if error_types <= {"enum", "literal_error", "union_tag_invalid"}:
+        return "enum"
+    if error_types & {"string_too_short", "greater_than", "less_than"}:
+        return "range"
+    if all("parsing" in error_type for error_type in error_types):
+        return "format"
+    return "type"
+
+
+def direct_model_cases(
+    models: Mapping[str, type[object]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Build direct root cases for every field-shape dimension owned by exported models."""
+
+    valid: list[dict[str, Any]] = []
+    invalid: list[dict[str, Any]] = []
+    for surface, model in models.items():
+        adapter: TypeAdapter[Any] = TypeAdapter(model)
+        adapter.rebuild(
+            _types_namespace={
+                **vars(strategy_contract),
+                **vars(sys.modules[model.__module__]),
+                **globals(),
+            }
+        )
+        model_fields = _model_fields(model)
+        minimal_wire = _minimal_model_wire(model)
+        baseline = _validate_wire(adapter, minimal_wire)
+        baseline_json = _json_value(baseline)
+        dimensions = direct_model_dimensions(model)
+
+        for name, annotation, _ in model_fields:
+            wire = {**minimal_wire, name: _non_default_wire_value(annotation)}
+            try:
+                decoded = _validate_wire(adapter, wire)
+            except ValidationError:
+                continue
+            if _json_value(decoded) != baseline_json:
+                valid.append(_valid(f"direct-{surface}-non-default", surface, [surface], decoded, wire=wire))
+                break
+        else:
+            raise AssertionError(f"{surface} has no constructible non-default field")
+
+        if "defaults" in dimensions:
+            valid.append(_valid(f"direct-{surface}-defaults", surface, [surface], baseline, wire=minimal_wire))
+
+        if "explicit_null" in dimensions:
+            name, _, _ = next(field for field in model_fields if _annotation_allows_none(field[1]))
+            wire = {**minimal_wire, name: None}
+            valid.append(
+                _valid(
+                    f"direct-{surface}-explicit-null",
+                    surface,
+                    [surface],
+                    _validate_wire(adapter, wire),
+                    wire=wire,
+                )
+            )
+
+        dimension_targets: tuple[tuple[str, set[object]], ...] = (
+            ("timestamp_formatting", {date, datetime}),
+            ("numeric_boundaries", {int, float}),
+        )
+        for dimension, targets in dimension_targets:
+            if dimension not in dimensions:
+                continue
+            name, annotation, _ = next(field for field in model_fields if _annotation_contains(field[1], targets))
+            wire = {**minimal_wire, name: _dimension_wire_value(annotation, dimension)}
+            valid.append(
+                _valid(
+                    f"direct-{surface}-{dimension.replace('_', '-')}",
+                    surface,
+                    [surface],
+                    _validate_wire(adapter, wire),
+                    wire=wire,
+                )
+            )
+
+        for name, annotation, _ in model_fields:
+            bad_values: tuple[object, ...] = (
+                ("invalid", [], {}, None)
+                if _annotation_has_closed_enum(annotation) or _annotation_has_model_or_mapping(annotation)
+                else ([], {}, None, "invalid")
+            )
+            for bad_value in bad_values:
+                wire = {**minimal_wire, name: bad_value}
+                try:
+                    _validate_wire(adapter, wire)
+                except ValidationError as error:
+                    invalid.append(
+                        _invalid(
+                            f"direct-{surface}-invalid-{name}",
+                            surface,
+                            _validation_category(error),
+                            wire,
+                        )
+                    )
+                    break
+            else:
+                continue
+            break
+        else:
+            raise AssertionError(f"{surface} has no rejected direct field input")
+    return valid, invalid
 
 
 def _events_fixture() -> dict[str, Any]:
@@ -527,19 +1064,48 @@ def _events_fixture() -> dict[str, Any]:
         _valid(case_id, "StrategyEvent", [*covers, "StrategyEvent", "EngineEvent"], event)
         for case_id, event, covers in events
     ]
+    for case in valid:
+        variant = cast("list[str]", case["covers"])[0]
+        case["evidence"][variant] = case["evidence_dimensions"]
+    observation_defaults = _valid(
+        "observation-defaults-and-null",
+        "StrategyEvent",
+        ["Observation", "TemperatureDayMode", "WuDayMode", "StrategyEvent", "EngineEvent"],
+        Observation(station_id="KMIA"),
+        wire={"type": "observation", "station_id": "KMIA", "event_id": None},
+    )
+    observation_defaults["evidence"]["Observation"] = observation_defaults["evidence_dimensions"]
+    valid.append(observation_defaults)
+    enum_values: dict[str, list[str]] = {
+        "OracleScoreMode": ["overall", "day_ahead", "day_of"],
+        "PersistenceStatus": ["uncommitted", "committed", "failed"],
+        "TemperatureDayMode": ["calendar_day", "nws_climate_day"],
+        "WuDayMode": ["calendar_day"],
+    }
+    for rust_type, values in enum_values.items():
+        valid.extend(_raw(f"{rust_type}-{value}", rust_type, [rust_type], value) for value in values)
+    blank_observation = _invalid(
+        "blank-required-station",
+        "StrategyEvent",
+        "range",
+        {"type": "observation", "station_id": ""},
+    )
+    blank_observation["covers"].append("Observation")
+    blank_observation["evidence"]["Observation"] = ["invalid_input"]
     return _document(
         "events",
         valid,
         [
             _invalid("missing-discriminator", "StrategyEvent", "required_field", {"station_id": "KMIA"}),
             _invalid("unknown-discriminator", "StrategyEvent", "enum", {"type": "unknown"}),
-            _invalid("blank-required-station", "StrategyEvent", "range", {"type": "observation", "station_id": ""}),
+            blank_observation,
             _invalid(
                 "malformed-nested-market",
                 "StrategyEvent",
                 "type",
                 {"type": "price_update", "source": "kalshi", "station_id": "KMIA", "markets": ["bad"]},
             ),
+            *[_invalid(f"unknown-{rust_type}", rust_type, "enum", "unknown") for rust_type in enum_values],
         ],
     )
 
@@ -976,6 +1542,12 @@ def _runtime_fixture() -> dict[str, Any]:
                 "enum",
                 {**_json_value(scope), "market_type": "mid"},
             ),
+            _invalid(
+                "coerced-supports-http",
+                "RuntimeCapabilities",
+                "type",
+                {"supports_http": "true"},
+            ),
             _invalid("invalid-telemetry-field", "TelemetryFields", "type", {"nested": []}),
         ],
     )
@@ -1037,6 +1609,7 @@ def _queries_fixture() -> dict[str, Any]:
             _invalid("wrong-refresh-type", "LimitsQuery", "type", {"refresh": []}),
             _invalid("missing-run-id", "ForecastRunQuery", "required_field", {"refresh": False}),
             _invalid("wrong-limit-type", "ForecastRunsQuery", "type", {"limit": []}),
+            _invalid("coerced-limit-type", "ForecastRunsQuery", "type", {"limit": "10"}),
         ],
     )
 
@@ -1044,13 +1617,20 @@ def _queries_fixture() -> dict[str, Any]:
 def build_core_fixtures() -> dict[str, dict[str, Any]]:
     """Build the canonical corpus from Python contract objects."""
 
-    return {
+    documents = {
         "events": _events_fixture(),
         "state": _state_fixture(),
         "broker": _broker_fixture(),
         "runtime": _runtime_fixture(),
         "queries": _queries_fixture(),
     }
+    direct_valid, direct_invalid = direct_model_cases(CORE_DIRECT_MODELS)
+    documents["runtime"]["valid"].extend(direct_valid)
+    documents["runtime"]["invalid"].extend(direct_invalid)
+    documents["runtime"]["invalid"].extend(
+        _invalid(f"direct-{name}-unknown", name, "enum", "unknown") for name in CORE_DIRECT_ENUM_NAMES
+    )
+    return documents
 
 
 def load_core_fixture(name: str) -> dict[str, Any]:
@@ -1098,8 +1678,10 @@ _PYTHON_WIRE_TYPES: dict[str, object] = {
     "OrderStatus": str,
     "OrderTimePolicy": str,
     "OrderType": str,
+    "OracleScoreMode": OracleScoreMode,
     "PendingOrder": PendingOrder,
     "Position": Position,
+    "PersistenceStatus": PersistenceStatus,
     "ReportHistoryQuery": ReportHistoryQuery,
     "ReportsQuery": ReportsQuery,
     "RuntimeCapabilities": RuntimeCapabilities,
@@ -1110,8 +1692,12 @@ _PYTHON_WIRE_TYPES: dict[str, object] = {
     "StrategyConfig": dict[str, object],
     "StrategyScope": StrategyScope,
     "TelemetryFields": dict[str, str | int | float | bool | None],
+    "TemperatureDayMode": TemperatureDayMode,
     "TickerPrices": TickerPrices,
+    "WuDayMode": WuDayMode,
 }
+_PYTHON_WIRE_TYPES.update(CORE_DIRECT_MODELS)
+_PYTHON_WIRE_TYPES.update(CORE_DIRECT_ENUMS)
 _TYPE_NAMESPACE: dict[str, object] = {
     "JSONValue": JSONValue,
     "OracleRankBy": OracleRankBy,
@@ -1133,7 +1719,7 @@ def python_round_trip_valid_case(case: Mapping[str, Any]) -> Any:
     """Decode and canonicalize a valid case through its Python contract type."""
 
     rust_type = cast("str", case["rust_type"])
-    return _json_value(_wire_adapter(rust_type).validate_python(case["wire"]))
+    return _json_value(_validate_wire(_wire_adapter(rust_type), case["wire"]))
 
 
 def python_invalid_category(case: Mapping[str, Any]) -> str | None:
@@ -1141,18 +1727,9 @@ def python_invalid_category(case: Mapping[str, Any]) -> str | None:
 
     adapter = _wire_adapter(cast("str", case["rust_type"]))
     try:
-        adapter.validate_python(case["wire"])
+        _validate_wire(adapter, case["wire"])
     except ValidationError as error:
-        error_type = error.errors()[0]["type"]
-        if error_type in {"missing", "union_tag_not_found"}:
-            return "required_field"
-        if error_type in {"enum", "literal_error", "union_tag_invalid"}:
-            return "enum"
-        if error_type in {"string_too_short", "greater_than", "less_than"}:
-            return "range"
-        if "parsing" in error_type:
-            return "format"
-        return "type"
+        return _validation_category(error)
     return None
 
 

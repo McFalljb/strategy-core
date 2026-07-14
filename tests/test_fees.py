@@ -1,8 +1,10 @@
 """Tests for Kalshi fee schedule and fee-rounding helpers."""
 
+from typing import Any, cast
+
 import pytest
 
-from strategy_core.fees import apply_fee_rounding, calculate_fill_fee
+from strategy_core.fees import apply_fee_rounding, calculate_fill_fee, calculate_trade_fee
 
 
 def test_general_taker_fee_matches_fee_schedule_examples() -> None:
@@ -164,4 +166,35 @@ def test_non_finite_fee_inputs_are_rejected(price: float) -> None:
             price=price,
             quantity=1,
             liquidity_role="taker",
+        )
+
+
+def test_signed_fee_inputs_round_toward_positive_infinity() -> None:
+    assert calculate_trade_fee(price=0.25, quantity=-1, liquidity_role="taker") == -0.0131
+    assert (
+        calculate_trade_fee(
+            price=0.25,
+            quantity=1,
+            liquidity_role="taker",
+            fee_multiplier=-1.0,
+        )
+        == -0.0131
+    )
+    assert apply_fee_rounding(revenue=-0.055, trade_fee=-0.00851, fee_accumulator=-0.0065).trade_fee == -0.0085
+
+
+def test_runtime_literals_reject_unknown_values() -> None:
+    with pytest.raises(ValueError, match="unknown order action"):
+        calculate_fill_fee(
+            action=cast("Any", "hold"),
+            price=0.5,
+            quantity=1,
+            liquidity_role="taker",
+        )
+
+    with pytest.raises(ValueError, match="unknown liquidity role"):
+        calculate_trade_fee(
+            price=0.5,
+            quantity=1,
+            liquidity_role=cast("Any", "passive"),
         )

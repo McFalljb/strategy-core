@@ -315,13 +315,24 @@ impl Default for TickerPrices {
 pub trait MarketStateView {
     fn get_weather(&self, station: &str) -> Option<&StationWeather>;
     fn get_forecast(&self, station: &str) -> Option<&StationForecast>;
-    fn get_oracle_scores(
+    fn get_oracle_scores(&self, station: &str) -> Option<&StationOracleScores>;
+
+    /// Return oracle scores only when every supplied selector matches.
+    ///
+    /// This additive helper preserves the original one-station trait method for
+    /// existing implementers while matching Python's selector-aware lookup.
+    fn get_oracle_scores_matching(
         &self,
         station: &str,
         days: Option<OracleScoreDays<'_>>,
         mode: Option<&str>,
         rank_by: Option<&str>,
-    ) -> Option<&StationOracleScores>;
+    ) -> Option<&StationOracleScores> {
+        let scores = self.get_oracle_scores(station)?;
+        scores
+            .matches_selectors(days, mode, rank_by)
+            .then_some(scores)
+    }
     fn get_prices(&self, ticker: &str) -> Option<&TickerPrices>;
     fn get_weather_freshness(&self, station: &str) -> FreshnessSnapshot;
     fn get_forecast_freshness(&self, station: &str) -> FreshnessSnapshot;

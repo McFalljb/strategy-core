@@ -3,32 +3,7 @@ use std::{collections::BTreeMap, fs, path::PathBuf, str::FromStr};
 use chrono::{DateTime, NaiveDate, SecondsFormat, Utc};
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
-use strategy_core::{
-    Action, BrokerOrderUpdate, BrokerUpdateStatus, CITY_TO_ICAO, ContractSide, DataResolution,
-    EffectiveLimits, EventDelivery, FeeError, FeeType, ForecastQuery, ForecastRunData,
-    ForecastRunQuery, ForecastRunsPage, ForecastRunsQuery, FreshnessDomain, FreshnessSnapshot,
-    FreshnessStatus, FreshnessSummary, HttpMethod, HttpRequest, HttpResponse, ICAO_TO_CITY_CODES,
-    KalshiCreateOrderResponse, KalshiEventLifecycleMessage, KalshiGetMarketResponse,
-    KalshiGetOrderResponse, KalshiGetOrderbookResponse, KalshiGetOrderbooksResponse,
-    KalshiGetOrdersResponse, KalshiListSubscriptionsCommand, KalshiMarket,
-    KalshiMarketLifecycleMessage, KalshiMarketPositionMessage, KalshiMarketsPage, KalshiOrder,
-    KalshiOrderCreateRequest, KalshiOrderbookDeltaMessage, KalshiOrderbookSnapshotMessage,
-    KalshiSubscribeCommand, KalshiTickerMessage, KalshiTradeMessage, KalshiUnsubscribeCommand,
-    KalshiUpdateSubscriptionCommand, KalshiUserFillMessage, KalshiUserOrderMessage,
-    KalshiWsMessage, LatestObservationData, LatestObservationQuery, LatestReportsData,
-    LatestReportsQuery, LimitsQuery, MARKET_TYPE_PREFIX, MarketType, NativeKernelResult,
-    NativeKernelStatus, ObservationRecord, OracleScoreData, OracleScoresQuery, OrderExecutionStyle,
-    OrderIntent, OrderResult, OrderStatus, OrderTimePolicy, OrderType, PendingOrder, Position,
-    ReportHistoryQuery, ReportIntervalSchedule, ReportsQuery, RuntimeCapabilities, RuntimeMode,
-    SIGNAL_DSM_REACTION, SIGNAL_METAR_6HR_LOW, SIGNAL_METAR_6HR_NEW_LOW, STATION_TIMEZONES,
-    StationForecast, StationForecastData, StationOracleScores, StationReportHistoryPage,
-    StationReportsData, StationWeather, StrategyConfig, StrategyEvent, StrategyScope,
-    TICKER_PREFIXES, TelemetryFields, TickerPrices, apply_fee_rounding, calculate_fill_fee,
-    calculate_trade_fee, city_codes_for_market_type, climate_day_date, climate_day_end,
-    climate_day_has_ended, parse_climate_date, primary_city_code_for_market_type,
-    primary_city_code_for_series, station_from_event_ticker, station_timezone,
-    ticker_prefixes_for_station,
-};
+use strategy_core::*;
 
 fn fixture(name: &str) -> Value {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -51,16 +26,25 @@ fn dispatch(rust_type: &str, wire: &Value) -> Result<Value, String> {
         "BrokerOrderUpdate" => round_trip::<BrokerOrderUpdate>(wire),
         "BrokerUpdateStatus" => round_trip::<BrokerUpdateStatus>(wire),
         "ContractSide" => round_trip::<ContractSide>(wire),
+        "CityInfo" => round_trip::<CityInfo>(wire),
+        "CursorPage" => round_trip::<CursorPage>(wire),
         "DataResolution" => round_trip::<DataResolution>(wire),
         "EffectiveLimits" => round_trip::<EffectiveLimits>(wire),
         "EventDelivery" => round_trip::<EventDelivery>(wire),
         "FeeType" => round_trip::<FeeType>(wire),
+        "ForecastBundle" => round_trip::<ForecastBundle>(wire),
+        "ForecastBundleRun" => round_trip::<ForecastBundleRun>(wire),
+        "ForecastHourly" => round_trip::<ForecastHourly>(wire),
         "ForecastQuery" => round_trip::<ForecastQuery>(wire),
         "ForecastRunQuery" => round_trip::<ForecastRunQuery>(wire),
         "ForecastRunData" => round_trip::<ForecastRunData>(wire),
+        "ForecastRunSummary" => round_trip::<ForecastRunSummary>(wire),
         "ForecastRunsPage" => round_trip::<ForecastRunsPage>(wire),
         "ForecastRunsQuery" => round_trip::<ForecastRunsQuery>(wire),
+        "ForecastUpdated" => round_trip::<ForecastUpdated>(wire),
+        "ForecastVersions" => round_trip::<ForecastVersions>(wire),
         "FreshnessDomain" => round_trip::<FreshnessDomain>(wire),
+        "FreshnessDomainSummary" => round_trip::<FreshnessDomainSummary>(wire),
         "FreshnessSnapshot" => round_trip::<FreshnessSnapshot>(wire),
         "FreshnessStatus" => round_trip::<FreshnessStatus>(wire),
         "FreshnessSummary" => round_trip::<FreshnessSummary>(wire),
@@ -72,6 +56,9 @@ fn dispatch(rust_type: &str, wire: &Value) -> Result<Value, String> {
         "HttpMethod" => round_trip::<HttpMethod>(wire),
         "HttpRequest" => round_trip::<HttpRequest>(wire),
         "HttpResponse" => round_trip::<HttpResponse>(wire),
+        "HourlyForecastRecord" => round_trip::<HourlyForecastRecord>(wire),
+        "IpGuardLimits" => round_trip::<IpGuardLimits>(wire),
+        "KalshiCollateralReturnType" => round_trip::<KalshiCollateralReturnType>(wire),
         "KalshiCreateOrderResponse" => round_trip::<KalshiCreateOrderResponse>(wire),
         "KalshiEventLifecycleMessage" => round_trip::<KalshiEventLifecycleMessage>(wire),
         "KalshiGetMarketResponse" => round_trip::<KalshiGetMarketResponse>(wire),
@@ -79,53 +66,101 @@ fn dispatch(rust_type: &str, wire: &Value) -> Result<Value, String> {
         "KalshiGetOrderbookResponse" => round_trip::<KalshiGetOrderbookResponse>(wire),
         "KalshiGetOrderbooksResponse" => round_trip::<KalshiGetOrderbooksResponse>(wire),
         "KalshiGetOrdersResponse" => round_trip::<KalshiGetOrdersResponse>(wire),
+        "KalshiImmediateTimeInForce" => round_trip::<KalshiImmediateTimeInForce>(wire),
         "KalshiListSubscriptionsCommand" => round_trip::<KalshiListSubscriptionsCommand>(wire),
         "KalshiMarket" => round_trip::<KalshiMarket>(wire),
+        "KalshiMarketLifecycleEventType" => round_trip::<KalshiMarketLifecycleEventType>(wire),
         "KalshiMarketLifecycleMessage" => round_trip::<KalshiMarketLifecycleMessage>(wire),
+        "KalshiMarketLifecycleMetadata" => round_trip::<KalshiMarketLifecycleMetadata>(wire),
+        "KalshiMarketOrderbook" => round_trip::<KalshiMarketOrderbook>(wire),
         "KalshiMarketPositionMessage" => round_trip::<KalshiMarketPositionMessage>(wire),
+        "KalshiMarketResult" => round_trip::<KalshiMarketResult>(wire),
+        "KalshiMarketSide" => round_trip::<KalshiMarketSide>(wire),
+        "KalshiMarketStatus" => round_trip::<KalshiMarketStatus>(wire),
         "KalshiMarketsPage" => round_trip::<KalshiMarketsPage>(wire),
+        "KalshiMveSelectedLeg" => round_trip::<KalshiMveSelectedLeg>(wire),
         "KalshiOrder" => round_trip::<KalshiOrder>(wire),
+        "KalshiOrderAction" => round_trip::<KalshiOrderAction>(wire),
         "KalshiOrderCreateRequest" => round_trip::<KalshiOrderCreateRequest>(wire),
+        "KalshiOrderStatus" => round_trip::<KalshiOrderStatus>(wire),
+        "KalshiOrderType" => round_trip::<KalshiOrderType>(wire),
+        "KalshiOrderbook" => round_trip::<KalshiOrderbook>(wire),
         "KalshiOrderbookDeltaMessage" => round_trip::<KalshiOrderbookDeltaMessage>(wire),
         "KalshiOrderbookSnapshotMessage" => round_trip::<KalshiOrderbookSnapshotMessage>(wire),
+        "KalshiOrderbookLevel" => round_trip::<KalshiOrderbookLevel>(wire),
+        "KalshiPriceLevelStructure" => round_trip::<KalshiPriceLevelStructure>(wire),
+        "KalshiPriceRange" => round_trip::<KalshiPriceRange>(wire),
+        "KalshiSelfTradePreventionType" => round_trip::<KalshiSelfTradePreventionType>(wire),
         "KalshiSubscribeCommand" => round_trip::<KalshiSubscribeCommand>(wire),
+        "KalshiSubscriptionUpdateAction" => round_trip::<KalshiSubscriptionUpdateAction>(wire),
         "KalshiTickerMessage" => round_trip::<KalshiTickerMessage>(wire),
+        "KalshiTimeInForce" => round_trip::<KalshiTimeInForce>(wire),
         "KalshiTradeMessage" => round_trip::<KalshiTradeMessage>(wire),
         "KalshiUnsubscribeCommand" => round_trip::<KalshiUnsubscribeCommand>(wire),
         "KalshiUpdateSubscriptionCommand" => round_trip::<KalshiUpdateSubscriptionCommand>(wire),
         "KalshiUserFillMessage" => round_trip::<KalshiUserFillMessage>(wire),
         "KalshiUserOrderMessage" => round_trip::<KalshiUserOrderMessage>(wire),
+        "KalshiWsChannel" => round_trip::<KalshiWsChannel>(wire),
         "KalshiWsMessage" => round_trip::<KalshiWsMessage>(wire),
         "MarketType" => round_trip::<MarketType>(wire),
+        "MarketBracket" => round_trip::<MarketBracket>(wire),
+        "ModelForecast" => round_trip::<ModelForecast>(wire),
         "NativeKernelResult" => round_trip::<NativeKernelResult>(wire),
         "NativeKernelStatus" => round_trip::<NativeKernelStatus>(wire),
+        "NewHigh" => round_trip::<NewHigh>(wire),
+        "NewLow" => round_trip::<NewLow>(wire),
+        "Observation" => round_trip::<Observation>(wire),
         "ObservationRecord" => round_trip::<ObservationRecord>(wire),
+        "OracleModelScore" => round_trip::<OracleModelScore>(wire),
+        "OracleModelScoreRecord" => round_trip::<OracleModelScoreRecord>(wire),
+        "OracleRankBy" => round_trip::<OracleRankBy>(wire),
         "OracleScoreData" => round_trip::<OracleScoreData>(wire),
+        "OracleScoreMode" => round_trip::<OracleScoreMode>(wire),
+        "OracleScoreRow" => round_trip::<OracleScoreRow>(wire),
+        "OracleScoreTable" => round_trip::<OracleScoreTable>(wire),
         "OracleScoresQuery" => round_trip::<OracleScoresQuery>(wire),
+        "OracleScoresUpdated" => round_trip::<OracleScoresUpdated>(wire),
         "OrderExecutionStyle" => round_trip::<OrderExecutionStyle>(wire),
         "OrderIntent" => round_trip::<OrderIntent>(wire),
         "OrderResult" => round_trip::<OrderResult>(wire),
         "OrderStatus" => round_trip::<OrderStatus>(wire),
         "OrderTimePolicy" => round_trip::<OrderTimePolicy>(wire),
         "OrderType" => round_trip::<OrderType>(wire),
+        "PersistenceStatus" => round_trip::<PersistenceStatus>(wire),
         "PendingOrder" => round_trip::<PendingOrder>(wire),
         "Position" => round_trip::<Position>(wire),
+        "PriceUpdate" => round_trip::<PriceUpdate>(wire),
+        "PlanTier" => round_trip::<PlanTier>(wire),
         "ReportHistoryQuery" => round_trip::<ReportHistoryQuery>(wire),
+        "ReportClockSchedule" => round_trip::<ReportClockSchedule>(wire),
         "ReportIntervalSchedule" => round_trip::<ReportIntervalSchedule>(wire),
+        "ReportMultiHourSchedule" => round_trip::<ReportMultiHourSchedule>(wire),
+        "ReportScheduleBasis" => round_trip::<ReportScheduleBasis>(wire),
+        "ReportType" => round_trip::<ReportType>(wire),
         "ReportsQuery" => round_trip::<ReportsQuery>(wire),
         "RuntimeCapabilities" => round_trip::<RuntimeCapabilities>(wire),
         "RuntimeMode" => round_trip::<RuntimeMode>(wire),
+        "ShutdownEvent" => round_trip::<ShutdownEvent>(wire),
         "StationForecast" => round_trip::<StationForecast>(wire),
         "StationForecastData" => round_trip::<StationForecastData>(wire),
+        "StationInfo" => round_trip::<StationInfo>(wire),
         "StationOracleScores" => round_trip::<StationOracleScores>(wire),
         "StationReportHistoryPage" => round_trip::<StationReportHistoryPage>(wire),
+        "StationReport" => round_trip::<StationReport>(wire),
+        "StationReportRecord" => round_trip::<StationReportRecord>(wire),
         "StationReportsData" => round_trip::<StationReportsData>(wire),
         "StationWeather" => round_trip::<StationWeather>(wire),
         "StrategyConfig" => round_trip::<StrategyConfig>(wire),
         "StrategyEvent" => round_trip::<StrategyEvent>(wire),
         "StrategyScope" => round_trip::<StrategyScope>(wire),
         "TelemetryFields" => round_trip::<TelemetryFields>(wire),
+        "TemperatureDayMode" => round_trip::<TemperatureDayMode>(wire),
+        "TemperatureUnit" => round_trip::<TemperatureUnit>(wire),
         "TickerPrices" => round_trip::<TickerPrices>(wire),
+        "TimerWake" => round_trip::<TimerWake>(wire),
+        "WeatherEvent" => round_trip::<WeatherEvent>(wire),
+        "WeatherEventSource" => round_trip::<WeatherEventSource>(wire),
+        "WuDayMode" => round_trip::<WuDayMode>(wire),
         other => Err(format!(
             "conformance fixture names unknown Rust type {other:?}"
         )),
@@ -139,7 +174,10 @@ fn normalized_error_category(error: &str) -> &'static str {
     if error.contains("missing field") || error.contains("type is required") {
         return "required_field";
     }
-    if error.contains("unknown variant") || error.contains("unknown strategy event type") {
+    if error.contains("unknown variant")
+        || error.contains("unknown strategy event type")
+        || error.contains("expected event type")
+    {
         return "enum";
     }
     if error.contains("invalid characters") || error.contains("premature end") {
@@ -165,12 +203,37 @@ fn input_f64(value: &Value) -> f64 {
     }
 }
 
+fn input_finite_f64(value: &Value) -> Result<f64, Value> {
+    let value = input_f64(value);
+    if value.is_finite() {
+        Ok(value)
+    } else {
+        Err(helper_error("invalid_decimal"))
+    }
+}
+
+fn input_optional_f64(input: &Value, name: &str) -> Result<Option<f64>, Value> {
+    match input.get(name) {
+        None | Some(Value::Null) => Ok(None),
+        Some(value) => input_finite_f64(value).map(Some),
+    }
+}
+
 fn input_fee_type(input: &Value) -> Result<Option<FeeType>, Value> {
     input["fee_type"]
         .as_str()
         .map(FeeType::from_str)
         .transpose()
         .map_err(|_| helper_error("unknown_fee_type"))
+}
+
+fn input_action(input: &Value) -> Result<Action, Value> {
+    serde_json::from_value(input["action"].clone()).map_err(|_| helper_error("unknown_action"))
+}
+
+fn input_liquidity_role(input: &Value) -> Result<strategy_core::LiquidityRole, Value> {
+    serde_json::from_value(input["liquidity_role"].clone())
+        .map_err(|_| helper_error("unknown_liquidity_role"))
 }
 
 fn fee_result<T: Serialize>(result: Result<T, FeeError>) -> Value {
@@ -200,36 +263,68 @@ fn input_date(input: &Value, name: &str) -> NaiveDate {
 fn evaluate_helper(helper: &str, input: &Value) -> Value {
     match helper {
         "calculate_trade_fee" => {
+            let liquidity_role = match input_liquidity_role(input) {
+                Ok(value) => value,
+                Err(error) => return error,
+            };
+            let fee_multiplier = match input_optional_f64(input, "fee_multiplier") {
+                Ok(value) => value,
+                Err(error) => return error,
+            };
             let fee_type = match input_fee_type(input) {
+                Ok(value) => value,
+                Err(error) => return error,
+            };
+            let price = match input_finite_f64(&input["price"]) {
                 Ok(value) => value,
                 Err(error) => return error,
             };
             fee_result(calculate_trade_fee(
-                input_f64(&input["price"]),
+                price,
                 input["quantity"].as_i64().unwrap(),
-                serde_json::from_value(input["liquidity_role"].clone()).unwrap(),
+                liquidity_role,
                 fee_type,
-                input["fee_multiplier"].as_f64(),
+                fee_multiplier,
             ))
         }
         "apply_fee_rounding" => fee_result(apply_fee_rounding(
-            input["revenue"].as_f64().unwrap(),
-            input["trade_fee"].as_f64().unwrap(),
-            input["fee_accumulator"].as_f64().unwrap(),
+            input_f64(&input["revenue"]),
+            input_f64(&input["trade_fee"]),
+            input_f64(&input["fee_accumulator"]),
         )),
         "calculate_fill_fee" => {
+            let action = match input_action(input) {
+                Ok(value) => value,
+                Err(error) => return error,
+            };
+            let price = match input_finite_f64(&input["price"]) {
+                Ok(value) => value,
+                Err(error) => return error,
+            };
+            let liquidity_role = match input_liquidity_role(input) {
+                Ok(value) => value,
+                Err(error) => return error,
+            };
+            let fee_multiplier = match input_optional_f64(input, "fee_multiplier") {
+                Ok(value) => value,
+                Err(error) => return error,
+            };
             let fee_type = match input_fee_type(input) {
                 Ok(value) => value,
                 Err(error) => return error,
             };
+            let fee_accumulator = match input_finite_f64(&input["fee_accumulator"]) {
+                Ok(value) => value,
+                Err(error) => return error,
+            };
             fee_result(calculate_fill_fee(
-                serde_json::from_value(input["action"].clone()).unwrap(),
-                input["price"].as_f64().unwrap(),
+                action,
+                price,
                 input["quantity"].as_i64().unwrap(),
-                serde_json::from_value(input["liquidity_role"].clone()).unwrap(),
-                input["fee_accumulator"].as_f64().unwrap(),
+                liquidity_role,
+                fee_accumulator,
                 fee_type,
-                input["fee_multiplier"].as_f64(),
+                fee_multiplier,
             ))
         }
         "station_constants" => helper_ok(json!({

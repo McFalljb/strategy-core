@@ -15,6 +15,17 @@
   "invalid": [
     {
       "category": "enum",
+      "covers": [
+        "OrderIntent"
+      ],
+      "evidence": {
+        "OrderIntent": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
       "id": "unknown-action",
       "rust_type": "OrderIntent",
       "wire": {
@@ -38,6 +49,17 @@
     },
     {
       "category": "required_field",
+      "covers": [
+        "OrderIntent"
+      ],
+      "evidence": {
+        "OrderIntent": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
       "id": "missing-ticker",
       "rust_type": "OrderIntent",
       "wire": {
@@ -46,6 +68,17 @@
     },
     {
       "category": "type",
+      "covers": [
+        "BrokerOrderUpdate"
+      ],
+      "evidence": {
+        "BrokerOrderUpdate": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
       "id": "wrong-quantity-type",
       "rust_type": "BrokerOrderUpdate",
       "wire": {
@@ -76,6 +109,14 @@
       "covers": [
         "Position"
       ],
+      "evidence": {
+        "Position": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
       "expected": {
         "avg_price": 0.61,
         "quantity": 1000000,
@@ -95,6 +136,21 @@
       "covers": [
         "PendingOrder",
         "OrderId"
+      ],
+      "evidence": {
+        "OrderId": [
+          "non_default_round_trip"
+        ],
+        "PendingOrder": [
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "timestamp_formatting"
       ],
       "expected": {
         "action": "buy",
@@ -143,6 +199,20 @@
       "covers": [
         "PendingOrder"
       ],
+      "evidence": {
+        "PendingOrder": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission"
+      ],
       "expected": {
         "action": "buy",
         "client_order_id": null,
@@ -181,6 +251,17 @@
         "OrderResult",
         "OrderStatus"
       ],
+      "evidence": {
+        "OrderResult": [
+          "non_default_round_trip"
+        ],
+        "OrderStatus": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
       "expected": {
         "fee_cost": 123.45,
         "fill_price": 0.6,
@@ -208,6 +289,23 @@
         "OrderType",
         "OrderExecutionStyle",
         "OrderTimePolicy"
+      ],
+      "evidence": {
+        "OrderExecutionStyle": [
+          "non_default_round_trip"
+        ],
+        "OrderIntent": [
+          "non_default_round_trip"
+        ],
+        "OrderTimePolicy": [
+          "non_default_round_trip"
+        ],
+        "OrderType": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
       ],
       "expected": {
         "action": "sell",
@@ -252,6 +350,21 @@
       "covers": [
         "BrokerOrderUpdate",
         "BrokerUpdateStatus"
+      ],
+      "evidence": {
+        "BrokerOrderUpdate": [
+          "explicit_null",
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ],
+        "BrokerUpdateStatus": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "explicit_null",
+        "non_default_round_trip",
+        "timestamp_formatting"
       ],
       "expected": {
         "action": "sell",
@@ -300,6 +413,16 @@
       "covers": [
         "Action"
       ],
+      "evidence": {
+        "Action": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
       "expected": "buy",
       "id": "Action-buy",
       "rust_type": "Action",
@@ -308,6 +431,16 @@
     {
       "covers": [
         "Action"
+      ],
+      "evidence": {
+        "Action": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
       ],
       "expected": "sell",
       "id": "Action-sell",
@@ -318,6 +451,16 @@
       "covers": [
         "ContractSide"
       ],
+      "evidence": {
+        "ContractSide": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
       "expected": "yes",
       "id": "ContractSide-yes",
       "rust_type": "ContractSide",
@@ -326,6 +469,16 @@
     {
       "covers": [
         "ContractSide"
+      ],
+      "evidence": {
+        "ContractSide": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
       ],
       "expected": "no",
       "id": "ContractSide-no",
@@ -336,6 +489,16 @@
       "covers": [
         "OrderType"
       ],
+      "evidence": {
+        "OrderType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
       "expected": "market",
       "id": "OrderType-market",
       "rust_type": "OrderType",
@@ -344,6 +507,16 @@
     {
       "covers": [
         "OrderType"
+      ],
+      "evidence": {
+        "OrderType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
       ],
       "expected": "limit",
       "id": "OrderType-limit",
@@ -354,6 +527,16 @@
       "covers": [
         "OrderStatus"
       ],
+      "evidence": {
+        "OrderStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
       "expected": "filled",
       "id": "OrderStatus-filled",
       "rust_type": "OrderStatus",
@@ -362,6 +545,16 @@
     {
       "covers": [
         "OrderStatus"
+      ],
+      "evidence": {
+        "OrderStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
       ],
       "expected": "partial",
       "id": "OrderStatus-partial",
@@ -372,6 +565,16 @@
       "covers": [
         "OrderStatus"
       ],
+      "evidence": {
+        "OrderStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
       "expected": "pending",
       "id": "OrderStatus-pending",
       "rust_type": "OrderStatus",
@@ -380,6 +583,16 @@
     {
       "covers": [
         "OrderStatus"
+      ],
+      "evidence": {
+        "OrderStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
       ],
       "expected": "rejected",
       "id": "OrderStatus-rejected",
@@ -390,6 +603,16 @@
       "covers": [
         "OrderStatus"
       ],
+      "evidence": {
+        "OrderStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
       "expected": "cancelled",
       "id": "OrderStatus-cancelled",
       "rust_type": "OrderStatus",
@@ -398,6 +621,16 @@
     {
       "covers": [
         "OrderExecutionStyle"
+      ],
+      "evidence": {
+        "OrderExecutionStyle": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
       ],
       "expected": "resting_limit",
       "id": "OrderExecutionStyle-resting_limit",
@@ -408,6 +641,16 @@
       "covers": [
         "OrderExecutionStyle"
       ],
+      "evidence": {
+        "OrderExecutionStyle": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
       "expected": "direct",
       "id": "OrderExecutionStyle-direct",
       "rust_type": "OrderExecutionStyle",
@@ -416,6 +659,16 @@
     {
       "covers": [
         "OrderExecutionStyle"
+      ],
+      "evidence": {
+        "OrderExecutionStyle": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
       ],
       "expected": "sweep",
       "id": "OrderExecutionStyle-sweep",
@@ -426,6 +679,16 @@
       "covers": [
         "OrderTimePolicy"
       ],
+      "evidence": {
+        "OrderTimePolicy": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
       "expected": "good_till_canceled",
       "id": "OrderTimePolicy-good_till_canceled",
       "rust_type": "OrderTimePolicy",
@@ -434,6 +697,16 @@
     {
       "covers": [
         "OrderTimePolicy"
+      ],
+      "evidence": {
+        "OrderTimePolicy": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
       ],
       "expected": "immediate_or_cancel",
       "id": "OrderTimePolicy-immediate_or_cancel",
@@ -444,6 +717,16 @@
       "covers": [
         "OrderTimePolicy"
       ],
+      "evidence": {
+        "OrderTimePolicy": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
       "expected": "fill_or_kill",
       "id": "OrderTimePolicy-fill_or_kill",
       "rust_type": "OrderTimePolicy",
@@ -452,6 +735,16 @@
     {
       "covers": [
         "BrokerUpdateStatus"
+      ],
+      "evidence": {
+        "BrokerUpdateStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
       ],
       "expected": "accepted",
       "id": "BrokerUpdateStatus-accepted",
@@ -462,6 +755,16 @@
       "covers": [
         "BrokerUpdateStatus"
       ],
+      "evidence": {
+        "BrokerUpdateStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
       "expected": "rejected",
       "id": "BrokerUpdateStatus-rejected",
       "rust_type": "BrokerUpdateStatus",
@@ -470,6 +773,16 @@
     {
       "covers": [
         "BrokerUpdateStatus"
+      ],
+      "evidence": {
+        "BrokerUpdateStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
       ],
       "expected": "submitted",
       "id": "BrokerUpdateStatus-submitted",
@@ -480,6 +793,16 @@
       "covers": [
         "BrokerUpdateStatus"
       ],
+      "evidence": {
+        "BrokerUpdateStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
       "expected": "resting",
       "id": "BrokerUpdateStatus-resting",
       "rust_type": "BrokerUpdateStatus",
@@ -488,6 +811,16 @@
     {
       "covers": [
         "BrokerUpdateStatus"
+      ],
+      "evidence": {
+        "BrokerUpdateStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
       ],
       "expected": "partially_filled",
       "id": "BrokerUpdateStatus-partially_filled",
@@ -498,6 +831,16 @@
       "covers": [
         "BrokerUpdateStatus"
       ],
+      "evidence": {
+        "BrokerUpdateStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
       "expected": "filled",
       "id": "BrokerUpdateStatus-filled",
       "rust_type": "BrokerUpdateStatus",
@@ -506,6 +849,16 @@
     {
       "covers": [
         "BrokerUpdateStatus"
+      ],
+      "evidence": {
+        "BrokerUpdateStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
       ],
       "expected": "cancel_requested",
       "id": "BrokerUpdateStatus-cancel_requested",
@@ -516,6 +869,16 @@
       "covers": [
         "BrokerUpdateStatus"
       ],
+      "evidence": {
+        "BrokerUpdateStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
       "expected": "cancelled",
       "id": "BrokerUpdateStatus-cancelled",
       "rust_type": "BrokerUpdateStatus",
@@ -524,6 +887,16 @@
     {
       "covers": [
         "BrokerUpdateStatus"
+      ],
+      "evidence": {
+        "BrokerUpdateStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
       ],
       "expected": "expired",
       "id": "BrokerUpdateStatus-expired",
@@ -534,6 +907,16 @@
       "covers": [
         "BrokerUpdateStatus"
       ],
+      "evidence": {
+        "BrokerUpdateStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
       "expected": "closed",
       "id": "BrokerUpdateStatus-closed",
       "rust_type": "BrokerUpdateStatus",
@@ -542,6 +925,16 @@
     {
       "covers": [
         "BrokerUpdateStatus"
+      ],
+      "evidence": {
+        "BrokerUpdateStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
       ],
       "expected": "submission_unknown",
       "id": "BrokerUpdateStatus-submission_unknown",
@@ -552,6 +945,16 @@
       "covers": [
         "BrokerUpdateStatus"
       ],
+      "evidence": {
+        "BrokerUpdateStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
       "expected": "reconciled",
       "id": "BrokerUpdateStatus-reconciled",
       "rust_type": "BrokerUpdateStatus",
@@ -561,7 +964,8 @@
   "wire_policy": {
     "non_finite_numbers": "excluded because they are not JSON-compatible values",
     "optional_fields": "omitted inputs resolve through defaults; explicit null is retained when nullable",
-    "portable_integer_domain": "signed 64-bit",
+    "portable_integer_domain": "IEEE-754 exactly represented signed integers (-9007199254740991 through 9007199254740991)",
+    "scalar_coercions": "disabled at the declared JSON wire boundary",
     "unknown_object_fields": "ignored and absent from canonical output"
   }
 }

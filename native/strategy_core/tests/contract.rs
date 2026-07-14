@@ -8,8 +8,9 @@ use strategy_core::{
     OracleScoresUpdated, OrderExecutionStyle, OrderIntent, OrderTimePolicy, OrderType, PriceUpdate,
     RuntimeCapabilities, STATION_TIMEZONES, StationForecast, StationOracleScores, StationWeather,
     StrategyEvent, TICKER_PREFIXES, TickerPrices, WeatherEvent, apply_fee_rounding,
-    calculate_fill_fee, city_codes_for_market_type, primary_city_code_for_market_type,
-    primary_city_code_for_series, station_from_event_ticker, ticker_prefixes_for_station,
+    calculate_fill_fee, calculate_trade_fee, city_codes_for_market_type,
+    primary_city_code_for_market_type, primary_city_code_for_series, station_from_event_ticker,
+    ticker_prefixes_for_station,
 };
 
 #[test]
@@ -175,6 +176,31 @@ fn fee_rounding_accumulator_applies_rebate_once_whole_cent_is_reached() {
     assert_eq!(third.rebate, 0.0);
     assert_eq!(third.net_fee, 0.015);
     assert_eq!(third.posted_balance_change, -0.07);
+}
+
+#[test]
+fn signed_fee_inputs_round_toward_positive_infinity() {
+    assert_eq!(
+        calculate_trade_fee(0.25, -1, strategy_core::LiquidityRole::Taker, None, None,).unwrap(),
+        -0.0131
+    );
+    assert_eq!(
+        calculate_trade_fee(
+            0.25,
+            1,
+            strategy_core::LiquidityRole::Taker,
+            None,
+            Some(-1.0),
+        )
+        .unwrap(),
+        -0.0131
+    );
+    assert_eq!(
+        apply_fee_rounding(-0.055, -0.00851, -0.0065)
+            .unwrap()
+            .trade_fee,
+        -0.0085
+    );
 }
 
 #[test]

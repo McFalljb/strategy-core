@@ -3,15 +3,60 @@ use std::collections::BTreeMap;
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Deserializer, Serialize, de};
 
-pub type ReportType = String;
-pub type TemperatureUnit = String;
-pub type PlanTier = String;
-pub type DataResolution = String;
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReportType {
+    Cli,
+    Dsm,
+    MetarTgroup,
+    #[serde(rename = "metar_6hr")]
+    Metar6hr,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum TemperatureUnit {
+    #[serde(rename = "F")]
+    Fahrenheit,
+    #[serde(rename = "C")]
+    Celsius,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PlanTier {
+    Starter,
+    Pro,
+    Clanker,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum DataResolution {
+    #[serde(rename = "1m")]
+    OneMinute,
+    #[serde(rename = "5m")]
+    FiveMinutes,
+    #[serde(rename = "10m")]
+    TenMinutes,
+}
+
 pub type TemperatureDayMode = String;
 pub type WuDayMode = String;
 pub type OracleScoreMode = String;
-pub type OracleRankBy = String;
-pub type ReportScheduleBasis = String;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum OracleRankBy {
+    Combined,
+    High,
+    Low,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ReportScheduleBasis {
+    Utc,
+    Local,
+}
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub struct CityInfo {
@@ -69,7 +114,7 @@ pub struct ObservationRecord {
     pub is_locf: bool,
     #[serde(default)]
     pub is_from_report: bool,
-    pub report_type: Option<String>,
+    pub report_type: Option<ReportType>,
     pub source_report_id: Option<String>,
     pub temp_min_f: Option<f64>,
     pub temp_max_f: Option<f64>,
@@ -84,7 +129,7 @@ pub struct StationReportRecord {
     #[serde(default)]
     pub report_revision: i64,
     pub report_updated_at: Option<DateTime<Utc>>,
-    pub report_type: Option<String>,
+    pub report_type: Option<ReportType>,
     pub report_date: Option<NaiveDate>,
     pub issuance_time: Option<DateTime<Utc>>,
     pub fetched_at: Option<DateTime<Utc>>,

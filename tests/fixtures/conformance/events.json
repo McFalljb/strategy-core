@@ -5,6 +5,17 @@
   "invalid": [
     {
       "category": "required_field",
+      "covers": [
+        "StrategyEvent"
+      ],
+      "evidence": {
+        "StrategyEvent": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
       "id": "missing-discriminator",
       "rust_type": "StrategyEvent",
       "wire": {
@@ -13,6 +24,17 @@
     },
     {
       "category": "enum",
+      "covers": [
+        "StrategyEvent"
+      ],
+      "evidence": {
+        "StrategyEvent": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
       "id": "unknown-discriminator",
       "rust_type": "StrategyEvent",
       "wire": {
@@ -21,6 +43,21 @@
     },
     {
       "category": "range",
+      "covers": [
+        "StrategyEvent",
+        "Observation"
+      ],
+      "evidence": {
+        "Observation": [
+          "invalid_input"
+        ],
+        "StrategyEvent": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
       "id": "blank-required-station",
       "rust_type": "StrategyEvent",
       "wire": {
@@ -30,6 +67,17 @@
     },
     {
       "category": "type",
+      "covers": [
+        "StrategyEvent"
+      ],
+      "evidence": {
+        "StrategyEvent": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
       "id": "malformed-nested-market",
       "rust_type": "StrategyEvent",
       "wire": {
@@ -40,6 +88,74 @@
         "station_id": "KMIA",
         "type": "price_update"
       }
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "OracleScoreMode"
+      ],
+      "evidence": {
+        "OracleScoreMode": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unknown-OracleScoreMode",
+      "rust_type": "OracleScoreMode",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "PersistenceStatus"
+      ],
+      "evidence": {
+        "PersistenceStatus": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unknown-PersistenceStatus",
+      "rust_type": "PersistenceStatus",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "TemperatureDayMode"
+      ],
+      "evidence": {
+        "TemperatureDayMode": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unknown-TemperatureDayMode",
+      "rust_type": "TemperatureDayMode",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "WuDayMode"
+      ],
+      "evidence": {
+        "WuDayMode": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unknown-WuDayMode",
+      "rust_type": "WuDayMode",
+      "wire": "unknown"
     }
   ],
   "schema_version": 1,
@@ -51,6 +167,32 @@
         "WuDayMode",
         "StrategyEvent",
         "EngineEvent"
+      ],
+      "evidence": {
+        "EngineEvent": [
+          "non_default_round_trip"
+        ],
+        "Observation": [
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "timestamp_formatting"
+        ],
+        "StrategyEvent": [
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "timestamp_formatting"
+        ],
+        "TemperatureDayMode": [
+          "non_default_round_trip"
+        ],
+        "WuDayMode": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "timestamp_formatting"
       ],
       "expected": {
         "city_sequence": 0,
@@ -144,6 +286,29 @@
         "PriceLevel",
         "StrategyEvent",
         "EngineEvent"
+      ],
+      "evidence": {
+        "EngineEvent": [
+          "non_default_round_trip"
+        ],
+        "MarketBracket": [
+          "non_default_round_trip"
+        ],
+        "PriceLevel": [
+          "non_default_round_trip"
+        ],
+        "PriceUpdate": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ],
+        "StrategyEvent": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
       ],
       "expected": {
         "city_id": "MIA",
@@ -272,6 +437,23 @@
         "StrategyEvent",
         "EngineEvent"
       ],
+      "evidence": {
+        "EngineEvent": [
+          "non_default_round_trip"
+        ],
+        "ForecastUpdated": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ],
+        "StrategyEvent": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
+      ],
       "expected": {
         "emitted_at": "2026-07-13T12:34:56.123456Z",
         "event_id": "forecast-1",
@@ -300,6 +482,23 @@
         "ForecastVersions",
         "StrategyEvent",
         "EngineEvent"
+      ],
+      "evidence": {
+        "EngineEvent": [
+          "non_default_round_trip"
+        ],
+        "ForecastVersions": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ],
+        "StrategyEvent": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
       ],
       "expected": {
         "emitted_at": "2026-07-13T12:34:56.123456Z",
@@ -336,6 +535,35 @@
         "OracleScoreMode",
         "StrategyEvent",
         "EngineEvent"
+      ],
+      "evidence": {
+        "EngineEvent": [
+          "non_default_round_trip"
+        ],
+        "OracleScoreMode": [
+          "non_default_round_trip"
+        ],
+        "OracleScoreRow": [
+          "non_default_round_trip"
+        ],
+        "OracleScoreTable": [
+          "non_default_round_trip"
+        ],
+        "OracleScoresUpdated": [
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "timestamp_formatting"
+        ],
+        "StrategyEvent": [
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "timestamp_formatting"
       ],
       "expected": {
         "day_ahead": {
@@ -506,6 +734,23 @@
         "StrategyEvent",
         "EngineEvent"
       ],
+      "evidence": {
+        "EngineEvent": [
+          "non_default_round_trip"
+        ],
+        "StationReport": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ],
+        "StrategyEvent": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
+      ],
       "expected": {
         "city_sequence": 7,
         "emitted_at": "2026-07-13T12:34:56.123456Z",
@@ -567,6 +812,29 @@
         "WeatherEventSource",
         "StrategyEvent",
         "EngineEvent"
+      ],
+      "evidence": {
+        "EngineEvent": [
+          "non_default_round_trip"
+        ],
+        "StrategyEvent": [
+          "explicit_null",
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ],
+        "WeatherEvent": [
+          "explicit_null",
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ],
+        "WeatherEventSource": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "explicit_null",
+        "non_default_round_trip",
+        "timestamp_formatting"
       ],
       "expected": {
         "badge": "TS",
@@ -642,6 +910,26 @@
         "StrategyEvent",
         "EngineEvent"
       ],
+      "evidence": {
+        "EngineEvent": [
+          "non_default_round_trip"
+        ],
+        "NewHigh": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ],
+        "PersistenceStatus": [
+          "non_default_round_trip"
+        ],
+        "StrategyEvent": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
+      ],
       "expected": {
         "city_sequence": 11,
         "emitted_at": "2026-07-13T12:34:56.123456Z",
@@ -700,6 +988,29 @@
         "NewLow",
         "StrategyEvent",
         "EngineEvent"
+      ],
+      "evidence": {
+        "EngineEvent": [
+          "non_default_round_trip"
+        ],
+        "NewLow": [
+          "explicit_null",
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "timestamp_formatting"
+        ],
+        "StrategyEvent": [
+          "explicit_null",
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "explicit_null",
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "timestamp_formatting"
       ],
       "expected": {
         "city_sequence": 14,
@@ -760,6 +1071,23 @@
         "StrategyEvent",
         "EngineEvent"
       ],
+      "evidence": {
+        "EngineEvent": [
+          "non_default_round_trip"
+        ],
+        "StrategyEvent": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ],
+        "TimerWake": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
+      ],
       "expected": {
         "fired_at": "2026-07-13T12:35:01.987654Z",
         "name": "rebalance",
@@ -781,6 +1109,20 @@
         "StrategyEvent",
         "EngineEvent"
       ],
+      "evidence": {
+        "EngineEvent": [
+          "non_default_round_trip"
+        ],
+        "ShutdownEvent": [
+          "non_default_round_trip"
+        ],
+        "StrategyEvent": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
       "expected": {
         "reason": "",
         "type": "shutdown"
@@ -799,6 +1141,32 @@
         "PriceLevel",
         "StrategyEvent",
         "EngineEvent"
+      ],
+      "evidence": {
+        "EngineEvent": [
+          "non_default_round_trip"
+        ],
+        "MarketBracket": [
+          "non_default_round_trip"
+        ],
+        "PriceLevel": [
+          "non_default_round_trip"
+        ],
+        "PriceUpdate": [
+          "explicit_null",
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ],
+        "StrategyEvent": [
+          "explicit_null",
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "explicit_null",
+        "non_default_round_trip",
+        "timestamp_formatting"
       ],
       "expected": {
         "city_id": "nyc",
@@ -889,6 +1257,23 @@
         "StrategyEvent",
         "EngineEvent"
       ],
+      "evidence": {
+        "EngineEvent": [
+          "non_default_round_trip"
+        ],
+        "ForecastUpdated": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ],
+        "StrategyEvent": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
+      ],
       "expected": {
         "emitted_at": "2026-06-16T12:00:00Z",
         "event_id": "mt-knyc-forecast-1",
@@ -920,6 +1305,35 @@
         "OracleScoreMode",
         "StrategyEvent",
         "EngineEvent"
+      ],
+      "evidence": {
+        "EngineEvent": [
+          "non_default_round_trip"
+        ],
+        "OracleScoreMode": [
+          "non_default_round_trip"
+        ],
+        "OracleScoreRow": [
+          "non_default_round_trip"
+        ],
+        "OracleScoreTable": [
+          "non_default_round_trip"
+        ],
+        "OracleScoresUpdated": [
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "timestamp_formatting"
+        ],
+        "StrategyEvent": [
+          "non_default_round_trip",
+          "numeric_boundaries",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "numeric_boundaries",
+        "timestamp_formatting"
       ],
       "expected": {
         "day_ahead": {
@@ -1090,6 +1504,23 @@
         "StrategyEvent",
         "EngineEvent"
       ],
+      "evidence": {
+        "EngineEvent": [
+          "non_default_round_trip"
+        ],
+        "StationReport": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ],
+        "StrategyEvent": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
+      ],
       "expected": {
         "city_sequence": 12,
         "emitted_at": "2026-06-21T04:16:00Z",
@@ -1144,12 +1575,270 @@
         "temp_f": 109.0,
         "type": "station_report"
       }
+    },
+    {
+      "covers": [
+        "Observation",
+        "TemperatureDayMode",
+        "WuDayMode",
+        "StrategyEvent",
+        "EngineEvent"
+      ],
+      "evidence": {
+        "EngineEvent": [
+          "non_default_round_trip"
+        ],
+        "Observation": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ],
+        "StrategyEvent": [
+          "defaults",
+          "explicit_null",
+          "non_default_round_trip",
+          "omission"
+        ],
+        "TemperatureDayMode": [
+          "non_default_round_trip"
+        ],
+        "WuDayMode": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "explicit_null",
+        "non_default_round_trip",
+        "omission"
+      ],
+      "expected": {
+        "city_sequence": null,
+        "dewpoint": null,
+        "emitted_at": null,
+        "event_id": null,
+        "heat_index": null,
+        "is_from_report": false,
+        "lag_seconds": null,
+        "observed_at": null,
+        "preliminary": false,
+        "relative_humidity": null,
+        "report_type": null,
+        "sequence": null,
+        "slug": "",
+        "source_report_id": null,
+        "station_id": "KMIA",
+        "temp_max_c": null,
+        "temp_max_f": null,
+        "temp_min_c": null,
+        "temp_min_f": null,
+        "temperature_c": null,
+        "temperature_day_date": null,
+        "temperature_day_mode": null,
+        "temperature_f": null,
+        "text_description": null,
+        "type": "observation",
+        "wind_chill": null,
+        "wind_direction": null,
+        "wind_gust": null,
+        "wind_speed": null,
+        "wu_current_temp_c": null,
+        "wu_current_temp_f": null,
+        "wu_daily_high_c": null,
+        "wu_daily_high_f": null,
+        "wu_daily_low_c": null,
+        "wu_daily_low_f": null,
+        "wu_day_date": null,
+        "wu_day_mode": null,
+        "wu_fetched_at": null,
+        "wu_observation_time": null
+      },
+      "id": "observation-defaults-and-null",
+      "rust_type": "StrategyEvent",
+      "wire": {
+        "event_id": null,
+        "station_id": "KMIA",
+        "type": "observation"
+      }
+    },
+    {
+      "covers": [
+        "OracleScoreMode"
+      ],
+      "evidence": {
+        "OracleScoreMode": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "overall",
+      "id": "OracleScoreMode-overall",
+      "rust_type": "OracleScoreMode",
+      "wire": "overall"
+    },
+    {
+      "covers": [
+        "OracleScoreMode"
+      ],
+      "evidence": {
+        "OracleScoreMode": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "day_ahead",
+      "id": "OracleScoreMode-day_ahead",
+      "rust_type": "OracleScoreMode",
+      "wire": "day_ahead"
+    },
+    {
+      "covers": [
+        "OracleScoreMode"
+      ],
+      "evidence": {
+        "OracleScoreMode": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "day_of",
+      "id": "OracleScoreMode-day_of",
+      "rust_type": "OracleScoreMode",
+      "wire": "day_of"
+    },
+    {
+      "covers": [
+        "PersistenceStatus"
+      ],
+      "evidence": {
+        "PersistenceStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "uncommitted",
+      "id": "PersistenceStatus-uncommitted",
+      "rust_type": "PersistenceStatus",
+      "wire": "uncommitted"
+    },
+    {
+      "covers": [
+        "PersistenceStatus"
+      ],
+      "evidence": {
+        "PersistenceStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "committed",
+      "id": "PersistenceStatus-committed",
+      "rust_type": "PersistenceStatus",
+      "wire": "committed"
+    },
+    {
+      "covers": [
+        "PersistenceStatus"
+      ],
+      "evidence": {
+        "PersistenceStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "failed",
+      "id": "PersistenceStatus-failed",
+      "rust_type": "PersistenceStatus",
+      "wire": "failed"
+    },
+    {
+      "covers": [
+        "TemperatureDayMode"
+      ],
+      "evidence": {
+        "TemperatureDayMode": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "calendar_day",
+      "id": "TemperatureDayMode-calendar_day",
+      "rust_type": "TemperatureDayMode",
+      "wire": "calendar_day"
+    },
+    {
+      "covers": [
+        "TemperatureDayMode"
+      ],
+      "evidence": {
+        "TemperatureDayMode": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "nws_climate_day",
+      "id": "TemperatureDayMode-nws_climate_day",
+      "rust_type": "TemperatureDayMode",
+      "wire": "nws_climate_day"
+    },
+    {
+      "covers": [
+        "WuDayMode"
+      ],
+      "evidence": {
+        "WuDayMode": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "calendar_day",
+      "id": "WuDayMode-calendar_day",
+      "rust_type": "WuDayMode",
+      "wire": "calendar_day"
     }
   ],
   "wire_policy": {
     "non_finite_numbers": "excluded because they are not JSON-compatible values",
     "optional_fields": "omitted inputs resolve through defaults; explicit null is retained when nullable",
-    "portable_integer_domain": "signed 64-bit",
+    "portable_integer_domain": "IEEE-754 exactly represented signed integers (-9007199254740991 through 9007199254740991)",
+    "scalar_coercions": "disabled at the declared JSON wire boundary",
     "unknown_object_fields": "ignored and absent from canonical output"
   }
 }

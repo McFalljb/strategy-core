@@ -7,20 +7,87 @@ use crate::models::JsonValue;
 
 pub type KalshiFixedPrice = String;
 pub type KalshiFixedCount = String;
-pub type KalshiMarketSide = String;
-pub type KalshiMarketResult = String;
-pub type KalshiOrderAction = String;
-pub type KalshiOrderType = String;
-pub type KalshiOrderStatus = String;
-pub type KalshiTimeInForce = String;
-pub type KalshiImmediateTimeInForce = String;
-pub type KalshiSelfTradePreventionType = String;
-pub type KalshiMarketStatus = String;
-pub type KalshiSubscriptionUpdateAction = String;
-pub type KalshiWsChannel = String;
-pub type KalshiMarketLifecycleEventType = String;
-pub type KalshiPriceLevelStructure = String;
-pub type KalshiCollateralReturnType = String;
+
+macro_rules! string_enum {
+    ($name:ident { $($variant:ident => $wire:literal),+ $(,)? }) => {
+        #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+        pub enum $name {
+            $(#[serde(rename = $wire)] $variant),+
+        }
+    };
+}
+
+string_enum!(KalshiMarketSide { Yes => "yes", No => "no" });
+string_enum!(KalshiMarketResult {
+    Yes => "yes",
+    No => "no",
+    Scalar => "scalar",
+    Undetermined => "",
+});
+string_enum!(KalshiOrderAction { Buy => "buy", Sell => "sell" });
+string_enum!(KalshiOrderType { Limit => "limit" });
+string_enum!(KalshiOrderStatus {
+    Resting => "resting",
+    Canceled => "canceled",
+    Executed => "executed",
+});
+string_enum!(KalshiTimeInForce {
+    FillOrKill => "fill_or_kill",
+    GoodTillCanceled => "good_till_canceled",
+    ImmediateOrCancel => "immediate_or_cancel",
+});
+string_enum!(KalshiImmediateTimeInForce {
+    FillOrKill => "fill_or_kill",
+    ImmediateOrCancel => "immediate_or_cancel",
+});
+string_enum!(KalshiSelfTradePreventionType {
+    TakerAtCross => "taker_at_cross",
+    Maker => "maker",
+});
+string_enum!(KalshiMarketStatus {
+    Unopened => "unopened",
+    Open => "open",
+    Paused => "paused",
+    Closed => "closed",
+    Settled => "settled",
+});
+string_enum!(KalshiSubscriptionUpdateAction {
+    AddMarkets => "add_markets",
+    DeleteMarkets => "delete_markets",
+});
+string_enum!(KalshiWsChannel {
+    OrderbookDelta => "orderbook_delta",
+    Ticker => "ticker",
+    Trade => "trade",
+    Fill => "fill",
+    MarketPositions => "market_positions",
+    MarketLifecycleV2 => "market_lifecycle_v2",
+    MultivariateMarketLifecycle => "multivariate_market_lifecycle",
+    Multivariate => "multivariate",
+    Communications => "communications",
+    OrderGroupUpdates => "order_group_updates",
+    UserOrders => "user_orders",
+});
+string_enum!(KalshiMarketLifecycleEventType {
+    Created => "created",
+    Deactivated => "deactivated",
+    Activated => "activated",
+    CloseDateUpdated => "close_date_updated",
+    Determined => "determined",
+    Settled => "settled",
+    FractionalTradingUpdated => "fractional_trading_updated",
+    PriceLevelStructureUpdated => "price_level_structure_updated",
+});
+string_enum!(KalshiPriceLevelStructure {
+    LinearCent => "linear_cent",
+    DeciCent => "deci_cent",
+    TaperedDeciCent => "tapered_deci_cent",
+});
+string_enum!(KalshiCollateralReturnType {
+    Mecnet => "MECNET",
+    Direcnet => "DIRECNET",
+    None => "",
+});
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct KalshiOrderCreateRequest {
