@@ -176,6 +176,10 @@ pub struct BrokerOrderUpdate {
 pub trait Broker {
     type Error;
 
+    /// Place an order through the legacy convenience surface.
+    ///
+    /// The default normalizes these arguments into a complete [`OrderIntent`]
+    /// and delegates to [`Broker::place_order_with_intent`].
     fn place_order(
         &mut self,
         ticker: &str,
@@ -187,21 +191,29 @@ pub trait Broker {
         signal_type: Option<&str>,
         signal_metadata: Option<&str>,
         client_order_id: Option<&str>,
-    ) -> Result<OrderResult, Self::Error>;
-
-    fn place_order_with_intent(&mut self, intent: OrderIntent) -> Result<OrderResult, Self::Error> {
-        self.place_order(
-            &intent.ticker,
-            intent.action,
-            intent.contract_side,
-            intent.order_type,
-            intent.quantity,
-            intent.limit_price,
-            intent.signal_type.as_deref(),
-            intent.signal_metadata.as_deref(),
-            intent.client_order_id.as_deref(),
-        )
+    ) -> Result<OrderResult, Self::Error> {
+        self.place_order_with_intent(OrderIntent {
+            ticker: ticker.to_string(),
+            action,
+            contract_side,
+            order_type,
+            quantity,
+            limit_price,
+            max_price: None,
+            max_cost: None,
+            execution_style: None,
+            time_policy: None,
+            reduce_only: false,
+            post_only: false,
+            signal_type: signal_type.map(str::to_string),
+            signal_metadata: signal_metadata.map(str::to_string),
+            client_order_id: client_order_id.map(str::to_string),
+            expires_after_ms: None,
+        })
     }
+
+    /// Canonical full-fidelity order path implemented by every runtime broker.
+    fn place_order_with_intent(&mut self, intent: OrderIntent) -> Result<OrderResult, Self::Error>;
 
     fn cancel_order(&mut self, order_id: &str) -> Result<bool, Self::Error>;
     fn cancel_all_orders(&mut self) -> Result<usize, Self::Error>;

@@ -45,6 +45,35 @@ fn query_objects_match_python_defaults_and_json_names() {
 }
 
 #[test]
+fn strategy_data_client_uses_one_canonical_query_per_read() {
+    let data = FakeData;
+
+    drop(data.fetch_limits(strategy_core::LimitsQuery::default()));
+    drop(data.fetch_forecast(strategy_core::ForecastQuery::default()));
+    drop(data.fetch_oracle_scores(strategy_core::OracleScoresQuery::default()));
+    drop(data.fetch_forecast_runs(strategy_core::ForecastRunsQuery::default()));
+    drop(data.fetch_latest_reports(strategy_core::LatestReportsQuery::default()));
+    drop(data.fetch_reports(strategy_core::ReportsQuery::default()));
+    drop(data.fetch_report_history(strategy_core::ReportHistoryQuery::default()));
+    drop(data.fetch_latest_observation(LatestObservationQuery::default()));
+
+    let run_id = ForecastRunLookup::from("run-1");
+    assert_eq!(run_id, ForecastRunLookup::RunId("run-1".to_string()));
+    let run_id_query = run_id.into_query();
+    assert_eq!(run_id_query.run_id, "run-1");
+    assert!(!run_id_query.refresh);
+    drop(data.fetch_forecast_run(run_id_query));
+
+    let query = strategy_core::ForecastRunQuery {
+        run_id: "run-2".to_string(),
+        refresh: true,
+    };
+    let lookup = ForecastRunLookup::from(query.clone());
+    assert_eq!(lookup, ForecastRunLookup::Query(query.clone()));
+    assert_eq!(lookup.into_query(), query);
+}
+
+#[test]
 fn http_models_accept_non_object_json_values() {
     let request: HttpRequest = serde_json::from_value(json!({
         "method": "POST",
@@ -268,9 +297,9 @@ fn market_state_oracle_selectors_match_python_contract() {
 }
 
 #[test]
-fn broker_place_order_with_intent_preserves_legacy_trait_method() {
+fn broker_place_order_with_intent_preserves_every_field() {
     let mut broker = FakeBroker::default();
-    let result = broker.place_order_with_intent(OrderIntent {
+    let intent = OrderIntent {
         ticker: "KXHIGHMIA-26APR08-B70.5".to_string(),
         action: Action::Buy,
         contract_side: ContractSide::Yes,
@@ -287,12 +316,50 @@ fn broker_place_order_with_intent_preserves_legacy_trait_method() {
         signal_metadata: Some("{\"source\":\"test\"}".to_string()),
         client_order_id: Some("client-1".to_string()),
         expires_after_ms: Some(30_000),
-    });
+    };
+    let result = broker.place_order_with_intent(intent.clone());
 
     assert_eq!(result.unwrap().status, OrderStatus::Filled);
+    assert_eq!(broker.intents, vec![intent]);
+}
+
+#[test]
+fn broker_legacy_place_order_builds_a_complete_default_intent() {
+    let mut broker = FakeBroker::default();
+    broker
+        .place_order(
+            "KXHIGHMIA-26APR08-B70.5",
+            Action::Buy,
+            ContractSide::Yes,
+            OrderType::Limit,
+            2,
+            Some(0.42),
+            Some("dsm_reaction"),
+            Some("{\"source\":\"test\"}"),
+            Some("client-legacy"),
+        )
+        .unwrap();
+
     assert_eq!(
-        broker.pending[0].client_order_id.as_deref(),
-        Some("client-1")
+        broker.intents,
+        vec![OrderIntent {
+            ticker: "KXHIGHMIA-26APR08-B70.5".to_string(),
+            action: Action::Buy,
+            contract_side: ContractSide::Yes,
+            order_type: OrderType::Limit,
+            quantity: 2,
+            limit_price: Some(0.42),
+            max_price: None,
+            max_cost: None,
+            execution_style: None,
+            time_policy: None,
+            reduce_only: false,
+            post_only: false,
+            signal_type: Some("dsm_reaction".to_string()),
+            signal_metadata: Some("{\"source\":\"test\"}".to_string()),
+            client_order_id: Some("client-legacy".to_string()),
+            expires_after_ms: None,
+        }]
     );
 }
 
@@ -777,8 +844,7 @@ impl StrategyDataClient for FakeData {
 
     fn fetch_limits(
         &self,
-        _query: Option<strategy_core::LimitsQuery>,
-        _refresh: bool,
+        _query: strategy_core::LimitsQuery,
     ) -> impl Future<Output = Result<strategy_core::EffectiveLimits, Self::Error>> + Send {
         ready(Ok(strategy_core::EffectiveLimits {
             tier: "demo".to_string(),
@@ -788,9 +854,7 @@ impl StrategyDataClient for FakeData {
 
     fn fetch_forecast(
         &self,
-        _query: Option<strategy_core::ForecastQuery>,
-        _model_id: Option<&str>,
-        _refresh: bool,
+        _query: strategy_core::ForecastQuery,
     ) -> impl Future<Output = Result<Option<strategy_core::StationForecastData>, Self::Error>> + Send
     {
         ready(Ok(None))
@@ -798,11 +862,7 @@ impl StrategyDataClient for FakeData {
 
     fn fetch_oracle_scores(
         &self,
-        _query: Option<strategy_core::OracleScoresQuery>,
-        _days: &str,
-        _mode: &str,
-        _rank_by: &str,
-        _refresh: bool,
+        _query: strategy_core::OracleScoresQuery,
     ) -> impl Future<Output = Result<Option<strategy_core::OracleScoreData>, Self::Error>> + Send
     {
         ready(Ok(None))
@@ -810,21 +870,14 @@ impl StrategyDataClient for FakeData {
 
     fn fetch_forecast_runs(
         &self,
-        _query: Option<strategy_core::ForecastRunsQuery>,
-        _model_id: Option<&str>,
-        _start: Option<strategy_core::DateLike>,
-        _end: Option<strategy_core::DateLike>,
-        _limit: Option<i64>,
-        _cursor: Option<&str>,
-        _refresh: bool,
+        _query: strategy_core::ForecastRunsQuery,
     ) -> impl Future<Output = Result<strategy_core::ForecastRunsPage, Self::Error>> + Send {
         ready(Ok(strategy_core::ForecastRunsPage::default()))
     }
 
     fn fetch_forecast_run(
         &self,
-        _run_id_or_query: ForecastRunLookup,
-        _refresh: bool,
+        _query: strategy_core::ForecastRunQuery,
     ) -> impl Future<Output = Result<Option<strategy_core::ForecastRunData>, Self::Error>> + Send
     {
         ready(Ok(None))
@@ -832,31 +885,21 @@ impl StrategyDataClient for FakeData {
 
     fn fetch_latest_reports(
         &self,
-        _query: Option<strategy_core::LatestReportsQuery>,
-        _refresh: bool,
+        _query: strategy_core::LatestReportsQuery,
     ) -> impl Future<Output = Result<strategy_core::LatestReportsData, Self::Error>> + Send {
         ready(Ok(strategy_core::LatestReportsData::default()))
     }
 
     fn fetch_reports(
         &self,
-        _query: Option<strategy_core::ReportsQuery>,
-        _report_type: Option<&str>,
-        _date: Option<strategy_core::LocalDateLike>,
-        _refresh: bool,
+        _query: strategy_core::ReportsQuery,
     ) -> impl Future<Output = Result<strategy_core::StationReportsData, Self::Error>> + Send {
         ready(Ok(strategy_core::StationReportsData::default()))
     }
 
     fn fetch_report_history(
         &self,
-        _query: Option<strategy_core::ReportHistoryQuery>,
-        _report_type: Option<&str>,
-        _start: Option<strategy_core::LocalDateLike>,
-        _end: Option<strategy_core::LocalDateLike>,
-        _limit: Option<i64>,
-        _cursor: Option<&str>,
-        _refresh: bool,
+        _query: strategy_core::ReportHistoryQuery,
     ) -> impl Future<Output = Result<strategy_core::StationReportHistoryPage, Self::Error>> + Send
     {
         ready(Ok(strategy_core::StationReportHistoryPage::default()))
@@ -864,8 +907,7 @@ impl StrategyDataClient for FakeData {
 
     fn fetch_latest_observation(
         &self,
-        _query: Option<LatestObservationQuery>,
-        _refresh: bool,
+        _query: LatestObservationQuery,
     ) -> impl Future<Output = Result<strategy_core::LatestObservationData, Self::Error>> + Send
     {
         ready(Ok(strategy_core::LatestObservationData::default()))
@@ -876,58 +918,58 @@ impl StrategyDataClient for FakeData {
 struct FakeBroker {
     positions: Vec<Position>,
     pending: Vec<PendingOrder>,
+    intents: Vec<OrderIntent>,
 }
 
 impl Broker for FakeBroker {
     type Error = String;
 
-    fn place_order(
-        &mut self,
-        ticker: &str,
-        _action: Action,
-        contract_side: ContractSide,
-        _order_type: OrderType,
-        quantity: i64,
-        limit_price: Option<f64>,
-        signal_type: Option<&str>,
-        signal_metadata: Option<&str>,
-        client_order_id: Option<&str>,
-    ) -> Result<OrderResult, Self::Error> {
+    fn place_order_with_intent(&mut self, intent: OrderIntent) -> Result<OrderResult, Self::Error> {
         self.positions.push(Position {
-            ticker: ticker.to_string(),
-            side: contract_side,
-            quantity,
-            avg_price: limit_price.unwrap_or_default(),
+            ticker: intent.ticker.clone(),
+            side: intent.contract_side,
+            quantity: intent.quantity,
+            avg_price: intent.limit_price.unwrap_or_default(),
         });
         self.pending.push(PendingOrder {
-            order_id: client_order_id.unwrap_or("order-1").to_string(),
+            order_id: intent
+                .client_order_id
+                .as_deref()
+                .unwrap_or("order-1")
+                .to_string(),
             sleeve_id: "demo:KMIA".to_string(),
-            ticker: ticker.to_string(),
-            action: _action,
-            contract_side,
-            limit_price: limit_price.unwrap_or_default(),
-            requested_quantity: quantity,
-            filled_quantity: quantity,
+            ticker: intent.ticker.clone(),
+            action: intent.action,
+            contract_side: intent.contract_side,
+            limit_price: intent.limit_price.unwrap_or_default(),
+            requested_quantity: intent.quantity,
+            filled_quantity: intent.quantity,
             reserved_global: 0.0,
             reserved_sleeve: 0.0,
             fee_type: String::new(),
             fee_multiplier: None,
             fee_accumulator: 0.0,
-            signal_type: signal_type.map(str::to_string),
-            signal_metadata: signal_metadata.map(str::to_string),
+            signal_type: intent.signal_type.clone(),
+            signal_metadata: intent.signal_metadata.clone(),
             created_at: String::new(),
-            client_order_id: client_order_id.map(str::to_string),
+            client_order_id: intent.client_order_id.clone(),
             expires_at: None,
         });
-        Ok(OrderResult {
-            order_id: client_order_id.unwrap_or("order-1").to_string(),
+        let result = OrderResult {
+            order_id: intent
+                .client_order_id
+                .as_deref()
+                .unwrap_or("order-1")
+                .to_string(),
             sleeve_id: "demo:KMIA".to_string(),
             status: OrderStatus::Filled,
-            filled_quantity: quantity,
-            fill_price: limit_price.unwrap_or_default(),
+            filled_quantity: intent.quantity,
+            fill_price: intent.limit_price.unwrap_or_default(),
             fee_cost: 0.0,
             reason: String::new(),
-        })
+        };
+        self.intents.push(intent);
+        Ok(result)
     }
 
     fn cancel_order(&mut self, _order_id: &str) -> Result<bool, Self::Error> {
