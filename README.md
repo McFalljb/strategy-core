@@ -95,14 +95,13 @@ Engines implement these protocols differently while keeping the same strategy-fa
 strategy_core/   # Importable Python package
 tests/           # Python pytest suite
 native/          # Rust strategy_core and strategy_core_kernel crates
-docs/            # Contract and Rust parity documentation
+docs/            # Contract documentation and implementation plans
 AGENTS.md        # Contributor commands and conventions
 ```
 
 ## Documentation
 
-- [docs/contract-map.md](docs/contract-map.md) — shared contract boundaries and engine responsibilities
-- [docs/rust-parity-strategy-core.md](docs/rust-parity-strategy-core.md) — Rust parity status and native crate rules
+- [docs/contract-map.md](docs/contract-map.md) — complete bot API, options, examples, native paths, and ownership rules
 
 ## License
 

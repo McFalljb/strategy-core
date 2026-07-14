@@ -65,4 +65,4 @@ cargo fmt --manifest-path native/Cargo.toml --all -- --check
 
 ## Docs
 
-- [docs/contract-map.md](docs/contract-map.md) — shared contract vs engine responsibilities
+- [docs/contract-map.md](docs/contract-map.md) — complete Python/Rust bot API, options, examples, native paths, and ownership rules
