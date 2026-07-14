@@ -1,0 +1,342 @@
+{
+  "authority": "python",
+  "comparison": "structural-json",
+  "family": "http-data",
+  "invalid": [
+    {
+      "category": "enum",
+      "covers": [
+        "HttpMethod"
+      ],
+      "evidence": {
+        "HttpMethod": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "invalid-http-method",
+      "rust_type": "HttpMethod",
+      "wire": "TRACE"
+    },
+    {
+      "category": "required_field",
+      "covers": [
+        "HttpRequest"
+      ],
+      "evidence": {
+        "HttpRequest": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "request-missing-url",
+      "rust_type": "HttpRequest",
+      "wire": {
+        "method": "GET"
+      }
+    },
+    {
+      "category": "type",
+      "covers": [
+        "HttpResponse"
+      ],
+      "evidence": {
+        "HttpResponse": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "response-invalid-status",
+      "rust_type": "HttpResponse",
+      "wire": {
+        "status_code": []
+      }
+    }
+  ],
+  "schema_version": 1,
+  "valid": [
+    {
+      "coverage_paths": {
+        "HttpMethod": [
+          "method"
+        ],
+        "HttpRequest": []
+      },
+      "evidence": {
+        "HttpMethod": [
+          "non_default_round_trip"
+        ],
+        "HttpRequest": [
+          "explicit_null",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "explicit_null",
+        "non_default_round_trip"
+      ],
+      "expected": {
+        "headers": {
+          "authorization": "Bearer redacted"
+        },
+        "json_body": {
+          "models": [
+            "hrrr"
+          ],
+          "station": "KMIA"
+        },
+        "method": "POST",
+        "params": {
+          "cursor": null,
+          "limit": 10,
+          "ratio": 0.5,
+          "refresh": true
+        },
+        "text_body": "body",
+        "timeout_seconds": 2.5,
+        "url": "https://example.test/v1/data"
+      },
+      "id": "http-request-full",
+      "rust_type": "HttpRequest",
+      "wire": {
+        "headers": {
+          "authorization": "Bearer redacted"
+        },
+        "json_body": {
+          "models": [
+            "hrrr"
+          ],
+          "station": "KMIA"
+        },
+        "method": "POST",
+        "params": {
+          "cursor": null,
+          "limit": 10,
+          "ratio": 0.5,
+          "refresh": true
+        },
+        "text_body": "body",
+        "timeout_seconds": 2.5,
+        "url": "https://example.test/v1/data"
+      }
+    },
+    {
+      "coverage_paths": {
+        "HttpResponse": []
+      },
+      "evidence": {
+        "HttpResponse": [
+          "explicit_null",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "explicit_null",
+        "non_default_round_trip"
+      ],
+      "expected": {
+        "headers": {
+          "content-type": "application/json"
+        },
+        "json_body": {
+          "items": [
+            1,
+            true,
+            null
+          ]
+        },
+        "status_code": 207,
+        "text": "ok"
+      },
+      "id": "http-response-full",
+      "rust_type": "HttpResponse",
+      "wire": {
+        "headers": {
+          "content-type": "application/json"
+        },
+        "json_body": {
+          "items": [
+            1,
+            true,
+            null
+          ]
+        },
+        "status_code": 207,
+        "text": "ok"
+      }
+    },
+    {
+      "coverage_paths": {
+        "HttpRequest": []
+      },
+      "evidence": {
+        "HttpRequest": [
+          "explicit_null",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "explicit_null",
+        "non_default_round_trip"
+      ],
+      "expected": {
+        "headers": {},
+        "json_body": null,
+        "method": "GET",
+        "params": {},
+        "text_body": null,
+        "timeout_seconds": null,
+        "url": "https://example.test/health"
+      },
+      "id": "http-request-defaults",
+      "rust_type": "HttpRequest",
+      "wire": {
+        "headers": {},
+        "json_body": null,
+        "method": "GET",
+        "params": {},
+        "text_body": null,
+        "timeout_seconds": null,
+        "url": "https://example.test/health"
+      }
+    },
+    {
+      "coverage_paths": {
+        "HttpResponse": []
+      },
+      "evidence": {
+        "HttpResponse": [
+          "explicit_null",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "explicit_null",
+        "non_default_round_trip"
+      ],
+      "expected": {
+        "headers": {},
+        "json_body": null,
+        "status_code": 204,
+        "text": null
+      },
+      "id": "http-response-defaults",
+      "rust_type": "HttpResponse",
+      "wire": {
+        "headers": {},
+        "json_body": null,
+        "status_code": 204,
+        "text": null
+      }
+    },
+    {
+      "coverage_paths": {
+        "HttpMethod": []
+      },
+      "evidence": {
+        "HttpMethod": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "GET",
+      "id": "HttpMethod-GET",
+      "rust_type": "HttpMethod",
+      "wire": "GET"
+    },
+    {
+      "coverage_paths": {
+        "HttpMethod": []
+      },
+      "evidence": {
+        "HttpMethod": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "POST",
+      "id": "HttpMethod-POST",
+      "rust_type": "HttpMethod",
+      "wire": "POST"
+    },
+    {
+      "coverage_paths": {
+        "HttpMethod": []
+      },
+      "evidence": {
+        "HttpMethod": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "PUT",
+      "id": "HttpMethod-PUT",
+      "rust_type": "HttpMethod",
+      "wire": "PUT"
+    },
+    {
+      "coverage_paths": {
+        "HttpMethod": []
+      },
+      "evidence": {
+        "HttpMethod": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "PATCH",
+      "id": "HttpMethod-PATCH",
+      "rust_type": "HttpMethod",
+      "wire": "PATCH"
+    },
+    {
+      "coverage_paths": {
+        "HttpMethod": []
+      },
+      "evidence": {
+        "HttpMethod": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "DELETE",
+      "id": "HttpMethod-DELETE",
+      "rust_type": "HttpMethod",
+      "wire": "DELETE"
+    }
+  ],
+  "wire_policy": {
+    "enum_strings": "HttpMethod is a closed literal/enum and rejects unknown methods.",
+    "non_finite_numbers": "excluded because they are not JSON-compatible values",
+    "optional_fields": "omitted inputs resolve through defaults; explicit null is retained when nullable",
+    "portable_integer_domain": "IEEE-754 exactly represented signed integers (-9007199254740991 through 9007199254740991)",
+    "scalar_coercions": "disabled at the declared JSON wire boundary",
+    "unknown_object_fields": "ignored and absent from canonical output"
+  }
+}

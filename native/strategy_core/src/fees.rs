@@ -1,6 +1,6 @@
 use std::{error::Error, fmt, str::FromStr};
 
-use rust_decimal::{Decimal, RoundingStrategy};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 use crate::broker::Action;
@@ -207,7 +207,7 @@ fn decimal_to_f64(value: Decimal) -> f64 {
 }
 
 fn ceil_to_increment(value: Decimal, increment: Decimal) -> Decimal {
-    let units = (value / increment).round_dp_with_strategy(0, RoundingStrategy::AwayFromZero);
+    let units = (value / increment).ceil();
     units * increment
 }
 

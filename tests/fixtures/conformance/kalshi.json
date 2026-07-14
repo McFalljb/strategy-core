@@ -1,0 +1,3198 @@
+{
+  "authority": "python",
+  "comparison": "structural-json",
+  "family": "kalshi",
+  "invalid": [
+    {
+      "category": "required_field",
+      "covers": [
+        "KalshiOrderCreateRequest"
+      ],
+      "evidence": {
+        "KalshiOrderCreateRequest": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "create-order-missing-ticker",
+      "rust_type": "KalshiOrderCreateRequest",
+      "wire": {
+        "action": "buy",
+        "side": "yes"
+      }
+    },
+    {
+      "category": "required_field",
+      "covers": [
+        "KalshiGetOrderbookResponse"
+      ],
+      "evidence": {
+        "KalshiGetOrderbookResponse": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "orderbook-missing-required",
+      "rust_type": "KalshiGetOrderbookResponse",
+      "wire": {}
+    },
+    {
+      "category": "type",
+      "covers": [
+        "KalshiOrderbookSnapshotMessage"
+      ],
+      "evidence": {
+        "KalshiOrderbookSnapshotMessage": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "snapshot-bad-level",
+      "rust_type": "KalshiOrderbookSnapshotMessage",
+      "wire": {
+        "market_id": "1",
+        "market_ticker": "M",
+        "seq": 2,
+        "sid": 1,
+        "yes_dollars_fp": [
+          1
+        ]
+      }
+    },
+    {
+      "category": "type",
+      "covers": [
+        "KalshiWsMessage"
+      ],
+      "evidence": {
+        "KalshiWsMessage": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unrecognized-websocket-shape",
+      "rust_type": "KalshiWsMessage",
+      "wire": {
+        "sid": 1
+      }
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "KalshiCollateralReturnType"
+      ],
+      "evidence": {
+        "KalshiCollateralReturnType": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unknown-KalshiCollateralReturnType",
+      "rust_type": "KalshiCollateralReturnType",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "KalshiImmediateTimeInForce"
+      ],
+      "evidence": {
+        "KalshiImmediateTimeInForce": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unknown-KalshiImmediateTimeInForce",
+      "rust_type": "KalshiImmediateTimeInForce",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "KalshiMarketLifecycleEventType"
+      ],
+      "evidence": {
+        "KalshiMarketLifecycleEventType": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unknown-KalshiMarketLifecycleEventType",
+      "rust_type": "KalshiMarketLifecycleEventType",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "KalshiMarketResult"
+      ],
+      "evidence": {
+        "KalshiMarketResult": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unknown-KalshiMarketResult",
+      "rust_type": "KalshiMarketResult",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "KalshiMarketSide"
+      ],
+      "evidence": {
+        "KalshiMarketSide": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unknown-KalshiMarketSide",
+      "rust_type": "KalshiMarketSide",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "KalshiMarketStatus"
+      ],
+      "evidence": {
+        "KalshiMarketStatus": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unknown-KalshiMarketStatus",
+      "rust_type": "KalshiMarketStatus",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "KalshiOrderAction"
+      ],
+      "evidence": {
+        "KalshiOrderAction": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unknown-KalshiOrderAction",
+      "rust_type": "KalshiOrderAction",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "KalshiOrderStatus"
+      ],
+      "evidence": {
+        "KalshiOrderStatus": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unknown-KalshiOrderStatus",
+      "rust_type": "KalshiOrderStatus",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "KalshiOrderType"
+      ],
+      "evidence": {
+        "KalshiOrderType": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unknown-KalshiOrderType",
+      "rust_type": "KalshiOrderType",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "KalshiPriceLevelStructure"
+      ],
+      "evidence": {
+        "KalshiPriceLevelStructure": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unknown-KalshiPriceLevelStructure",
+      "rust_type": "KalshiPriceLevelStructure",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "KalshiSelfTradePreventionType"
+      ],
+      "evidence": {
+        "KalshiSelfTradePreventionType": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unknown-KalshiSelfTradePreventionType",
+      "rust_type": "KalshiSelfTradePreventionType",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "KalshiSubscriptionUpdateAction"
+      ],
+      "evidence": {
+        "KalshiSubscriptionUpdateAction": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unknown-KalshiSubscriptionUpdateAction",
+      "rust_type": "KalshiSubscriptionUpdateAction",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "KalshiTimeInForce"
+      ],
+      "evidence": {
+        "KalshiTimeInForce": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unknown-KalshiTimeInForce",
+      "rust_type": "KalshiTimeInForce",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
+        "KalshiWsChannel"
+      ],
+      "evidence": {
+        "KalshiWsChannel": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "unknown-KalshiWsChannel",
+      "rust_type": "KalshiWsChannel",
+      "wire": "unknown"
+    }
+  ],
+  "schema_version": 1,
+  "valid": [
+    {
+      "coverage_paths": {
+        "KalshiFixedCount": [
+          "count_fp"
+        ],
+        "KalshiFixedPrice": [
+          "yes_price_dollars"
+        ],
+        "KalshiImmediateTimeInForce": [
+          "time_in_force"
+        ],
+        "KalshiMarketSide": [
+          "side"
+        ],
+        "KalshiOrderAction": [
+          "action"
+        ],
+        "KalshiOrderCreateRequest": [],
+        "KalshiSelfTradePreventionType": [
+          "self_trade_prevention_type"
+        ],
+        "KalshiTimeInForce": [
+          "time_in_force"
+        ]
+      },
+      "evidence": {
+        "KalshiFixedCount": [
+          "non_default_round_trip"
+        ],
+        "KalshiFixedPrice": [
+          "non_default_round_trip"
+        ],
+        "KalshiImmediateTimeInForce": [
+          "non_default_round_trip"
+        ],
+        "KalshiMarketSide": [
+          "non_default_round_trip"
+        ],
+        "KalshiOrderAction": [
+          "non_default_round_trip"
+        ],
+        "KalshiOrderCreateRequest": [
+          "non_default_round_trip"
+        ],
+        "KalshiSelfTradePreventionType": [
+          "non_default_round_trip"
+        ],
+        "KalshiTimeInForce": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
+      "expected": {
+        "action": "buy",
+        "buy_max_cost": 610,
+        "cancel_order_on_pause": true,
+        "client_order_id": "client-1",
+        "count": 10,
+        "count_fp": "10.00",
+        "expiration_ts": 1786800000,
+        "no_price": 39,
+        "no_price_dollars": "0.3900",
+        "order_group_id": "group-1",
+        "post_only": false,
+        "reduce_only": false,
+        "self_trade_prevention_type": "taker_at_cross",
+        "sell_position_floor": 0,
+        "side": "yes",
+        "subaccount": 2,
+        "ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "time_in_force": "fill_or_kill",
+        "yes_price": 61,
+        "yes_price_dollars": "0.6100"
+      },
+      "id": "create-order-full",
+      "rust_type": "KalshiOrderCreateRequest",
+      "wire": {
+        "action": "buy",
+        "buy_max_cost": 610,
+        "cancel_order_on_pause": true,
+        "client_order_id": "client-1",
+        "count": 10,
+        "count_fp": "10.00",
+        "expiration_ts": 1786800000,
+        "no_price": 39,
+        "no_price_dollars": "0.3900",
+        "order_group_id": "group-1",
+        "post_only": false,
+        "reduce_only": false,
+        "self_trade_prevention_type": "taker_at_cross",
+        "sell_position_floor": 0,
+        "side": "yes",
+        "subaccount": 2,
+        "ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "time_in_force": "fill_or_kill",
+        "yes_price": 61,
+        "yes_price_dollars": "0.6100"
+      }
+    },
+    {
+      "coverage_paths": {
+        "KalshiOrder": [],
+        "KalshiOrderStatus": [
+          "status"
+        ],
+        "KalshiOrderType": [
+          "type"
+        ]
+      },
+      "evidence": {
+        "KalshiOrder": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ],
+        "KalshiOrderStatus": [
+          "non_default_round_trip"
+        ],
+        "KalshiOrderType": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "action": "buy",
+        "cancel_order_on_pause": true,
+        "client_order_id": "client-1",
+        "created_time": "2026-07-13T12:34:56.123456Z",
+        "expiration_time": "2026-07-13T13:45:01.987654Z",
+        "fill_count_fp": "2.00",
+        "initial_count_fp": "10.00",
+        "last_update_time": "2026-07-13T13:45:01.987654Z",
+        "maker_fees_dollars": "0.0000",
+        "maker_fill_cost_dollars": "0.0000",
+        "no_price_dollars": "0.3900",
+        "order_group_id": "group-1",
+        "order_id": "order-1",
+        "remaining_count_fp": "8.00",
+        "self_trade_prevention_type": "taker_at_cross",
+        "side": "yes",
+        "status": "resting",
+        "subaccount_number": 2,
+        "taker_fees_dollars": "0.0300",
+        "taker_fill_cost_dollars": "1.2200",
+        "ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "type": "limit",
+        "user_id": "user-1",
+        "yes_price_dollars": "0.6100"
+      },
+      "id": "order-full",
+      "rust_type": "KalshiOrder",
+      "wire": {
+        "action": "buy",
+        "cancel_order_on_pause": true,
+        "client_order_id": "client-1",
+        "created_time": "2026-07-13T12:34:56.123456Z",
+        "expiration_time": "2026-07-13T13:45:01.987654Z",
+        "fill_count_fp": "2.00",
+        "initial_count_fp": "10.00",
+        "last_update_time": "2026-07-13T13:45:01.987654Z",
+        "maker_fees_dollars": "0.0000",
+        "maker_fill_cost_dollars": "0.0000",
+        "no_price_dollars": "0.3900",
+        "order_group_id": "group-1",
+        "order_id": "order-1",
+        "remaining_count_fp": "8.00",
+        "self_trade_prevention_type": "taker_at_cross",
+        "side": "yes",
+        "status": "resting",
+        "subaccount_number": 2,
+        "taker_fees_dollars": "0.0300",
+        "taker_fill_cost_dollars": "1.2200",
+        "ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "type": "limit",
+        "user_id": "user-1",
+        "yes_price_dollars": "0.6100"
+      }
+    },
+    {
+      "coverage_paths": {
+        "KalshiCreateOrderResponse": [],
+        "KalshiOrder": [
+          "order"
+        ]
+      },
+      "evidence": {
+        "KalshiCreateOrderResponse": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ],
+        "KalshiOrder": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "order": {
+          "action": "buy",
+          "cancel_order_on_pause": true,
+          "client_order_id": "client-1",
+          "created_time": "2026-07-13T12:34:56.123456Z",
+          "expiration_time": "2026-07-13T13:45:01.987654Z",
+          "fill_count_fp": "2.00",
+          "initial_count_fp": "10.00",
+          "last_update_time": "2026-07-13T13:45:01.987654Z",
+          "maker_fees_dollars": "0.0000",
+          "maker_fill_cost_dollars": "0.0000",
+          "no_price_dollars": "0.3900",
+          "order_group_id": "group-1",
+          "order_id": "order-1",
+          "remaining_count_fp": "8.00",
+          "self_trade_prevention_type": "taker_at_cross",
+          "side": "yes",
+          "status": "resting",
+          "subaccount_number": 2,
+          "taker_fees_dollars": "0.0300",
+          "taker_fill_cost_dollars": "1.2200",
+          "ticker": "KXHIGHMIA-26JUL13-B90.5",
+          "type": "limit",
+          "user_id": "user-1",
+          "yes_price_dollars": "0.6100"
+        }
+      },
+      "id": "create-response",
+      "rust_type": "KalshiCreateOrderResponse",
+      "wire": {
+        "order": {
+          "action": "buy",
+          "cancel_order_on_pause": true,
+          "client_order_id": "client-1",
+          "created_time": "2026-07-13T12:34:56.123456Z",
+          "expiration_time": "2026-07-13T13:45:01.987654Z",
+          "fill_count_fp": "2.00",
+          "initial_count_fp": "10.00",
+          "last_update_time": "2026-07-13T13:45:01.987654Z",
+          "maker_fees_dollars": "0.0000",
+          "maker_fill_cost_dollars": "0.0000",
+          "no_price_dollars": "0.3900",
+          "order_group_id": "group-1",
+          "order_id": "order-1",
+          "remaining_count_fp": "8.00",
+          "self_trade_prevention_type": "taker_at_cross",
+          "side": "yes",
+          "status": "resting",
+          "subaccount_number": 2,
+          "taker_fees_dollars": "0.0300",
+          "taker_fill_cost_dollars": "1.2200",
+          "ticker": "KXHIGHMIA-26JUL13-B90.5",
+          "type": "limit",
+          "user_id": "user-1",
+          "yes_price_dollars": "0.6100"
+        }
+      }
+    },
+    {
+      "coverage_paths": {
+        "KalshiGetOrderResponse": []
+      },
+      "evidence": {
+        "KalshiGetOrderResponse": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "order": {
+          "action": "buy",
+          "cancel_order_on_pause": true,
+          "client_order_id": "client-1",
+          "created_time": "2026-07-13T12:34:56.123456Z",
+          "expiration_time": "2026-07-13T13:45:01.987654Z",
+          "fill_count_fp": "2.00",
+          "initial_count_fp": "10.00",
+          "last_update_time": "2026-07-13T13:45:01.987654Z",
+          "maker_fees_dollars": "0.0000",
+          "maker_fill_cost_dollars": "0.0000",
+          "no_price_dollars": "0.3900",
+          "order_group_id": "group-1",
+          "order_id": "order-1",
+          "remaining_count_fp": "8.00",
+          "self_trade_prevention_type": "taker_at_cross",
+          "side": "yes",
+          "status": "resting",
+          "subaccount_number": 2,
+          "taker_fees_dollars": "0.0300",
+          "taker_fill_cost_dollars": "1.2200",
+          "ticker": "KXHIGHMIA-26JUL13-B90.5",
+          "type": "limit",
+          "user_id": "user-1",
+          "yes_price_dollars": "0.6100"
+        }
+      },
+      "id": "get-order-response",
+      "rust_type": "KalshiGetOrderResponse",
+      "wire": {
+        "order": {
+          "action": "buy",
+          "cancel_order_on_pause": true,
+          "client_order_id": "client-1",
+          "created_time": "2026-07-13T12:34:56.123456Z",
+          "expiration_time": "2026-07-13T13:45:01.987654Z",
+          "fill_count_fp": "2.00",
+          "initial_count_fp": "10.00",
+          "last_update_time": "2026-07-13T13:45:01.987654Z",
+          "maker_fees_dollars": "0.0000",
+          "maker_fill_cost_dollars": "0.0000",
+          "no_price_dollars": "0.3900",
+          "order_group_id": "group-1",
+          "order_id": "order-1",
+          "remaining_count_fp": "8.00",
+          "self_trade_prevention_type": "taker_at_cross",
+          "side": "yes",
+          "status": "resting",
+          "subaccount_number": 2,
+          "taker_fees_dollars": "0.0300",
+          "taker_fill_cost_dollars": "1.2200",
+          "ticker": "KXHIGHMIA-26JUL13-B90.5",
+          "type": "limit",
+          "user_id": "user-1",
+          "yes_price_dollars": "0.6100"
+        }
+      }
+    },
+    {
+      "coverage_paths": {
+        "KalshiGetOrdersResponse": []
+      },
+      "evidence": {
+        "KalshiGetOrdersResponse": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "cursor": "next-order",
+        "orders": [
+          {
+            "action": "buy",
+            "cancel_order_on_pause": true,
+            "client_order_id": "client-1",
+            "created_time": "2026-07-13T12:34:56.123456Z",
+            "expiration_time": "2026-07-13T13:45:01.987654Z",
+            "fill_count_fp": "2.00",
+            "initial_count_fp": "10.00",
+            "last_update_time": "2026-07-13T13:45:01.987654Z",
+            "maker_fees_dollars": "0.0000",
+            "maker_fill_cost_dollars": "0.0000",
+            "no_price_dollars": "0.3900",
+            "order_group_id": "group-1",
+            "order_id": "order-1",
+            "remaining_count_fp": "8.00",
+            "self_trade_prevention_type": "taker_at_cross",
+            "side": "yes",
+            "status": "resting",
+            "subaccount_number": 2,
+            "taker_fees_dollars": "0.0300",
+            "taker_fill_cost_dollars": "1.2200",
+            "ticker": "KXHIGHMIA-26JUL13-B90.5",
+            "type": "limit",
+            "user_id": "user-1",
+            "yes_price_dollars": "0.6100"
+          }
+        ]
+      },
+      "id": "orders-page",
+      "rust_type": "KalshiGetOrdersResponse",
+      "wire": {
+        "cursor": "next-order",
+        "orders": [
+          {
+            "action": "buy",
+            "cancel_order_on_pause": true,
+            "client_order_id": "client-1",
+            "created_time": "2026-07-13T12:34:56.123456Z",
+            "expiration_time": "2026-07-13T13:45:01.987654Z",
+            "fill_count_fp": "2.00",
+            "initial_count_fp": "10.00",
+            "last_update_time": "2026-07-13T13:45:01.987654Z",
+            "maker_fees_dollars": "0.0000",
+            "maker_fill_cost_dollars": "0.0000",
+            "no_price_dollars": "0.3900",
+            "order_group_id": "group-1",
+            "order_id": "order-1",
+            "remaining_count_fp": "8.00",
+            "self_trade_prevention_type": "taker_at_cross",
+            "side": "yes",
+            "status": "resting",
+            "subaccount_number": 2,
+            "taker_fees_dollars": "0.0300",
+            "taker_fill_cost_dollars": "1.2200",
+            "ticker": "KXHIGHMIA-26JUL13-B90.5",
+            "type": "limit",
+            "user_id": "user-1",
+            "yes_price_dollars": "0.6100"
+          }
+        ]
+      }
+    },
+    {
+      "coverage_paths": {
+        "KalshiGetOrderbookResponse": [],
+        "KalshiOrderbook": [
+          "orderbook_fp"
+        ],
+        "KalshiOrderbookLevel": [
+          "orderbook_fp",
+          "yes_dollars",
+          0
+        ]
+      },
+      "evidence": {
+        "KalshiGetOrderbookResponse": [
+          "non_default_round_trip"
+        ],
+        "KalshiOrderbook": [
+          "non_default_round_trip"
+        ],
+        "KalshiOrderbookLevel": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
+      "expected": {
+        "orderbook_fp": {
+          "no_dollars": [
+            {
+              "count_fp": "100.00",
+              "price_dollars": "0.6100"
+            }
+          ],
+          "yes_dollars": [
+            {
+              "count_fp": "100.00",
+              "price_dollars": "0.6100"
+            }
+          ]
+        }
+      },
+      "id": "orderbook-response",
+      "rust_type": "KalshiGetOrderbookResponse",
+      "wire": {
+        "orderbook_fp": {
+          "no_dollars": [
+            {
+              "count_fp": "100.00",
+              "price_dollars": "0.6100"
+            }
+          ],
+          "yes_dollars": [
+            {
+              "count_fp": "100.00",
+              "price_dollars": "0.6100"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "coverage_paths": {
+        "KalshiGetOrderbooksResponse": [],
+        "KalshiMarketOrderbook": [
+          "orderbooks",
+          0
+        ]
+      },
+      "evidence": {
+        "KalshiGetOrderbooksResponse": [
+          "non_default_round_trip"
+        ],
+        "KalshiMarketOrderbook": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
+      "expected": {
+        "orderbooks": [
+          {
+            "orderbook_fp": {
+              "no_dollars": [
+                {
+                  "count_fp": "100.00",
+                  "price_dollars": "0.6100"
+                }
+              ],
+              "yes_dollars": [
+                {
+                  "count_fp": "100.00",
+                  "price_dollars": "0.6100"
+                }
+              ]
+            },
+            "ticker": "KXHIGHMIA-26JUL13-B90.5"
+          }
+        ]
+      },
+      "id": "multi-orderbook-response",
+      "rust_type": "KalshiGetOrderbooksResponse",
+      "wire": {
+        "orderbooks": [
+          {
+            "orderbook_fp": {
+              "no_dollars": [
+                {
+                  "count_fp": "100.00",
+                  "price_dollars": "0.6100"
+                }
+              ],
+              "yes_dollars": [
+                {
+                  "count_fp": "100.00",
+                  "price_dollars": "0.6100"
+                }
+              ]
+            },
+            "ticker": "KXHIGHMIA-26JUL13-B90.5"
+          }
+        ]
+      }
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarket": [],
+        "KalshiMarketResult": [
+          "result"
+        ],
+        "KalshiMarketStatus": [
+          "status"
+        ],
+        "KalshiMveSelectedLeg": [
+          "mve_selected_legs",
+          0
+        ],
+        "KalshiPriceLevelStructure": [
+          "price_level_structure"
+        ],
+        "KalshiPriceRange": [
+          "price_ranges",
+          0
+        ]
+      },
+      "evidence": {
+        "KalshiMarket": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ],
+        "KalshiMarketResult": [
+          "non_default_round_trip"
+        ],
+        "KalshiMarketStatus": [
+          "non_default_round_trip"
+        ],
+        "KalshiMveSelectedLeg": [
+          "non_default_round_trip"
+        ],
+        "KalshiPriceLevelStructure": [
+          "non_default_round_trip"
+        ],
+        "KalshiPriceRange": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "can_close_early": true,
+        "cap_strike": 91,
+        "close_time": "2026-07-13T13:45:01.987654Z",
+        "created_time": "2026-07-13T12:34:56.123456Z",
+        "custom_strike": {
+          "threshold": 90.5
+        },
+        "dollar_open_interest": 750,
+        "dollar_volume": 1000,
+        "early_close_condition": "Official report",
+        "event_ticker": "KXHIGHMIA-26JUL13",
+        "expected_expiration_time": "2026-07-13T13:45:01.987654Z",
+        "expiration_time": "2026-07-13T13:45:01.987654Z",
+        "expiration_value": "91",
+        "fee_waiver_expiration_time": "2026-07-13T13:45:01.987654Z",
+        "floor_strike": 90,
+        "fractional_trading_enabled": true,
+        "functional_strike": "90.5",
+        "is_provisional": false,
+        "last_price_dollars": "0.6100",
+        "latest_expiration_time": "2026-07-13T13:45:01.987654Z",
+        "liquidity_dollars": "500.0000",
+        "market_type": "binary",
+        "mve_collection_ticker": "MVE-1",
+        "mve_selected_legs": [
+          {
+            "event_ticker": "EVENT-1",
+            "market_ticker": "MARKET-1",
+            "side": "yes",
+            "yes_settlement_value_dollars": "1.0000"
+          }
+        ],
+        "no_ask_dollars": "0.4000",
+        "no_bid_dollars": "0.3800",
+        "no_sub_title": "No",
+        "notional_value_dollars": "1.0000",
+        "open_interest_fp": "750.00",
+        "open_time": "2026-07-13T12:34:56.123456Z",
+        "previous_price_dollars": "0.6000",
+        "previous_yes_ask_dollars": "0.6300",
+        "previous_yes_bid_dollars": "0.5900",
+        "price_level_structure": "deci_cent",
+        "price_ranges": [
+          {
+            "end": "1.0000",
+            "start": "0.0000",
+            "step": "0.0010"
+          }
+        ],
+        "primary_participant_key": "participant-1",
+        "response_price_units": "usd_cent",
+        "result": "",
+        "rules_primary": "Primary rules",
+        "rules_secondary": "Secondary rules",
+        "settlement_timer_seconds": 3600,
+        "settlement_ts": "2026-07-13T13:45:01.987654Z",
+        "settlement_value_dollars": "1.0000",
+        "status": "open",
+        "strike_type": "between",
+        "subtitle": "90 to 91",
+        "tick_size": 1,
+        "ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "title": "Miami high",
+        "updated_time": "2026-07-13T13:45:01.987654Z",
+        "volume_24h_fp": "500.00",
+        "volume_fp": "1000.00",
+        "yes_ask_dollars": "0.6200",
+        "yes_ask_size_fp": "20.00",
+        "yes_bid_dollars": "0.6000",
+        "yes_bid_size_fp": "100.00",
+        "yes_sub_title": "Yes"
+      },
+      "id": "market-full",
+      "rust_type": "KalshiMarket",
+      "wire": {
+        "can_close_early": true,
+        "cap_strike": 91,
+        "close_time": "2026-07-13T13:45:01.987654Z",
+        "created_time": "2026-07-13T12:34:56.123456Z",
+        "custom_strike": {
+          "threshold": 90.5
+        },
+        "dollar_open_interest": 750,
+        "dollar_volume": 1000,
+        "early_close_condition": "Official report",
+        "event_ticker": "KXHIGHMIA-26JUL13",
+        "expected_expiration_time": "2026-07-13T13:45:01.987654Z",
+        "expiration_time": "2026-07-13T13:45:01.987654Z",
+        "expiration_value": "91",
+        "fee_waiver_expiration_time": "2026-07-13T13:45:01.987654Z",
+        "floor_strike": 90,
+        "fractional_trading_enabled": true,
+        "functional_strike": "90.5",
+        "is_provisional": false,
+        "last_price_dollars": "0.6100",
+        "latest_expiration_time": "2026-07-13T13:45:01.987654Z",
+        "liquidity_dollars": "500.0000",
+        "market_type": "binary",
+        "mve_collection_ticker": "MVE-1",
+        "mve_selected_legs": [
+          {
+            "event_ticker": "EVENT-1",
+            "market_ticker": "MARKET-1",
+            "side": "yes",
+            "yes_settlement_value_dollars": "1.0000"
+          }
+        ],
+        "no_ask_dollars": "0.4000",
+        "no_bid_dollars": "0.3800",
+        "no_sub_title": "No",
+        "notional_value_dollars": "1.0000",
+        "open_interest_fp": "750.00",
+        "open_time": "2026-07-13T12:34:56.123456Z",
+        "previous_price_dollars": "0.6000",
+        "previous_yes_ask_dollars": "0.6300",
+        "previous_yes_bid_dollars": "0.5900",
+        "price_level_structure": "deci_cent",
+        "price_ranges": [
+          {
+            "end": "1.0000",
+            "start": "0.0000",
+            "step": "0.0010"
+          }
+        ],
+        "primary_participant_key": "participant-1",
+        "response_price_units": "usd_cent",
+        "result": "",
+        "rules_primary": "Primary rules",
+        "rules_secondary": "Secondary rules",
+        "settlement_timer_seconds": 3600,
+        "settlement_ts": "2026-07-13T13:45:01.987654Z",
+        "settlement_value_dollars": "1.0000",
+        "status": "open",
+        "strike_type": "between",
+        "subtitle": "90 to 91",
+        "tick_size": 1,
+        "ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "title": "Miami high",
+        "updated_time": "2026-07-13T13:45:01.987654Z",
+        "volume_24h_fp": "500.00",
+        "volume_fp": "1000.00",
+        "yes_ask_dollars": "0.6200",
+        "yes_ask_size_fp": "20.00",
+        "yes_bid_dollars": "0.6000",
+        "yes_bid_size_fp": "100.00",
+        "yes_sub_title": "Yes"
+      }
+    },
+    {
+      "coverage_paths": {
+        "KalshiGetMarketResponse": []
+      },
+      "evidence": {
+        "KalshiGetMarketResponse": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "market": {
+          "can_close_early": true,
+          "cap_strike": 91,
+          "close_time": "2026-07-13T13:45:01.987654Z",
+          "created_time": "2026-07-13T12:34:56.123456Z",
+          "custom_strike": {
+            "threshold": 90.5
+          },
+          "dollar_open_interest": 750,
+          "dollar_volume": 1000,
+          "early_close_condition": "Official report",
+          "event_ticker": "KXHIGHMIA-26JUL13",
+          "expected_expiration_time": "2026-07-13T13:45:01.987654Z",
+          "expiration_time": "2026-07-13T13:45:01.987654Z",
+          "expiration_value": "91",
+          "fee_waiver_expiration_time": "2026-07-13T13:45:01.987654Z",
+          "floor_strike": 90,
+          "fractional_trading_enabled": true,
+          "functional_strike": "90.5",
+          "is_provisional": false,
+          "last_price_dollars": "0.6100",
+          "latest_expiration_time": "2026-07-13T13:45:01.987654Z",
+          "liquidity_dollars": "500.0000",
+          "market_type": "binary",
+          "mve_collection_ticker": "MVE-1",
+          "mve_selected_legs": [
+            {
+              "event_ticker": "EVENT-1",
+              "market_ticker": "MARKET-1",
+              "side": "yes",
+              "yes_settlement_value_dollars": "1.0000"
+            }
+          ],
+          "no_ask_dollars": "0.4000",
+          "no_bid_dollars": "0.3800",
+          "no_sub_title": "No",
+          "notional_value_dollars": "1.0000",
+          "open_interest_fp": "750.00",
+          "open_time": "2026-07-13T12:34:56.123456Z",
+          "previous_price_dollars": "0.6000",
+          "previous_yes_ask_dollars": "0.6300",
+          "previous_yes_bid_dollars": "0.5900",
+          "price_level_structure": "deci_cent",
+          "price_ranges": [
+            {
+              "end": "1.0000",
+              "start": "0.0000",
+              "step": "0.0010"
+            }
+          ],
+          "primary_participant_key": "participant-1",
+          "response_price_units": "usd_cent",
+          "result": "",
+          "rules_primary": "Primary rules",
+          "rules_secondary": "Secondary rules",
+          "settlement_timer_seconds": 3600,
+          "settlement_ts": "2026-07-13T13:45:01.987654Z",
+          "settlement_value_dollars": "1.0000",
+          "status": "open",
+          "strike_type": "between",
+          "subtitle": "90 to 91",
+          "tick_size": 1,
+          "ticker": "KXHIGHMIA-26JUL13-B90.5",
+          "title": "Miami high",
+          "updated_time": "2026-07-13T13:45:01.987654Z",
+          "volume_24h_fp": "500.00",
+          "volume_fp": "1000.00",
+          "yes_ask_dollars": "0.6200",
+          "yes_ask_size_fp": "20.00",
+          "yes_bid_dollars": "0.6000",
+          "yes_bid_size_fp": "100.00",
+          "yes_sub_title": "Yes"
+        }
+      },
+      "id": "get-market-response",
+      "rust_type": "KalshiGetMarketResponse",
+      "wire": {
+        "market": {
+          "can_close_early": true,
+          "cap_strike": 91,
+          "close_time": "2026-07-13T13:45:01.987654Z",
+          "created_time": "2026-07-13T12:34:56.123456Z",
+          "custom_strike": {
+            "threshold": 90.5
+          },
+          "dollar_open_interest": 750,
+          "dollar_volume": 1000,
+          "early_close_condition": "Official report",
+          "event_ticker": "KXHIGHMIA-26JUL13",
+          "expected_expiration_time": "2026-07-13T13:45:01.987654Z",
+          "expiration_time": "2026-07-13T13:45:01.987654Z",
+          "expiration_value": "91",
+          "fee_waiver_expiration_time": "2026-07-13T13:45:01.987654Z",
+          "floor_strike": 90,
+          "fractional_trading_enabled": true,
+          "functional_strike": "90.5",
+          "is_provisional": false,
+          "last_price_dollars": "0.6100",
+          "latest_expiration_time": "2026-07-13T13:45:01.987654Z",
+          "liquidity_dollars": "500.0000",
+          "market_type": "binary",
+          "mve_collection_ticker": "MVE-1",
+          "mve_selected_legs": [
+            {
+              "event_ticker": "EVENT-1",
+              "market_ticker": "MARKET-1",
+              "side": "yes",
+              "yes_settlement_value_dollars": "1.0000"
+            }
+          ],
+          "no_ask_dollars": "0.4000",
+          "no_bid_dollars": "0.3800",
+          "no_sub_title": "No",
+          "notional_value_dollars": "1.0000",
+          "open_interest_fp": "750.00",
+          "open_time": "2026-07-13T12:34:56.123456Z",
+          "previous_price_dollars": "0.6000",
+          "previous_yes_ask_dollars": "0.6300",
+          "previous_yes_bid_dollars": "0.5900",
+          "price_level_structure": "deci_cent",
+          "price_ranges": [
+            {
+              "end": "1.0000",
+              "start": "0.0000",
+              "step": "0.0010"
+            }
+          ],
+          "primary_participant_key": "participant-1",
+          "response_price_units": "usd_cent",
+          "result": "",
+          "rules_primary": "Primary rules",
+          "rules_secondary": "Secondary rules",
+          "settlement_timer_seconds": 3600,
+          "settlement_ts": "2026-07-13T13:45:01.987654Z",
+          "settlement_value_dollars": "1.0000",
+          "status": "open",
+          "strike_type": "between",
+          "subtitle": "90 to 91",
+          "tick_size": 1,
+          "ticker": "KXHIGHMIA-26JUL13-B90.5",
+          "title": "Miami high",
+          "updated_time": "2026-07-13T13:45:01.987654Z",
+          "volume_24h_fp": "500.00",
+          "volume_fp": "1000.00",
+          "yes_ask_dollars": "0.6200",
+          "yes_ask_size_fp": "20.00",
+          "yes_bid_dollars": "0.6000",
+          "yes_bid_size_fp": "100.00",
+          "yes_sub_title": "Yes"
+        }
+      }
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketsPage": []
+      },
+      "evidence": {
+        "KalshiMarketsPage": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "cursor": "next",
+        "markets": [
+          {
+            "can_close_early": true,
+            "cap_strike": 91,
+            "close_time": "2026-07-13T13:45:01.987654Z",
+            "created_time": "2026-07-13T12:34:56.123456Z",
+            "custom_strike": {
+              "threshold": 90.5
+            },
+            "dollar_open_interest": 750,
+            "dollar_volume": 1000,
+            "early_close_condition": "Official report",
+            "event_ticker": "KXHIGHMIA-26JUL13",
+            "expected_expiration_time": "2026-07-13T13:45:01.987654Z",
+            "expiration_time": "2026-07-13T13:45:01.987654Z",
+            "expiration_value": "91",
+            "fee_waiver_expiration_time": "2026-07-13T13:45:01.987654Z",
+            "floor_strike": 90,
+            "fractional_trading_enabled": true,
+            "functional_strike": "90.5",
+            "is_provisional": false,
+            "last_price_dollars": "0.6100",
+            "latest_expiration_time": "2026-07-13T13:45:01.987654Z",
+            "liquidity_dollars": "500.0000",
+            "market_type": "binary",
+            "mve_collection_ticker": "MVE-1",
+            "mve_selected_legs": [
+              {
+                "event_ticker": "EVENT-1",
+                "market_ticker": "MARKET-1",
+                "side": "yes",
+                "yes_settlement_value_dollars": "1.0000"
+              }
+            ],
+            "no_ask_dollars": "0.4000",
+            "no_bid_dollars": "0.3800",
+            "no_sub_title": "No",
+            "notional_value_dollars": "1.0000",
+            "open_interest_fp": "750.00",
+            "open_time": "2026-07-13T12:34:56.123456Z",
+            "previous_price_dollars": "0.6000",
+            "previous_yes_ask_dollars": "0.6300",
+            "previous_yes_bid_dollars": "0.5900",
+            "price_level_structure": "deci_cent",
+            "price_ranges": [
+              {
+                "end": "1.0000",
+                "start": "0.0000",
+                "step": "0.0010"
+              }
+            ],
+            "primary_participant_key": "participant-1",
+            "response_price_units": "usd_cent",
+            "result": "",
+            "rules_primary": "Primary rules",
+            "rules_secondary": "Secondary rules",
+            "settlement_timer_seconds": 3600,
+            "settlement_ts": "2026-07-13T13:45:01.987654Z",
+            "settlement_value_dollars": "1.0000",
+            "status": "open",
+            "strike_type": "between",
+            "subtitle": "90 to 91",
+            "tick_size": 1,
+            "ticker": "KXHIGHMIA-26JUL13-B90.5",
+            "title": "Miami high",
+            "updated_time": "2026-07-13T13:45:01.987654Z",
+            "volume_24h_fp": "500.00",
+            "volume_fp": "1000.00",
+            "yes_ask_dollars": "0.6200",
+            "yes_ask_size_fp": "20.00",
+            "yes_bid_dollars": "0.6000",
+            "yes_bid_size_fp": "100.00",
+            "yes_sub_title": "Yes"
+          }
+        ]
+      },
+      "id": "markets-page",
+      "rust_type": "KalshiMarketsPage",
+      "wire": {
+        "cursor": "next",
+        "markets": [
+          {
+            "can_close_early": true,
+            "cap_strike": 91,
+            "close_time": "2026-07-13T13:45:01.987654Z",
+            "created_time": "2026-07-13T12:34:56.123456Z",
+            "custom_strike": {
+              "threshold": 90.5
+            },
+            "dollar_open_interest": 750,
+            "dollar_volume": 1000,
+            "early_close_condition": "Official report",
+            "event_ticker": "KXHIGHMIA-26JUL13",
+            "expected_expiration_time": "2026-07-13T13:45:01.987654Z",
+            "expiration_time": "2026-07-13T13:45:01.987654Z",
+            "expiration_value": "91",
+            "fee_waiver_expiration_time": "2026-07-13T13:45:01.987654Z",
+            "floor_strike": 90,
+            "fractional_trading_enabled": true,
+            "functional_strike": "90.5",
+            "is_provisional": false,
+            "last_price_dollars": "0.6100",
+            "latest_expiration_time": "2026-07-13T13:45:01.987654Z",
+            "liquidity_dollars": "500.0000",
+            "market_type": "binary",
+            "mve_collection_ticker": "MVE-1",
+            "mve_selected_legs": [
+              {
+                "event_ticker": "EVENT-1",
+                "market_ticker": "MARKET-1",
+                "side": "yes",
+                "yes_settlement_value_dollars": "1.0000"
+              }
+            ],
+            "no_ask_dollars": "0.4000",
+            "no_bid_dollars": "0.3800",
+            "no_sub_title": "No",
+            "notional_value_dollars": "1.0000",
+            "open_interest_fp": "750.00",
+            "open_time": "2026-07-13T12:34:56.123456Z",
+            "previous_price_dollars": "0.6000",
+            "previous_yes_ask_dollars": "0.6300",
+            "previous_yes_bid_dollars": "0.5900",
+            "price_level_structure": "deci_cent",
+            "price_ranges": [
+              {
+                "end": "1.0000",
+                "start": "0.0000",
+                "step": "0.0010"
+              }
+            ],
+            "primary_participant_key": "participant-1",
+            "response_price_units": "usd_cent",
+            "result": "",
+            "rules_primary": "Primary rules",
+            "rules_secondary": "Secondary rules",
+            "settlement_timer_seconds": 3600,
+            "settlement_ts": "2026-07-13T13:45:01.987654Z",
+            "settlement_value_dollars": "1.0000",
+            "status": "open",
+            "strike_type": "between",
+            "subtitle": "90 to 91",
+            "tick_size": 1,
+            "ticker": "KXHIGHMIA-26JUL13-B90.5",
+            "title": "Miami high",
+            "updated_time": "2026-07-13T13:45:01.987654Z",
+            "volume_24h_fp": "500.00",
+            "volume_fp": "1000.00",
+            "yes_ask_dollars": "0.6200",
+            "yes_ask_size_fp": "20.00",
+            "yes_bid_dollars": "0.6000",
+            "yes_bid_size_fp": "100.00",
+            "yes_sub_title": "Yes"
+          }
+        ]
+      }
+    },
+    {
+      "coverage_paths": {
+        "KalshiSubscribeCommand": [],
+        "KalshiWsChannel": [
+          "channels",
+          0
+        ]
+      },
+      "evidence": {
+        "KalshiSubscribeCommand": [
+          "non_default_round_trip"
+        ],
+        "KalshiWsChannel": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
+      "expected": {
+        "channels": [
+          "orderbook_delta",
+          "ticker"
+        ],
+        "id": 1,
+        "market_id": "market-1",
+        "market_ids": [
+          "market-1"
+        ],
+        "market_ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "market_tickers": [
+          "KXHIGHMIA-26JUL13-B90.5"
+        ]
+      },
+      "id": "subscribe",
+      "rust_type": "KalshiSubscribeCommand",
+      "wire": {
+        "channels": [
+          "orderbook_delta",
+          "ticker"
+        ],
+        "id": 1,
+        "market_id": "market-1",
+        "market_ids": [
+          "market-1"
+        ],
+        "market_ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "market_tickers": [
+          "KXHIGHMIA-26JUL13-B90.5"
+        ]
+      }
+    },
+    {
+      "coverage_paths": {
+        "KalshiUnsubscribeCommand": []
+      },
+      "evidence": {
+        "KalshiUnsubscribeCommand": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
+      "expected": {
+        "id": 2,
+        "sids": [
+          1,
+          2
+        ]
+      },
+      "id": "unsubscribe",
+      "rust_type": "KalshiUnsubscribeCommand",
+      "wire": {
+        "id": 2,
+        "sids": [
+          1,
+          2
+        ]
+      }
+    },
+    {
+      "coverage_paths": {
+        "KalshiListSubscriptionsCommand": []
+      },
+      "evidence": {
+        "KalshiListSubscriptionsCommand": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
+      "expected": {
+        "id": 3
+      },
+      "id": "list-subscriptions",
+      "rust_type": "KalshiListSubscriptionsCommand",
+      "wire": {
+        "id": 3
+      }
+    },
+    {
+      "coverage_paths": {
+        "KalshiSubscriptionUpdateAction": [
+          "action"
+        ],
+        "KalshiUpdateSubscriptionCommand": []
+      },
+      "evidence": {
+        "KalshiSubscriptionUpdateAction": [
+          "non_default_round_trip"
+        ],
+        "KalshiUpdateSubscriptionCommand": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
+      "expected": {
+        "action": "add_markets",
+        "id": 4,
+        "market_tickers": [
+          "KXHIGHMIA-26JUL13-B90.5"
+        ],
+        "sid": 1,
+        "sids": [
+          1
+        ]
+      },
+      "id": "update-subscription",
+      "rust_type": "KalshiUpdateSubscriptionCommand",
+      "wire": {
+        "action": "add_markets",
+        "id": 4,
+        "market_tickers": [
+          "KXHIGHMIA-26JUL13-B90.5"
+        ],
+        "sid": 1,
+        "sids": [
+          1
+        ]
+      }
+    },
+    {
+      "coverage_paths": {
+        "KalshiOrderbookSnapshotMessage": []
+      },
+      "evidence": {
+        "KalshiOrderbookSnapshotMessage": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
+      "expected": {
+        "market_id": "market-1",
+        "market_ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "no_dollars_fp": [
+          {
+            "count_fp": "100.00",
+            "price_dollars": "0.6100"
+          }
+        ],
+        "seq": 2,
+        "sid": 1,
+        "yes_dollars_fp": [
+          {
+            "count_fp": "100.00",
+            "price_dollars": "0.6100"
+          }
+        ]
+      },
+      "id": "orderbook-snapshot",
+      "rust_type": "KalshiOrderbookSnapshotMessage",
+      "wire": {
+        "market_id": "market-1",
+        "market_ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "no_dollars_fp": [
+          {
+            "count_fp": "100.00",
+            "price_dollars": "0.6100"
+          }
+        ],
+        "seq": 2,
+        "sid": 1,
+        "yes_dollars_fp": [
+          {
+            "count_fp": "100.00",
+            "price_dollars": "0.6100"
+          }
+        ]
+      }
+    },
+    {
+      "coverage_paths": {
+        "KalshiOrderbookDeltaMessage": []
+      },
+      "evidence": {
+        "KalshiOrderbookDeltaMessage": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "client_order_id": "client-1",
+        "delta_fp": "-2.00",
+        "market_id": "market-1",
+        "market_ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "price_dollars": "0.6200",
+        "seq": 3,
+        "sid": 1,
+        "side": "yes",
+        "subaccount": 2,
+        "ts": "2026-07-13T13:45:01.987654Z"
+      },
+      "id": "orderbook-delta",
+      "rust_type": "KalshiOrderbookDeltaMessage",
+      "wire": {
+        "client_order_id": "client-1",
+        "delta_fp": "-2.00",
+        "market_id": "market-1",
+        "market_ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "price_dollars": "0.6200",
+        "seq": 3,
+        "sid": 1,
+        "side": "yes",
+        "subaccount": 2,
+        "ts": "2026-07-13T13:45:01.987654Z"
+      }
+    },
+    {
+      "coverage_paths": {
+        "KalshiTickerMessage": []
+      },
+      "evidence": {
+        "KalshiTickerMessage": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "dollar_open_interest": 50,
+        "dollar_volume": 100,
+        "last_trade_size_fp": "1.00",
+        "market_id": "market-1",
+        "market_ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "open_interest_fp": "50.00",
+        "price_dollars": "0.6100",
+        "sid": 1,
+        "time": "2026-07-13T13:45:01.987654Z",
+        "ts": 1786800000,
+        "volume_fp": "100.00",
+        "yes_ask_dollars": "0.6200",
+        "yes_ask_size_fp": "12.00",
+        "yes_bid_dollars": "0.6000",
+        "yes_bid_size_fp": "10.00"
+      },
+      "id": "ticker",
+      "rust_type": "KalshiTickerMessage",
+      "wire": {
+        "dollar_open_interest": 50,
+        "dollar_volume": 100,
+        "last_trade_size_fp": "1.00",
+        "market_id": "market-1",
+        "market_ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "open_interest_fp": "50.00",
+        "price_dollars": "0.6100",
+        "sid": 1,
+        "time": "2026-07-13T13:45:01.987654Z",
+        "ts": 1786800000,
+        "volume_fp": "100.00",
+        "yes_ask_dollars": "0.6200",
+        "yes_ask_size_fp": "12.00",
+        "yes_bid_dollars": "0.6000",
+        "yes_bid_size_fp": "10.00"
+      }
+    },
+    {
+      "coverage_paths": {
+        "KalshiTradeMessage": []
+      },
+      "evidence": {
+        "KalshiTradeMessage": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
+      "expected": {
+        "count_fp": "2.00",
+        "market_ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "no_price_dollars": "0.3900",
+        "sid": 1,
+        "taker_side": "yes",
+        "trade_id": "trade-1",
+        "ts": 1786800000,
+        "yes_price_dollars": "0.6100"
+      },
+      "id": "trade",
+      "rust_type": "KalshiTradeMessage",
+      "wire": {
+        "count_fp": "2.00",
+        "market_ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "no_price_dollars": "0.3900",
+        "sid": 1,
+        "taker_side": "yes",
+        "trade_id": "trade-1",
+        "ts": 1786800000,
+        "yes_price_dollars": "0.6100"
+      }
+    },
+    {
+      "coverage_paths": {
+        "KalshiUserOrderMessage": []
+      },
+      "evidence": {
+        "KalshiUserOrderMessage": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "client_order_id": "client-1",
+        "created_time": "2026-07-13T12:34:56.123456Z",
+        "expiration_time": "2026-07-13T13:45:01.987654Z",
+        "fill_count_fp": "10.00",
+        "initial_count_fp": "10.00",
+        "is_yes": true,
+        "maker_fill_cost_dollars": "0.0000",
+        "order_group_id": "group-1",
+        "order_id": "order-1",
+        "remaining_count_fp": "0.00",
+        "self_trade_prevention_type": "maker",
+        "sid": 1,
+        "side": "yes",
+        "status": "executed",
+        "subaccount_number": 2,
+        "taker_fill_cost_dollars": "6.1000",
+        "ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "user_id": "user-1",
+        "yes_price_dollars": "0.6100"
+      },
+      "id": "user-order",
+      "rust_type": "KalshiUserOrderMessage",
+      "wire": {
+        "client_order_id": "client-1",
+        "created_time": "2026-07-13T12:34:56.123456Z",
+        "expiration_time": "2026-07-13T13:45:01.987654Z",
+        "fill_count_fp": "10.00",
+        "initial_count_fp": "10.00",
+        "is_yes": true,
+        "maker_fill_cost_dollars": "0.0000",
+        "order_group_id": "group-1",
+        "order_id": "order-1",
+        "remaining_count_fp": "0.00",
+        "self_trade_prevention_type": "maker",
+        "sid": 1,
+        "side": "yes",
+        "status": "executed",
+        "subaccount_number": 2,
+        "taker_fill_cost_dollars": "6.1000",
+        "ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "user_id": "user-1",
+        "yes_price_dollars": "0.6100"
+      }
+    },
+    {
+      "coverage_paths": {
+        "KalshiUserFillMessage": []
+      },
+      "evidence": {
+        "KalshiUserFillMessage": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
+      "expected": {
+        "action": "buy",
+        "client_order_id": "client-1",
+        "count_fp": "2.00",
+        "fee_cost": "0.0300",
+        "is_taker": true,
+        "market_ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "order_id": "order-1",
+        "post_position_fp": "2.00",
+        "purchased_side": "yes",
+        "sid": 1,
+        "side": "yes",
+        "subaccount": 2,
+        "trade_id": "trade-1",
+        "ts": 1786800000,
+        "yes_price_dollars": "0.6100"
+      },
+      "id": "user-fill",
+      "rust_type": "KalshiUserFillMessage",
+      "wire": {
+        "action": "buy",
+        "client_order_id": "client-1",
+        "count_fp": "2.00",
+        "fee_cost": "0.0300",
+        "is_taker": true,
+        "market_ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "order_id": "order-1",
+        "post_position_fp": "2.00",
+        "purchased_side": "yes",
+        "sid": 1,
+        "side": "yes",
+        "subaccount": 2,
+        "trade_id": "trade-1",
+        "ts": 1786800000,
+        "yes_price_dollars": "0.6100"
+      }
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketPositionMessage": []
+      },
+      "evidence": {
+        "KalshiMarketPositionMessage": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
+      "expected": {
+        "fees_paid_dollars": "0.0300",
+        "market_ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "position_cost_dollars": "1.2200",
+        "position_fee_cost_dollars": "0.0300",
+        "position_fp": "2.00",
+        "realized_pnl_dollars": "0.1000",
+        "sid": 1,
+        "user_id": "user-1",
+        "volume_fp": "2.00"
+      },
+      "id": "market-position",
+      "rust_type": "KalshiMarketPositionMessage",
+      "wire": {
+        "fees_paid_dollars": "0.0300",
+        "market_ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "position_cost_dollars": "1.2200",
+        "position_fee_cost_dollars": "0.0300",
+        "position_fp": "2.00",
+        "realized_pnl_dollars": "0.1000",
+        "sid": 1,
+        "user_id": "user-1",
+        "volume_fp": "2.00"
+      }
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketLifecycleEventType": [
+          "event_type"
+        ],
+        "KalshiMarketLifecycleMessage": [],
+        "KalshiMarketLifecycleMetadata": [
+          "additional_metadata"
+        ]
+      },
+      "evidence": {
+        "KalshiMarketLifecycleEventType": [
+          "non_default_round_trip"
+        ],
+        "KalshiMarketLifecycleMessage": [
+          "non_default_round_trip"
+        ],
+        "KalshiMarketLifecycleMetadata": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
+      "expected": {
+        "additional_metadata": {
+          "can_close_early": true,
+          "cap_strike": 91.0,
+          "custom_strike": {
+            "threshold": 90.5
+          },
+          "event_ticker": "KXHIGHMIA-26JUL13",
+          "expected_expiration_ts": 1786800000,
+          "floor_strike": 90.0,
+          "name": "Miami high",
+          "no_sub_title": "No",
+          "rules_primary": "Primary",
+          "rules_secondary": "Secondary",
+          "strike_type": "between",
+          "title": "Miami high",
+          "yes_sub_title": "Yes"
+        },
+        "close_ts": 1786800000,
+        "determination_ts": 1786900000,
+        "event_type": "created",
+        "fractional_trading_enabled": true,
+        "is_deactivated": false,
+        "market_ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "open_ts": 1786700000,
+        "price_level_structure": "linear_cent",
+        "result": "yes",
+        "settled_ts": 1786900001,
+        "settlement_value": "1.0000",
+        "sid": 1
+      },
+      "id": "market-lifecycle",
+      "rust_type": "KalshiMarketLifecycleMessage",
+      "wire": {
+        "additional_metadata": {
+          "can_close_early": true,
+          "cap_strike": 91.0,
+          "custom_strike": {
+            "threshold": 90.5
+          },
+          "event_ticker": "KXHIGHMIA-26JUL13",
+          "expected_expiration_ts": 1786800000,
+          "floor_strike": 90.0,
+          "name": "Miami high",
+          "no_sub_title": "No",
+          "rules_primary": "Primary",
+          "rules_secondary": "Secondary",
+          "strike_type": "between",
+          "title": "Miami high",
+          "yes_sub_title": "Yes"
+        },
+        "close_ts": 1786800000,
+        "determination_ts": 1786900000,
+        "event_type": "created",
+        "fractional_trading_enabled": true,
+        "is_deactivated": false,
+        "market_ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "open_ts": 1786700000,
+        "price_level_structure": "linear_cent",
+        "result": "yes",
+        "settled_ts": 1786900001,
+        "settlement_value": "1.0000",
+        "sid": 1
+      }
+    },
+    {
+      "coverage_paths": {
+        "KalshiCollateralReturnType": [
+          "collateral_return_type"
+        ],
+        "KalshiEventLifecycleMessage": []
+      },
+      "evidence": {
+        "KalshiCollateralReturnType": [
+          "non_default_round_trip"
+        ],
+        "KalshiEventLifecycleMessage": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
+      "expected": {
+        "collateral_return_type": "MECNET",
+        "event_ticker": "KXHIGHMIA-26JUL13",
+        "series_ticker": "KXHIGHMIA",
+        "sid": 1,
+        "strike_date": 20260713,
+        "strike_period": "day",
+        "subtitle": "July 13",
+        "title": "Miami high"
+      },
+      "id": "event-lifecycle",
+      "rust_type": "KalshiEventLifecycleMessage",
+      "wire": {
+        "collateral_return_type": "MECNET",
+        "event_ticker": "KXHIGHMIA-26JUL13",
+        "series_ticker": "KXHIGHMIA",
+        "sid": 1,
+        "strike_date": 20260713,
+        "strike_period": "day",
+        "subtitle": "July 13",
+        "title": "Miami high"
+      }
+    },
+    {
+      "coverage_paths": {
+        "KalshiWsMessage": []
+      },
+      "evidence": {
+        "KalshiWsMessage": [
+          "explicit_null",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "explicit_null",
+        "non_default_round_trip"
+      ],
+      "expected": {
+        "client_order_id": null,
+        "delta_fp": "1.00",
+        "market_id": "market-1",
+        "market_ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "price_dollars": "0.6200",
+        "seq": 3,
+        "sid": 1,
+        "side": "yes",
+        "subaccount": null,
+        "ts": null
+      },
+      "id": "websocket-union",
+      "rust_type": "KalshiWsMessage",
+      "wire": {
+        "client_order_id": null,
+        "delta_fp": "1.00",
+        "market_id": "market-1",
+        "market_ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "price_dollars": "0.6200",
+        "seq": 3,
+        "sid": 1,
+        "side": "yes",
+        "subaccount": null,
+        "ts": null
+      }
+    },
+    {
+      "coverage_paths": {
+        "KalshiOrder": []
+      },
+      "evidence": {
+        "KalshiOrder": [
+          "explicit_null",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "explicit_null",
+        "non_default_round_trip"
+      ],
+      "expected": {
+        "action": "buy",
+        "cancel_order_on_pause": null,
+        "client_order_id": null,
+        "created_time": null,
+        "expiration_time": null,
+        "fill_count_fp": null,
+        "initial_count_fp": null,
+        "last_update_time": null,
+        "maker_fees_dollars": null,
+        "maker_fill_cost_dollars": null,
+        "no_price_dollars": null,
+        "order_group_id": null,
+        "order_id": "",
+        "remaining_count_fp": null,
+        "self_trade_prevention_type": null,
+        "side": "yes",
+        "status": "resting",
+        "subaccount_number": null,
+        "taker_fees_dollars": null,
+        "taker_fill_cost_dollars": null,
+        "ticker": "",
+        "type": "limit",
+        "user_id": "",
+        "yes_price_dollars": null
+      },
+      "id": "order-defaults",
+      "rust_type": "KalshiOrder",
+      "wire": {
+        "action": "buy",
+        "cancel_order_on_pause": null,
+        "client_order_id": null,
+        "created_time": null,
+        "expiration_time": null,
+        "fill_count_fp": null,
+        "initial_count_fp": null,
+        "last_update_time": null,
+        "maker_fees_dollars": null,
+        "maker_fill_cost_dollars": null,
+        "no_price_dollars": null,
+        "order_group_id": null,
+        "order_id": "",
+        "remaining_count_fp": null,
+        "self_trade_prevention_type": null,
+        "side": "yes",
+        "status": "resting",
+        "subaccount_number": null,
+        "taker_fees_dollars": null,
+        "taker_fill_cost_dollars": null,
+        "ticker": "",
+        "type": "limit",
+        "user_id": "",
+        "yes_price_dollars": null
+      }
+    },
+    {
+      "coverage_paths": {
+        "KalshiGetOrdersResponse": []
+      },
+      "evidence": {
+        "KalshiGetOrdersResponse": [
+          "explicit_null",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "explicit_null",
+        "non_default_round_trip"
+      ],
+      "expected": {
+        "cursor": null,
+        "orders": []
+      },
+      "id": "orders-empty-page",
+      "rust_type": "KalshiGetOrdersResponse",
+      "wire": {
+        "cursor": null,
+        "orders": []
+      }
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketsPage": []
+      },
+      "evidence": {
+        "KalshiMarketsPage": [
+          "explicit_null",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "explicit_null",
+        "non_default_round_trip"
+      ],
+      "expected": {
+        "cursor": null,
+        "markets": []
+      },
+      "id": "markets-empty-page",
+      "rust_type": "KalshiMarketsPage",
+      "wire": {
+        "cursor": null,
+        "markets": []
+      }
+    },
+    {
+      "coverage_paths": {
+        "KalshiOrderCreateRequest": []
+      },
+      "evidence": {
+        "KalshiOrderCreateRequest": [
+          "explicit_null",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "explicit_null",
+        "non_default_round_trip"
+      ],
+      "expected": {
+        "action": "future-action",
+        "buy_max_cost": null,
+        "cancel_order_on_pause": null,
+        "client_order_id": null,
+        "count": null,
+        "count_fp": null,
+        "expiration_ts": null,
+        "no_price": null,
+        "no_price_dollars": null,
+        "order_group_id": null,
+        "post_only": null,
+        "reduce_only": null,
+        "self_trade_prevention_type": null,
+        "sell_position_floor": null,
+        "side": "future-side",
+        "subaccount": 0,
+        "ticker": "future-market",
+        "time_in_force": null,
+        "yes_price": null,
+        "yes_price_dollars": null
+      },
+      "id": "forward-compatible-enum-string",
+      "rust_type": "KalshiOrderCreateRequest",
+      "wire": {
+        "action": "future-action",
+        "buy_max_cost": null,
+        "cancel_order_on_pause": null,
+        "client_order_id": null,
+        "count": null,
+        "count_fp": null,
+        "expiration_ts": null,
+        "no_price": null,
+        "no_price_dollars": null,
+        "order_group_id": null,
+        "post_only": null,
+        "reduce_only": null,
+        "self_trade_prevention_type": null,
+        "sell_position_floor": null,
+        "side": "future-side",
+        "subaccount": 0,
+        "ticker": "future-market",
+        "time_in_force": null,
+        "yes_price": null,
+        "yes_price_dollars": null
+      }
+    },
+    {
+      "coverage_paths": {
+        "KalshiCollateralReturnType": []
+      },
+      "evidence": {
+        "KalshiCollateralReturnType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "MECNET",
+      "id": "KalshiCollateralReturnType-MECNET",
+      "rust_type": "KalshiCollateralReturnType",
+      "wire": "MECNET"
+    },
+    {
+      "coverage_paths": {
+        "KalshiCollateralReturnType": []
+      },
+      "evidence": {
+        "KalshiCollateralReturnType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "DIRECNET",
+      "id": "KalshiCollateralReturnType-DIRECNET",
+      "rust_type": "KalshiCollateralReturnType",
+      "wire": "DIRECNET"
+    },
+    {
+      "coverage_paths": {
+        "KalshiCollateralReturnType": []
+      },
+      "evidence": {
+        "KalshiCollateralReturnType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "",
+      "id": "KalshiCollateralReturnType-empty",
+      "rust_type": "KalshiCollateralReturnType",
+      "wire": ""
+    },
+    {
+      "coverage_paths": {
+        "KalshiImmediateTimeInForce": []
+      },
+      "evidence": {
+        "KalshiImmediateTimeInForce": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "fill_or_kill",
+      "id": "KalshiImmediateTimeInForce-fill_or_kill",
+      "rust_type": "KalshiImmediateTimeInForce",
+      "wire": "fill_or_kill"
+    },
+    {
+      "coverage_paths": {
+        "KalshiImmediateTimeInForce": []
+      },
+      "evidence": {
+        "KalshiImmediateTimeInForce": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "immediate_or_cancel",
+      "id": "KalshiImmediateTimeInForce-immediate_or_cancel",
+      "rust_type": "KalshiImmediateTimeInForce",
+      "wire": "immediate_or_cancel"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketLifecycleEventType": []
+      },
+      "evidence": {
+        "KalshiMarketLifecycleEventType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "created",
+      "id": "KalshiMarketLifecycleEventType-created",
+      "rust_type": "KalshiMarketLifecycleEventType",
+      "wire": "created"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketLifecycleEventType": []
+      },
+      "evidence": {
+        "KalshiMarketLifecycleEventType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "deactivated",
+      "id": "KalshiMarketLifecycleEventType-deactivated",
+      "rust_type": "KalshiMarketLifecycleEventType",
+      "wire": "deactivated"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketLifecycleEventType": []
+      },
+      "evidence": {
+        "KalshiMarketLifecycleEventType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "activated",
+      "id": "KalshiMarketLifecycleEventType-activated",
+      "rust_type": "KalshiMarketLifecycleEventType",
+      "wire": "activated"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketLifecycleEventType": []
+      },
+      "evidence": {
+        "KalshiMarketLifecycleEventType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "close_date_updated",
+      "id": "KalshiMarketLifecycleEventType-close_date_updated",
+      "rust_type": "KalshiMarketLifecycleEventType",
+      "wire": "close_date_updated"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketLifecycleEventType": []
+      },
+      "evidence": {
+        "KalshiMarketLifecycleEventType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "determined",
+      "id": "KalshiMarketLifecycleEventType-determined",
+      "rust_type": "KalshiMarketLifecycleEventType",
+      "wire": "determined"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketLifecycleEventType": []
+      },
+      "evidence": {
+        "KalshiMarketLifecycleEventType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "settled",
+      "id": "KalshiMarketLifecycleEventType-settled",
+      "rust_type": "KalshiMarketLifecycleEventType",
+      "wire": "settled"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketLifecycleEventType": []
+      },
+      "evidence": {
+        "KalshiMarketLifecycleEventType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "fractional_trading_updated",
+      "id": "KalshiMarketLifecycleEventType-fractional_trading_updated",
+      "rust_type": "KalshiMarketLifecycleEventType",
+      "wire": "fractional_trading_updated"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketLifecycleEventType": []
+      },
+      "evidence": {
+        "KalshiMarketLifecycleEventType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "price_level_structure_updated",
+      "id": "KalshiMarketLifecycleEventType-price_level_structure_updated",
+      "rust_type": "KalshiMarketLifecycleEventType",
+      "wire": "price_level_structure_updated"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketResult": []
+      },
+      "evidence": {
+        "KalshiMarketResult": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "yes",
+      "id": "KalshiMarketResult-yes",
+      "rust_type": "KalshiMarketResult",
+      "wire": "yes"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketResult": []
+      },
+      "evidence": {
+        "KalshiMarketResult": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "no",
+      "id": "KalshiMarketResult-no",
+      "rust_type": "KalshiMarketResult",
+      "wire": "no"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketResult": []
+      },
+      "evidence": {
+        "KalshiMarketResult": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "scalar",
+      "id": "KalshiMarketResult-scalar",
+      "rust_type": "KalshiMarketResult",
+      "wire": "scalar"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketResult": []
+      },
+      "evidence": {
+        "KalshiMarketResult": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "",
+      "id": "KalshiMarketResult-empty",
+      "rust_type": "KalshiMarketResult",
+      "wire": ""
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketSide": []
+      },
+      "evidence": {
+        "KalshiMarketSide": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "yes",
+      "id": "KalshiMarketSide-yes",
+      "rust_type": "KalshiMarketSide",
+      "wire": "yes"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketSide": []
+      },
+      "evidence": {
+        "KalshiMarketSide": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "no",
+      "id": "KalshiMarketSide-no",
+      "rust_type": "KalshiMarketSide",
+      "wire": "no"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketStatus": []
+      },
+      "evidence": {
+        "KalshiMarketStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "unopened",
+      "id": "KalshiMarketStatus-unopened",
+      "rust_type": "KalshiMarketStatus",
+      "wire": "unopened"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketStatus": []
+      },
+      "evidence": {
+        "KalshiMarketStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "open",
+      "id": "KalshiMarketStatus-open",
+      "rust_type": "KalshiMarketStatus",
+      "wire": "open"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketStatus": []
+      },
+      "evidence": {
+        "KalshiMarketStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "paused",
+      "id": "KalshiMarketStatus-paused",
+      "rust_type": "KalshiMarketStatus",
+      "wire": "paused"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketStatus": []
+      },
+      "evidence": {
+        "KalshiMarketStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "closed",
+      "id": "KalshiMarketStatus-closed",
+      "rust_type": "KalshiMarketStatus",
+      "wire": "closed"
+    },
+    {
+      "coverage_paths": {
+        "KalshiMarketStatus": []
+      },
+      "evidence": {
+        "KalshiMarketStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "settled",
+      "id": "KalshiMarketStatus-settled",
+      "rust_type": "KalshiMarketStatus",
+      "wire": "settled"
+    },
+    {
+      "coverage_paths": {
+        "KalshiOrderAction": []
+      },
+      "evidence": {
+        "KalshiOrderAction": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "buy",
+      "id": "KalshiOrderAction-buy",
+      "rust_type": "KalshiOrderAction",
+      "wire": "buy"
+    },
+    {
+      "coverage_paths": {
+        "KalshiOrderAction": []
+      },
+      "evidence": {
+        "KalshiOrderAction": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "sell",
+      "id": "KalshiOrderAction-sell",
+      "rust_type": "KalshiOrderAction",
+      "wire": "sell"
+    },
+    {
+      "coverage_paths": {
+        "KalshiOrderStatus": []
+      },
+      "evidence": {
+        "KalshiOrderStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "resting",
+      "id": "KalshiOrderStatus-resting",
+      "rust_type": "KalshiOrderStatus",
+      "wire": "resting"
+    },
+    {
+      "coverage_paths": {
+        "KalshiOrderStatus": []
+      },
+      "evidence": {
+        "KalshiOrderStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "canceled",
+      "id": "KalshiOrderStatus-canceled",
+      "rust_type": "KalshiOrderStatus",
+      "wire": "canceled"
+    },
+    {
+      "coverage_paths": {
+        "KalshiOrderStatus": []
+      },
+      "evidence": {
+        "KalshiOrderStatus": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "executed",
+      "id": "KalshiOrderStatus-executed",
+      "rust_type": "KalshiOrderStatus",
+      "wire": "executed"
+    },
+    {
+      "coverage_paths": {
+        "KalshiOrderType": []
+      },
+      "evidence": {
+        "KalshiOrderType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "limit",
+      "id": "KalshiOrderType-limit",
+      "rust_type": "KalshiOrderType",
+      "wire": "limit"
+    },
+    {
+      "coverage_paths": {
+        "KalshiPriceLevelStructure": []
+      },
+      "evidence": {
+        "KalshiPriceLevelStructure": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "linear_cent",
+      "id": "KalshiPriceLevelStructure-linear_cent",
+      "rust_type": "KalshiPriceLevelStructure",
+      "wire": "linear_cent"
+    },
+    {
+      "coverage_paths": {
+        "KalshiPriceLevelStructure": []
+      },
+      "evidence": {
+        "KalshiPriceLevelStructure": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "deci_cent",
+      "id": "KalshiPriceLevelStructure-deci_cent",
+      "rust_type": "KalshiPriceLevelStructure",
+      "wire": "deci_cent"
+    },
+    {
+      "coverage_paths": {
+        "KalshiPriceLevelStructure": []
+      },
+      "evidence": {
+        "KalshiPriceLevelStructure": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "tapered_deci_cent",
+      "id": "KalshiPriceLevelStructure-tapered_deci_cent",
+      "rust_type": "KalshiPriceLevelStructure",
+      "wire": "tapered_deci_cent"
+    },
+    {
+      "coverage_paths": {
+        "KalshiSelfTradePreventionType": []
+      },
+      "evidence": {
+        "KalshiSelfTradePreventionType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "taker_at_cross",
+      "id": "KalshiSelfTradePreventionType-taker_at_cross",
+      "rust_type": "KalshiSelfTradePreventionType",
+      "wire": "taker_at_cross"
+    },
+    {
+      "coverage_paths": {
+        "KalshiSelfTradePreventionType": []
+      },
+      "evidence": {
+        "KalshiSelfTradePreventionType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "maker",
+      "id": "KalshiSelfTradePreventionType-maker",
+      "rust_type": "KalshiSelfTradePreventionType",
+      "wire": "maker"
+    },
+    {
+      "coverage_paths": {
+        "KalshiSubscriptionUpdateAction": []
+      },
+      "evidence": {
+        "KalshiSubscriptionUpdateAction": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "add_markets",
+      "id": "KalshiSubscriptionUpdateAction-add_markets",
+      "rust_type": "KalshiSubscriptionUpdateAction",
+      "wire": "add_markets"
+    },
+    {
+      "coverage_paths": {
+        "KalshiSubscriptionUpdateAction": []
+      },
+      "evidence": {
+        "KalshiSubscriptionUpdateAction": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "delete_markets",
+      "id": "KalshiSubscriptionUpdateAction-delete_markets",
+      "rust_type": "KalshiSubscriptionUpdateAction",
+      "wire": "delete_markets"
+    },
+    {
+      "coverage_paths": {
+        "KalshiTimeInForce": []
+      },
+      "evidence": {
+        "KalshiTimeInForce": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "fill_or_kill",
+      "id": "KalshiTimeInForce-fill_or_kill",
+      "rust_type": "KalshiTimeInForce",
+      "wire": "fill_or_kill"
+    },
+    {
+      "coverage_paths": {
+        "KalshiTimeInForce": []
+      },
+      "evidence": {
+        "KalshiTimeInForce": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "good_till_canceled",
+      "id": "KalshiTimeInForce-good_till_canceled",
+      "rust_type": "KalshiTimeInForce",
+      "wire": "good_till_canceled"
+    },
+    {
+      "coverage_paths": {
+        "KalshiTimeInForce": []
+      },
+      "evidence": {
+        "KalshiTimeInForce": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "immediate_or_cancel",
+      "id": "KalshiTimeInForce-immediate_or_cancel",
+      "rust_type": "KalshiTimeInForce",
+      "wire": "immediate_or_cancel"
+    },
+    {
+      "coverage_paths": {
+        "KalshiWsChannel": []
+      },
+      "evidence": {
+        "KalshiWsChannel": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "orderbook_delta",
+      "id": "KalshiWsChannel-orderbook_delta",
+      "rust_type": "KalshiWsChannel",
+      "wire": "orderbook_delta"
+    },
+    {
+      "coverage_paths": {
+        "KalshiWsChannel": []
+      },
+      "evidence": {
+        "KalshiWsChannel": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "ticker",
+      "id": "KalshiWsChannel-ticker",
+      "rust_type": "KalshiWsChannel",
+      "wire": "ticker"
+    },
+    {
+      "coverage_paths": {
+        "KalshiWsChannel": []
+      },
+      "evidence": {
+        "KalshiWsChannel": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "trade",
+      "id": "KalshiWsChannel-trade",
+      "rust_type": "KalshiWsChannel",
+      "wire": "trade"
+    },
+    {
+      "coverage_paths": {
+        "KalshiWsChannel": []
+      },
+      "evidence": {
+        "KalshiWsChannel": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "fill",
+      "id": "KalshiWsChannel-fill",
+      "rust_type": "KalshiWsChannel",
+      "wire": "fill"
+    },
+    {
+      "coverage_paths": {
+        "KalshiWsChannel": []
+      },
+      "evidence": {
+        "KalshiWsChannel": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "market_positions",
+      "id": "KalshiWsChannel-market_positions",
+      "rust_type": "KalshiWsChannel",
+      "wire": "market_positions"
+    },
+    {
+      "coverage_paths": {
+        "KalshiWsChannel": []
+      },
+      "evidence": {
+        "KalshiWsChannel": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "market_lifecycle_v2",
+      "id": "KalshiWsChannel-market_lifecycle_v2",
+      "rust_type": "KalshiWsChannel",
+      "wire": "market_lifecycle_v2"
+    },
+    {
+      "coverage_paths": {
+        "KalshiWsChannel": []
+      },
+      "evidence": {
+        "KalshiWsChannel": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "multivariate_market_lifecycle",
+      "id": "KalshiWsChannel-multivariate_market_lifecycle",
+      "rust_type": "KalshiWsChannel",
+      "wire": "multivariate_market_lifecycle"
+    },
+    {
+      "coverage_paths": {
+        "KalshiWsChannel": []
+      },
+      "evidence": {
+        "KalshiWsChannel": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "multivariate",
+      "id": "KalshiWsChannel-multivariate",
+      "rust_type": "KalshiWsChannel",
+      "wire": "multivariate"
+    },
+    {
+      "coverage_paths": {
+        "KalshiWsChannel": []
+      },
+      "evidence": {
+        "KalshiWsChannel": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "communications",
+      "id": "KalshiWsChannel-communications",
+      "rust_type": "KalshiWsChannel",
+      "wire": "communications"
+    },
+    {
+      "coverage_paths": {
+        "KalshiWsChannel": []
+      },
+      "evidence": {
+        "KalshiWsChannel": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "order_group_updates",
+      "id": "KalshiWsChannel-order_group_updates",
+      "rust_type": "KalshiWsChannel",
+      "wire": "order_group_updates"
+    },
+    {
+      "coverage_paths": {
+        "KalshiWsChannel": []
+      },
+      "evidence": {
+        "KalshiWsChannel": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "user_orders",
+      "id": "KalshiWsChannel-user_orders",
+      "rust_type": "KalshiWsChannel",
+      "wire": "user_orders"
+    }
+  ],
+  "wire_policy": {
+    "enum_strings": "Fields annotated as Literal | str intentionally retain unknown upstream strings; required shapes still reject.",
+    "non_finite_numbers": "excluded because they are not JSON-compatible values",
+    "optional_fields": "omitted inputs resolve through defaults; explicit null is retained when nullable",
+    "portable_integer_domain": "IEEE-754 exactly represented signed integers (-9007199254740991 through 9007199254740991)",
+    "scalar_coercions": "disabled at the declared JSON wire boundary",
+    "unknown_object_fields": "ignored and absent from canonical output"
+  }
+}

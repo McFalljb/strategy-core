@@ -9,9 +9,10 @@ use strategy_core::{
     Action, Broker, BrokerOrderUpdate, BrokerUpdateStatus, ContractSide, EngineClock,
     ForecastRunLookup, FreshnessDomain, FreshnessDomainSummary, FreshnessSnapshot, FreshnessStatus,
     FreshnessSummary, HttpClient, HttpMethod, HttpRequest, HttpResponse, LatestObservationQuery,
-    MarketStateView, OrderExecutionStyle, OrderIntent, OrderResult, OrderStatus, OrderTimePolicy,
-    OrderType, PendingOrder, Position, RuntimeCapabilities, RuntimeMode, SIGNAL_DSM_REACTION,
-    SIGNAL_METAR_6HR_LOW, SIGNAL_METAR_6HR_NEW_LOW, StrategyContext, StrategyDataClient,
+    MarketStateView, OracleModelScore, OracleScoreDays, OrderExecutionStyle, OrderIntent,
+    OrderResult, OrderStatus, OrderTimePolicy, OrderType, PendingOrder, Position, ReportType,
+    RuntimeCapabilities, RuntimeMode, SIGNAL_DSM_REACTION, SIGNAL_METAR_6HR_LOW,
+    SIGNAL_METAR_6HR_NEW_LOW, StationOracleScores, StrategyContext, StrategyDataClient,
     StrategyEvent, StrategyLogger, StrategyRuntime, StrategyScope, Telemetry, TelemetryField,
     TickerPrices, TimerHandle, WorkHandle, climate_day_date, climate_day_end,
     climate_day_has_ended, parse_climate_date, station_timezone,
@@ -39,7 +40,7 @@ fn query_objects_match_python_defaults_and_json_names() {
         "refresh": true
     }))
     .unwrap();
-    assert_eq!(reports.report_type, Some("cli".to_string()));
+    assert_eq!(reports.report_type, Some(ReportType::Cli));
     assert!(reports.refresh);
 }
 
@@ -174,6 +175,96 @@ fn strategy_context_traits_are_implementable() {
             .get_positions()
             .contains_key("KXHIGHMIA-26APR08-B70.5:yes")
     );
+}
+
+#[test]
+fn market_state_oracle_selectors_match_python_contract() {
+    let scores = StationOracleScores {
+        station_id: "KMIA".to_string(),
+        scores: vec![OracleModelScore {
+            model_id: "ncep_hrrr_conus".to_string(),
+            model_name: String::new(),
+            combined_mae: None,
+            high_mae: Some(1.2),
+            low_mae: None,
+            high_bias: None,
+            low_bias: None,
+            day_count: Some(7),
+            is_public: Some(true),
+        }],
+        rank_by: "high".to_string(),
+        score_mode: "day_of".to_string(),
+        days_requested: "7".to_string(),
+        range_start: String::new(),
+        range_end: String::new(),
+        updated_at: None,
+    };
+    let state = FakeState {
+        oracle_scores: [("KMIA".to_string(), scores)].into_iter().collect(),
+    };
+
+    assert!(state.get_oracle_scores("KMIA").is_some());
+    assert!(state.get_oracle_scores("KORD").is_none());
+
+    for (case_id, station, days, mode, rank_by, expected) in [
+        ("omitted", "KMIA", None, None, None, true),
+        (
+            "string days",
+            "KMIA",
+            Some(OracleScoreDays::from("7")),
+            Some("day_of"),
+            Some("high"),
+            true,
+        ),
+        (
+            "integer days",
+            "KMIA",
+            Some(OracleScoreDays::from(7_i64)),
+            Some("day_of"),
+            Some("high"),
+            true,
+        ),
+        (
+            "mismatched days",
+            "KMIA",
+            Some(OracleScoreDays::from("30")),
+            Some("day_of"),
+            Some("high"),
+            false,
+        ),
+        (
+            "mismatched mode",
+            "KMIA",
+            Some(OracleScoreDays::from("7")),
+            Some("day_ahead"),
+            Some("high"),
+            false,
+        ),
+        (
+            "mismatched rank",
+            "KMIA",
+            Some(OracleScoreDays::from("7")),
+            Some("day_of"),
+            Some("combined"),
+            false,
+        ),
+        (
+            "missing station",
+            "KORD",
+            Some(OracleScoreDays::from(7_i64)),
+            Some("day_of"),
+            Some("high"),
+            false,
+        ),
+    ] {
+        assert_eq!(
+            state
+                .get_oracle_scores_matching(station, days, mode, rank_by)
+                .is_some(),
+            expected,
+            "{case_id}",
+        );
+    }
 }
 
 #[test]
@@ -612,7 +703,9 @@ fn run_native_or_fallback_distinguishes_unavailable_and_runner_errors() {
 }
 
 #[derive(Default)]
-struct FakeState;
+struct FakeState {
+    oracle_scores: BTreeMap<String, StationOracleScores>,
+}
 
 impl MarketStateView for FakeState {
     fn get_weather(&self, _station: &str) -> Option<&strategy_core::StationWeather> {
@@ -623,8 +716,8 @@ impl MarketStateView for FakeState {
         None
     }
 
-    fn get_oracle_scores(&self, _station: &str) -> Option<&strategy_core::StationOracleScores> {
-        None
+    fn get_oracle_scores(&self, station: &str) -> Option<&strategy_core::StationOracleScores> {
+        self.oracle_scores.get(station)
     }
 
     fn get_prices(&self, _ticker: &str) -> Option<&TickerPrices> {
@@ -1116,7 +1209,7 @@ struct FakeContext {
 impl Default for FakeContext {
     fn default() -> Self {
         Self {
-            state: FakeState,
+            state: FakeState::default(),
             data: FakeData,
             broker: FakeBroker::default(),
             http: FakeHttp,

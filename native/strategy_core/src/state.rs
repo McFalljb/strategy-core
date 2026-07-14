@@ -143,6 +143,54 @@ pub struct StationOracleScores {
     pub updated_at: Option<DateTime<Utc>>,
 }
 
+/// A caller-supplied oracle lookback selector.
+///
+/// Python accepts either an integer or string for `days` and compares the
+/// normalized string value with `StationOracleScores::days_requested`. This
+/// enum preserves the same semantics without accepting unrelated Rust types.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OracleScoreDays<'a> {
+    Text(&'a str),
+    Count(i64),
+}
+
+impl OracleScoreDays<'_> {
+    #[must_use]
+    pub fn matches(self, days_requested: &str) -> bool {
+        match self {
+            Self::Text(value) => value == days_requested,
+            Self::Count(value) => value.to_string() == days_requested,
+        }
+    }
+}
+
+impl<'a> From<&'a str> for OracleScoreDays<'a> {
+    fn from(value: &'a str) -> Self {
+        Self::Text(value)
+    }
+}
+
+impl From<i64> for OracleScoreDays<'_> {
+    fn from(value: i64) -> Self {
+        Self::Count(value)
+    }
+}
+
+impl StationOracleScores {
+    /// Return whether the stored metadata satisfies every supplied selector.
+    #[must_use]
+    pub fn matches_selectors(
+        &self,
+        days: Option<OracleScoreDays<'_>>,
+        mode: Option<&str>,
+        rank_by: Option<&str>,
+    ) -> bool {
+        days.is_none_or(|value| value.matches(&self.days_requested))
+            && mode.is_none_or(|value| value == self.score_mode)
+            && rank_by.is_none_or(|value| value == self.rank_by)
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct StationWeather {
     pub current_temp: Option<f64>,
@@ -268,6 +316,23 @@ pub trait MarketStateView {
     fn get_weather(&self, station: &str) -> Option<&StationWeather>;
     fn get_forecast(&self, station: &str) -> Option<&StationForecast>;
     fn get_oracle_scores(&self, station: &str) -> Option<&StationOracleScores>;
+
+    /// Return oracle scores only when every supplied selector matches.
+    ///
+    /// This additive helper preserves the original one-station trait method for
+    /// existing implementers while matching Python's selector-aware lookup.
+    fn get_oracle_scores_matching(
+        &self,
+        station: &str,
+        days: Option<OracleScoreDays<'_>>,
+        mode: Option<&str>,
+        rank_by: Option<&str>,
+    ) -> Option<&StationOracleScores> {
+        let scores = self.get_oracle_scores(station)?;
+        scores
+            .matches_selectors(days, mode, rank_by)
+            .then_some(scores)
+    }
     fn get_prices(&self, ticker: &str) -> Option<&TickerPrices>;
     fn get_weather_freshness(&self, station: &str) -> FreshnessSnapshot;
     fn get_forecast_freshness(&self, station: &str) -> FreshnessSnapshot;

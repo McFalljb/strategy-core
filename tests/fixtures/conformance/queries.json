@@ -1,0 +1,483 @@
+{
+  "authority": "python",
+  "comparison": "structural-json",
+  "family": "queries",
+  "invalid": [
+    {
+      "category": "type",
+      "covers": [
+        "LimitsQuery"
+      ],
+      "evidence": {
+        "LimitsQuery": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "wrong-refresh-type",
+      "rust_type": "LimitsQuery",
+      "wire": {
+        "refresh": []
+      }
+    },
+    {
+      "category": "required_field",
+      "covers": [
+        "ForecastRunQuery"
+      ],
+      "evidence": {
+        "ForecastRunQuery": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "missing-run-id",
+      "rust_type": "ForecastRunQuery",
+      "wire": {
+        "refresh": false
+      }
+    },
+    {
+      "category": "type",
+      "covers": [
+        "ForecastRunsQuery"
+      ],
+      "evidence": {
+        "ForecastRunsQuery": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "wrong-limit-type",
+      "rust_type": "ForecastRunsQuery",
+      "wire": {
+        "limit": []
+      }
+    },
+    {
+      "category": "type",
+      "covers": [
+        "ForecastRunsQuery"
+      ],
+      "evidence": {
+        "ForecastRunsQuery": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "coerced-limit-type",
+      "rust_type": "ForecastRunsQuery",
+      "wire": {
+        "limit": "10"
+      }
+    }
+  ],
+  "schema_version": 1,
+  "valid": [
+    {
+      "covers": [
+        "LimitsQuery"
+      ],
+      "evidence": {
+        "LimitsQuery": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
+      "expected": {
+        "refresh": false
+      },
+      "id": "limits-defaults",
+      "rust_type": "LimitsQuery",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "ForecastQuery"
+      ],
+      "evidence": {
+        "ForecastQuery": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
+      "expected": {
+        "model_id": "ncep_hrrr_conus",
+        "refresh": true
+      },
+      "id": "forecast-full",
+      "rust_type": "ForecastQuery",
+      "wire": {
+        "model_id": "ncep_hrrr_conus",
+        "refresh": true
+      }
+    },
+    {
+      "covers": [
+        "ForecastQuery"
+      ],
+      "evidence": {
+        "ForecastQuery": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
+      "expected": {
+        "model_id": null,
+        "refresh": false
+      },
+      "id": "forecast-defaults",
+      "rust_type": "ForecastQuery",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "OracleScoresQuery"
+      ],
+      "evidence": {
+        "OracleScoresQuery": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
+      "expected": {
+        "days": "30",
+        "mode": "day_of",
+        "rank_by": "combined",
+        "refresh": true
+      },
+      "id": "oracle-full",
+      "rust_type": "OracleScoresQuery",
+      "wire": {
+        "days": "30",
+        "mode": "day_of",
+        "rank_by": "combined",
+        "refresh": true
+      }
+    },
+    {
+      "covers": [
+        "OracleScoresQuery"
+      ],
+      "evidence": {
+        "OracleScoresQuery": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
+      "expected": {
+        "days": "7",
+        "mode": "day_ahead",
+        "rank_by": "high",
+        "refresh": false
+      },
+      "id": "oracle-defaults",
+      "rust_type": "OracleScoresQuery",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "ForecastRunsQuery",
+        "DateLike"
+      ],
+      "evidence": {
+        "DateLike": [
+          "non_default_round_trip"
+        ],
+        "ForecastRunsQuery": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "cursor": "cursor-1",
+        "end": "2026-07-14T12:00:00Z",
+        "limit": 1000000,
+        "model_id": "ncep_hrrr_conus",
+        "refresh": true,
+        "start": "2026-07-13T12:34:56.123456Z"
+      },
+      "id": "forecast-runs-full",
+      "rust_type": "ForecastRunsQuery",
+      "wire": {
+        "cursor": "cursor-1",
+        "end": "2026-07-14T12:00:00Z",
+        "limit": 1000000,
+        "model_id": "ncep_hrrr_conus",
+        "refresh": true,
+        "start": "2026-07-13T12:34:56.123456Z"
+      }
+    },
+    {
+      "covers": [
+        "ForecastRunsQuery"
+      ],
+      "evidence": {
+        "ForecastRunsQuery": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
+      "expected": {
+        "cursor": null,
+        "end": null,
+        "limit": null,
+        "model_id": null,
+        "refresh": false,
+        "start": null
+      },
+      "id": "forecast-runs-defaults",
+      "rust_type": "ForecastRunsQuery",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "ForecastRunQuery"
+      ],
+      "evidence": {
+        "ForecastRunQuery": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
+      "expected": {
+        "refresh": true,
+        "run_id": "run-1"
+      },
+      "id": "forecast-run",
+      "rust_type": "ForecastRunQuery",
+      "wire": {
+        "refresh": true,
+        "run_id": "run-1"
+      }
+    },
+    {
+      "covers": [
+        "LatestReportsQuery"
+      ],
+      "evidence": {
+        "LatestReportsQuery": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
+      "expected": {
+        "refresh": false
+      },
+      "id": "latest-reports-defaults",
+      "rust_type": "LatestReportsQuery",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "ReportsQuery",
+        "LocalDateLike"
+      ],
+      "evidence": {
+        "LocalDateLike": [
+          "non_default_round_trip"
+        ],
+        "ReportsQuery": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "date": "2026-07-13",
+        "refresh": true,
+        "report_type": "cli"
+      },
+      "id": "reports-full",
+      "rust_type": "ReportsQuery",
+      "wire": {
+        "date": "2026-07-13",
+        "refresh": true,
+        "report_type": "cli"
+      }
+    },
+    {
+      "covers": [
+        "ReportsQuery"
+      ],
+      "evidence": {
+        "ReportsQuery": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
+      "expected": {
+        "date": null,
+        "refresh": false,
+        "report_type": null
+      },
+      "id": "reports-defaults",
+      "rust_type": "ReportsQuery",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "ReportHistoryQuery",
+        "LocalDateLike"
+      ],
+      "evidence": {
+        "LocalDateLike": [
+          "non_default_round_trip"
+        ],
+        "ReportHistoryQuery": [
+          "non_default_round_trip",
+          "timestamp_formatting"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip",
+        "timestamp_formatting"
+      ],
+      "expected": {
+        "cursor": "cursor-2",
+        "end": "2026-07-13",
+        "limit": 1000000,
+        "refresh": true,
+        "report_type": "cli",
+        "start": "2026-07-01"
+      },
+      "id": "report-history-full",
+      "rust_type": "ReportHistoryQuery",
+      "wire": {
+        "cursor": "cursor-2",
+        "end": "2026-07-13",
+        "limit": 1000000,
+        "refresh": true,
+        "report_type": "cli",
+        "start": "2026-07-01"
+      }
+    },
+    {
+      "covers": [
+        "ReportHistoryQuery"
+      ],
+      "evidence": {
+        "ReportHistoryQuery": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
+      "expected": {
+        "cursor": null,
+        "end": null,
+        "limit": null,
+        "refresh": false,
+        "report_type": null,
+        "start": null
+      },
+      "id": "report-history-defaults",
+      "rust_type": "ReportHistoryQuery",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "LatestObservationQuery",
+        "TemperatureDayMode"
+      ],
+      "evidence": {
+        "LatestObservationQuery": [
+          "non_default_round_trip"
+        ],
+        "TemperatureDayMode": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
+      "expected": {
+        "day_mode": "nws_climate_day",
+        "refresh": true
+      },
+      "id": "latest-observation-full",
+      "rust_type": "LatestObservationQuery",
+      "wire": {
+        "day_mode": "nws_climate_day",
+        "refresh": true
+      }
+    },
+    {
+      "covers": [
+        "LatestObservationQuery"
+      ],
+      "evidence": {
+        "LatestObservationQuery": [
+          "defaults",
+          "omission"
+        ]
+      },
+      "evidence_dimensions": [
+        "defaults",
+        "omission"
+      ],
+      "expected": {
+        "day_mode": null,
+        "refresh": false
+      },
+      "id": "latest-observation-defaults",
+      "rust_type": "LatestObservationQuery",
+      "wire": {}
+    }
+  ],
+  "wire_policy": {
+    "non_finite_numbers": "excluded because they are not JSON-compatible values",
+    "optional_fields": "omitted inputs resolve through defaults; explicit null is retained when nullable",
+    "portable_integer_domain": "IEEE-754 exactly represented signed integers (-9007199254740991 through 9007199254740991)",
+    "scalar_coercions": "disabled at the declared JSON wire boundary",
+    "unknown_object_fields": "ignored and absent from canonical output"
+  }
+}

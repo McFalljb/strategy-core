@@ -87,7 +87,11 @@ pub struct WeatherEventSource {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Observation {
-    #[serde(rename = "type", deserialize_with = "deserialize_observation_type")]
+    #[serde(
+        default = "default_observation_type",
+        rename = "type",
+        deserialize_with = "deserialize_observation_type"
+    )]
     pub event_type: String,
     pub event_id: Option<String>,
     pub sequence: Option<i64>,
@@ -135,7 +139,11 @@ pub struct Observation {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PriceUpdate {
-    #[serde(rename = "type", deserialize_with = "deserialize_price_update_type")]
+    #[serde(
+        default = "default_price_update_type",
+        rename = "type",
+        deserialize_with = "deserialize_price_update_type"
+    )]
     pub event_type: String,
     pub event_id: Option<String>,
     pub sequence: Option<i64>,
@@ -157,6 +165,7 @@ pub struct PriceUpdate {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ForecastUpdated {
     #[serde(
+        default = "default_forecast_updated_type",
         rename = "type",
         deserialize_with = "deserialize_forecast_updated_type"
     )]
@@ -177,6 +186,7 @@ pub struct ForecastUpdated {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ForecastVersions {
     #[serde(
+        default = "default_forecast_versions_type",
         rename = "type",
         deserialize_with = "deserialize_forecast_versions_type"
     )]
@@ -228,6 +238,7 @@ pub struct OracleScoreTable {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct OracleScoresUpdated {
     #[serde(
+        default = "default_oracle_scores_updated_type",
         rename = "type",
         deserialize_with = "deserialize_oracle_scores_updated_type"
     )]
@@ -249,7 +260,11 @@ pub struct OracleScoresUpdated {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StationReport {
-    #[serde(rename = "type", deserialize_with = "deserialize_station_report_type")]
+    #[serde(
+        default = "default_station_report_type",
+        rename = "type",
+        deserialize_with = "deserialize_station_report_type"
+    )]
     pub event_type: String,
     pub event_id: Option<String>,
     pub sequence: Option<i64>,
@@ -286,7 +301,11 @@ pub struct StationReport {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WeatherEvent {
-    #[serde(rename = "type", deserialize_with = "deserialize_weather_event_type")]
+    #[serde(
+        default = "default_weather_event_type",
+        rename = "type",
+        deserialize_with = "deserialize_weather_event_type"
+    )]
     pub event_type: String,
     pub event_id: Option<String>,
     pub sequence: Option<i64>,
@@ -321,7 +340,11 @@ pub struct WeatherEvent {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct NewHigh {
-    #[serde(rename = "type", deserialize_with = "deserialize_new_high_type")]
+    #[serde(
+        default = "default_new_high_type",
+        rename = "type",
+        deserialize_with = "deserialize_new_high_type"
+    )]
     pub event_type: String,
     pub event_id: Option<String>,
     pub sequence: Option<i64>,
@@ -353,7 +376,11 @@ pub struct NewHigh {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct NewLow {
-    #[serde(rename = "type", deserialize_with = "deserialize_new_low_type")]
+    #[serde(
+        default = "default_new_low_type",
+        rename = "type",
+        deserialize_with = "deserialize_new_low_type"
+    )]
     pub event_type: String,
     pub event_id: Option<String>,
     pub sequence: Option<i64>,
@@ -385,7 +412,11 @@ pub struct NewLow {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TimerWake {
-    #[serde(rename = "type", deserialize_with = "deserialize_timer_wake_type")]
+    #[serde(
+        default = "default_timer_wake_type",
+        rename = "type",
+        deserialize_with = "deserialize_timer_wake_type"
+    )]
     pub event_type: String,
     pub scheduled_for: DateTime<Utc>,
     pub fired_at: Option<DateTime<Utc>>,
@@ -395,7 +426,11 @@ pub struct TimerWake {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ShutdownEvent {
-    #[serde(rename = "type", deserialize_with = "deserialize_shutdown_type")]
+    #[serde(
+        default = "default_shutdown_type",
+        rename = "type",
+        deserialize_with = "deserialize_shutdown_type"
+    )]
     pub event_type: String,
     #[serde(default)]
     pub reason: String,
@@ -485,27 +520,60 @@ where
 }
 
 macro_rules! event_type_deserializer {
-    ($name:ident, $expected:literal) => {
-        fn $name<'de, D>(deserializer: D) -> Result<String, D::Error>
+    ($deserialize:ident, $default:ident, $expected:literal) => {
+        fn $deserialize<'de, D>(deserializer: D) -> Result<String, D::Error>
         where
             D: Deserializer<'de>,
         {
             deserialize_exact_type(deserializer, $expected)
         }
+
+        fn $default() -> String {
+            $expected.to_string()
+        }
     };
 }
 
-event_type_deserializer!(deserialize_observation_type, "observation");
-event_type_deserializer!(deserialize_price_update_type, "price_update");
-event_type_deserializer!(deserialize_forecast_updated_type, "forecast_updated");
-event_type_deserializer!(deserialize_forecast_versions_type, "forecast_versions");
+event_type_deserializer!(
+    deserialize_observation_type,
+    default_observation_type,
+    "observation"
+);
+event_type_deserializer!(
+    deserialize_price_update_type,
+    default_price_update_type,
+    "price_update"
+);
+event_type_deserializer!(
+    deserialize_forecast_updated_type,
+    default_forecast_updated_type,
+    "forecast_updated"
+);
+event_type_deserializer!(
+    deserialize_forecast_versions_type,
+    default_forecast_versions_type,
+    "forecast_versions"
+);
 event_type_deserializer!(
     deserialize_oracle_scores_updated_type,
+    default_oracle_scores_updated_type,
     "oracle_scores_updated"
 );
-event_type_deserializer!(deserialize_station_report_type, "station_report");
-event_type_deserializer!(deserialize_weather_event_type, "weather_event");
-event_type_deserializer!(deserialize_new_high_type, "new_high");
-event_type_deserializer!(deserialize_new_low_type, "new_low");
-event_type_deserializer!(deserialize_timer_wake_type, "timer_wake");
-event_type_deserializer!(deserialize_shutdown_type, "shutdown");
+event_type_deserializer!(
+    deserialize_station_report_type,
+    default_station_report_type,
+    "station_report"
+);
+event_type_deserializer!(
+    deserialize_weather_event_type,
+    default_weather_event_type,
+    "weather_event"
+);
+event_type_deserializer!(deserialize_new_high_type, default_new_high_type, "new_high");
+event_type_deserializer!(deserialize_new_low_type, default_new_low_type, "new_low");
+event_type_deserializer!(
+    deserialize_timer_wake_type,
+    default_timer_wake_type,
+    "timer_wake"
+);
+event_type_deserializer!(deserialize_shutdown_type, default_shutdown_type, "shutdown");

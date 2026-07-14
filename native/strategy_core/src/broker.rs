@@ -101,7 +101,7 @@ pub struct PendingOrder {
     #[serde(default)]
     pub created_at: String,
     pub client_order_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub expires_at: Option<String>,
 }
 
@@ -139,7 +139,7 @@ pub struct OrderIntent {
     pub signal_type: Option<String>,
     pub signal_metadata: Option<String>,
     pub client_order_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub expires_after_ms: Option<i64>,
 }
 
@@ -169,7 +169,7 @@ pub struct BrokerOrderUpdate {
     pub provider_sequence: Option<String>,
     #[serde(default)]
     pub updated_at: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub expires_at: Option<String>,
 }
 
