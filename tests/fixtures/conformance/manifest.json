@@ -1,0 +1,263 @@
+{
+  "schema_version": 1,
+  "authority": "python",
+  "comparison": "structural-json",
+  "ownership_classes": [
+    "broad-parity-required",
+    "kernel-only",
+    "python-only",
+    "consumer-owned"
+  ],
+  "evidence_mechanisms": [
+    "fixture",
+    "helper-vector",
+    "trait-test",
+    "intentional-exclusion"
+  ],
+  "evidence_dimensions": [
+    "non_default_round_trip",
+    "defaults",
+    "omission",
+    "explicit_null",
+    "enum_values",
+    "timestamp_formatting",
+    "numeric_boundaries",
+    "invalid_input",
+    "helper_or_trait_behavior",
+    "consumer_boundaries"
+  ],
+  "evidence_profiles": {
+    "serializable-contract": {
+      "mechanism": "fixture",
+      "reference": "tests/fixtures/conformance (canonical corpus established by Units 2-3)",
+      "dimensions": {
+        "non_default_round_trip": {"applicable": true},
+        "defaults": {"applicable": true},
+        "omission": {"applicable": true},
+        "explicit_null": {"applicable": true},
+        "enum_values": {"applicable": true},
+        "timestamp_formatting": {"applicable": true},
+        "numeric_boundaries": {"applicable": true},
+        "invalid_input": {"applicable": true},
+        "helper_or_trait_behavior": {
+          "applicable": false,
+          "rationale": "Owned wire values are proven by structural fixtures; standalone behavior belongs to helper or trait profiles."
+        },
+        "consumer_boundaries": {
+          "applicable": false,
+          "rationale": "Consumer adoption is tracked at strategy-facing trait boundaries rather than required for every portable value."
+        }
+      }
+    },
+    "portable-helper": {
+      "mechanism": "helper-vector",
+      "reference": "tests/test_fees.py, tests/test_climate_day.py, tests/test_stations.py, tests/test_native_contract.py and matching Rust integration tests",
+      "dimensions": {
+        "non_default_round_trip": {"applicable": true},
+        "defaults": {
+          "applicable": false,
+          "rationale": "These surfaces are constants or input/output helpers rather than default-constructible wire models."
+        },
+        "omission": {
+          "applicable": false,
+          "rationale": "Omitted JSON fields do not apply to standalone helper calls or constants."
+        },
+        "explicit_null": {
+          "applicable": false,
+          "rationale": "Optional helper arguments are covered as input vectors, not as explicit JSON null fields."
+        },
+        "enum_values": {
+          "applicable": false,
+          "rationale": "Enum wire values are classified with the serializable contract surfaces."
+        },
+        "timestamp_formatting": {"applicable": true},
+        "numeric_boundaries": {"applicable": true},
+        "invalid_input": {"applicable": true},
+        "helper_or_trait_behavior": {"applicable": true},
+        "consumer_boundaries": {
+          "applicable": false,
+          "rationale": "Portable helper vectors establish semantics independently of consumer runtime adoption."
+        }
+      }
+    },
+    "strategy-trait": {
+      "mechanism": "trait-test",
+      "reference": "tests/test_context_contract.py, tests/test_state_contract.py, tests/test_native_contract.py and native/strategy_core/tests/interface.rs",
+      "dimensions": {
+        "non_default_round_trip": {
+          "applicable": false,
+          "rationale": "Protocols and traits expose behavior and are not owned serializable values."
+        },
+        "defaults": {
+          "applicable": false,
+          "rationale": "Protocols and traits do not define a serialized default instance."
+        },
+        "omission": {
+          "applicable": false,
+          "rationale": "Protocol method availability is behavioral rather than JSON field omission."
+        },
+        "explicit_null": {
+          "applicable": false,
+          "rationale": "Optional method results are covered as behavior, not explicit JSON null fields."
+        },
+        "enum_values": {
+          "applicable": false,
+          "rationale": "Enum wire values are classified with owned serializable surfaces."
+        },
+        "timestamp_formatting": {
+          "applicable": false,
+          "rationale": "Timestamp formatting is verified on values crossing these boundaries."
+        },
+        "numeric_boundaries": {
+          "applicable": false,
+          "rationale": "Numeric boundaries are verified on the request and result value objects."
+        },
+        "invalid_input": {"applicable": true},
+        "helper_or_trait_behavior": {"applicable": true},
+        "consumer_boundaries": {"applicable": true}
+      }
+    },
+    "shared-alias": {
+      "mechanism": "intentional-exclusion",
+      "reference": "Owning model/helper/trait evidence; aliases have no independent runtime representation",
+      "dimensions": {
+        "non_default_round_trip": {"applicable": false, "rationale": "The alias is exercised through its owning wire surface."},
+        "defaults": {"applicable": false, "rationale": "Type aliases do not define independent defaults."},
+        "omission": {"applicable": false, "rationale": "Type aliases do not define independent object fields."},
+        "explicit_null": {"applicable": false, "rationale": "Nullability is enforced by the owning field or method."},
+        "enum_values": {"applicable": false, "rationale": "Allowed literal values are exercised through the owning field."},
+        "timestamp_formatting": {"applicable": false, "rationale": "The alias does not independently format timestamps."},
+        "numeric_boundaries": {"applicable": false, "rationale": "Numeric behavior belongs to the owning field or helper."},
+        "invalid_input": {"applicable": false, "rationale": "Validation belongs to the owning model or method."},
+        "helper_or_trait_behavior": {"applicable": false, "rationale": "The alias has no behavior independent of its owner."},
+        "consumer_boundaries": {"applicable": false, "rationale": "Consumers encounter the alias only through an owned boundary."
+        }
+      }
+    },
+    "language-specific-exclusion": {
+      "mechanism": "intentional-exclusion",
+      "reference": "Explicit language-mechanics classification in this manifest",
+      "dimensions": {
+        "non_default_round_trip": {"applicable": false, "rationale": "The surface has no independent cross-language wire representation."},
+        "defaults": {"applicable": false, "rationale": "The language-specific carrier does not define a shared default."},
+        "omission": {"applicable": false, "rationale": "The language-specific carrier is not a shared object field."},
+        "explicit_null": {"applicable": false, "rationale": "The language-specific carrier is not a nullable shared field."},
+        "enum_values": {"applicable": false, "rationale": "The language-specific carrier does not define shared enum values."},
+        "timestamp_formatting": {"applicable": false, "rationale": "The language-specific carrier does not format shared timestamps."},
+        "numeric_boundaries": {"applicable": false, "rationale": "The language-specific carrier has no portable numeric domain."},
+        "invalid_input": {"applicable": false, "rationale": "Portable errors are compared by normalized category at the owning API."},
+        "helper_or_trait_behavior": {"applicable": false, "rationale": "Behavior is covered by the owning helper or trait test."},
+        "consumer_boundaries": {"applicable": false, "rationale": "Consumers do not depend on cross-language identity for this carrier."}
+      }
+    },
+    "kernel-borrowed-contract": {
+      "mechanism": "trait-test",
+      "reference": "native/strategy_core_kernel/tests/contract.rs",
+      "dimensions": {
+        "non_default_round_trip": {"applicable": false, "rationale": "The kernel uses borrowed views and actions, not the owned broad JSON corpus."},
+        "defaults": {"applicable": false, "rationale": "Kernel views are populated by runtime adapters rather than deserialized defaults."},
+        "omission": {"applicable": false, "rationale": "Borrowed kernel fields are enforced by Rust types rather than JSON omission."},
+        "explicit_null": {"applicable": false, "rationale": "Kernel optionality is exercised directly in contract tests."},
+        "enum_values": {"applicable": false, "rationale": "Kernel enum behavior is exercised directly rather than through broad fixtures."},
+        "timestamp_formatting": {"applicable": false, "rationale": "Kernel timestamps are borrowed numeric/runtime values, not broad JSON strings."},
+        "numeric_boundaries": {"applicable": true},
+        "invalid_input": {"applicable": true},
+        "helper_or_trait_behavior": {"applicable": true},
+        "consumer_boundaries": {"applicable": true}
+      }
+    }
+  },
+  "export_groups": [
+    {
+      "id": "shared-serializable-contract",
+      "ownership": "broad-parity-required",
+      "evidence_profile": "serializable-contract",
+      "rationale": "These names are shared owned models, enums, queries, and value objects whose Python-authored JSON representation must round-trip through Rust.",
+      "surfaces": {
+        "python": [
+          "Action", "BrokerOrderUpdate", "BrokerUpdateStatus", "CityInfo", "ContractSide", "CursorPage", "DataResolution", "EffectiveLimits", "EngineEvent", "FeeCalculation", "ForecastBundle", "ForecastBundleRun", "ForecastHourly", "ForecastQuery", "ForecastRunData", "ForecastRunQuery", "ForecastRunSummary", "ForecastRunsPage", "ForecastRunsQuery", "ForecastUpdated", "ForecastVersions", "FreshnessDomain", "FreshnessDomainSummary", "FreshnessSnapshot", "FreshnessStatus", "FreshnessSummary", "HourlyForecastRecord", "HttpMethod", "HttpRequest", "HttpResponse", "IpGuardLimits", "KalshiCollateralReturnType", "KalshiCreateOrderResponse", "KalshiEventLifecycleMessage", "KalshiFixedCount", "KalshiFixedPrice", "KalshiGetMarketResponse", "KalshiGetOrderResponse", "KalshiGetOrderbookResponse", "KalshiGetOrderbooksResponse", "KalshiGetOrdersResponse", "KalshiImmediateTimeInForce", "KalshiListSubscriptionsCommand", "KalshiMarket", "KalshiMarketLifecycleEventType", "KalshiMarketLifecycleMessage", "KalshiMarketLifecycleMetadata", "KalshiMarketOrderbook", "KalshiMarketPositionMessage", "KalshiMarketResult", "KalshiMarketSide", "KalshiMarketStatus", "KalshiMarketsPage", "KalshiMveSelectedLeg", "KalshiOrder", "KalshiOrderAction", "KalshiOrderCreateRequest", "KalshiOrderStatus", "KalshiOrderType", "KalshiOrderbook", "KalshiOrderbookDeltaMessage", "KalshiOrderbookLevel", "KalshiOrderbookSnapshotMessage", "KalshiPriceLevelStructure", "KalshiPriceRange", "KalshiSelfTradePreventionType", "KalshiSubscribeCommand", "KalshiSubscriptionUpdateAction", "KalshiTickerMessage", "KalshiTimeInForce", "KalshiTradeMessage", "KalshiUnsubscribeCommand", "KalshiUpdateSubscriptionCommand", "KalshiUserFillMessage", "KalshiUserOrderMessage", "KalshiWsChannel", "KalshiWsMessage", "LatestObservationData", "LatestObservationQuery", "LatestReportsData", "LatestReportsQuery", "LimitsQuery", "LiquidityRole", "MarketBracket", "ModelForecast", "NativeKernelResult", "NativeKernelStatus", "NewHigh", "NewLow", "Observation", "ObservationRecord", "OracleModelScore", "OracleModelScoreRecord", "OracleRankBy", "OracleScoreData", "OracleScoreMode", "OracleScoreRow", "OracleScoreTable", "OracleScoresQuery", "OracleScoresUpdated", "OrderExecutionStyle", "OrderIntent", "OrderResult", "OrderStatus", "OrderTimePolicy", "OrderType", "PendingOrder", "PlanTier", "Position", "PriceUpdate", "ReportClockSchedule", "ReportHistoryQuery", "ReportIntervalSchedule", "ReportMultiHourSchedule", "ReportSchedule", "ReportScheduleBasis", "ReportScheduleEntry", "ReportType", "ReportsQuery", "RuntimeCapabilities", "RuntimeMode", "ShutdownEvent", "StationForecast", "StationForecastData", "StationInfo", "StationOracleScores", "StationReport", "StationReportHistoryPage", "StationReportRecord", "StationReportsData", "StationWeather", "StrategyConfig", "StrategyEvent", "StrategyScope", "TemperatureDayMode", "TemperatureUnit", "TickerPrices", "TimerWake", "WeatherEvent", "WeatherEventSource", "WuDayMode"
+        ],
+        "rust_broad": [
+          "Action", "BrokerOrderUpdate", "BrokerUpdateStatus", "CityInfo", "ContractSide", "CursorPage", "DataResolution", "EffectiveLimits", "EngineEvent", "FeeCalculation", "ForecastBundle", "ForecastBundleRun", "ForecastHourly", "ForecastQuery", "ForecastRunData", "ForecastRunQuery", "ForecastRunSummary", "ForecastRunsPage", "ForecastRunsQuery", "ForecastUpdated", "ForecastVersions", "FreshnessDomain", "FreshnessDomainSummary", "FreshnessSnapshot", "FreshnessStatus", "FreshnessSummary", "HourlyForecastRecord", "HttpMethod", "HttpRequest", "HttpResponse", "IpGuardLimits", "KalshiCollateralReturnType", "KalshiCreateOrderResponse", "KalshiEventLifecycleMessage", "KalshiFixedCount", "KalshiFixedPrice", "KalshiGetMarketResponse", "KalshiGetOrderResponse", "KalshiGetOrderbookResponse", "KalshiGetOrderbooksResponse", "KalshiGetOrdersResponse", "KalshiImmediateTimeInForce", "KalshiListSubscriptionsCommand", "KalshiMarket", "KalshiMarketLifecycleEventType", "KalshiMarketLifecycleMessage", "KalshiMarketLifecycleMetadata", "KalshiMarketOrderbook", "KalshiMarketPositionMessage", "KalshiMarketResult", "KalshiMarketSide", "KalshiMarketStatus", "KalshiMarketsPage", "KalshiMveSelectedLeg", "KalshiOrder", "KalshiOrderAction", "KalshiOrderCreateRequest", "KalshiOrderStatus", "KalshiOrderType", "KalshiOrderbook", "KalshiOrderbookDeltaMessage", "KalshiOrderbookLevel", "KalshiOrderbookSnapshotMessage", "KalshiPriceLevelStructure", "KalshiPriceRange", "KalshiSelfTradePreventionType", "KalshiSubscribeCommand", "KalshiSubscriptionUpdateAction", "KalshiTickerMessage", "KalshiTimeInForce", "KalshiTradeMessage", "KalshiUnsubscribeCommand", "KalshiUpdateSubscriptionCommand", "KalshiUserFillMessage", "KalshiUserOrderMessage", "KalshiWsChannel", "KalshiWsMessage", "LatestObservationData", "LatestObservationQuery", "LatestReportsData", "LatestReportsQuery", "LimitsQuery", "LiquidityRole", "MarketBracket", "ModelForecast", "NativeKernelResult", "NativeKernelStatus", "NewHigh", "NewLow", "Observation", "ObservationRecord", "OracleModelScore", "OracleModelScoreRecord", "OracleRankBy", "OracleScoreData", "OracleScoreMode", "OracleScoreRow", "OracleScoreTable", "OracleScoresQuery", "OracleScoresUpdated", "OrderExecutionStyle", "OrderIntent", "OrderResult", "OrderStatus", "OrderTimePolicy", "OrderType", "PendingOrder", "PlanTier", "Position", "PriceUpdate", "ReportClockSchedule", "ReportHistoryQuery", "ReportIntervalSchedule", "ReportMultiHourSchedule", "ReportSchedule", "ReportScheduleBasis", "ReportScheduleEntry", "ReportType", "ReportsQuery", "RuntimeCapabilities", "RuntimeMode", "ShutdownEvent", "StationForecast", "StationForecastData", "StationInfo", "StationOracleScores", "StationReport", "StationReportHistoryPage", "StationReportRecord", "StationReportsData", "StationWeather", "StrategyConfig", "StrategyEvent", "StrategyScope", "TemperatureDayMode", "TemperatureUnit", "TickerPrices", "TimerWake", "WeatherEvent", "WeatherEventSource", "WuDayMode"
+        ]
+      }
+    },
+    {
+      "id": "shared-portable-helpers-and-constants",
+      "ownership": "broad-parity-required",
+      "evidence_profile": "portable-helper",
+      "rationale": "These constants and portable helpers require shared input/output or error vectors rather than owned JSON object fixtures.",
+      "surfaces": {
+        "python": ["CITY_TO_ICAO", "ICAO_TO_CITY_CODES", "MARKET_TYPE_PREFIX", "SIGNAL_DSM_REACTION", "SIGNAL_METAR_6HR_LOW", "SIGNAL_METAR_6HR_NEW_LOW", "STATION_TIMEZONES", "TICKER_PREFIXES", "apply_fee_rounding", "calculate_fill_fee", "calculate_trade_fee", "city_codes_for_market_type", "climate_day_date", "climate_day_end", "climate_day_has_ended", "get_native_kernel_runner", "parse_climate_date", "primary_city_code_for_market_type", "primary_city_code_for_series", "run_native_or_fallback", "station_from_event_ticker", "station_timezone", "ticker_prefixes_for_station"],
+        "rust_broad": ["CITY_TO_ICAO", "ICAO_TO_CITY_CODES", "MARKET_TYPE_PREFIX", "SIGNAL_DSM_REACTION", "SIGNAL_METAR_6HR_LOW", "SIGNAL_METAR_6HR_NEW_LOW", "STATION_TIMEZONES", "TICKER_PREFIXES", "apply_fee_rounding", "calculate_fill_fee", "calculate_trade_fee", "city_codes_for_market_type", "climate_day_date", "climate_day_end", "climate_day_has_ended", "get_native_kernel_runner", "parse_climate_date", "primary_city_code_for_market_type", "primary_city_code_for_series", "run_native_or_fallback", "station_from_event_ticker", "station_timezone", "ticker_prefixes_for_station"]
+      }
+    },
+    {
+      "id": "shared-strategy-traits",
+      "ownership": "broad-parity-required",
+      "evidence_profile": "strategy-trait",
+      "rationale": "Language signatures may differ, but these strategy-facing protocols and traits require matching behavior and consumer-boundary coverage.",
+      "surfaces": {
+        "python": ["Broker", "EngineClock", "HttpClient", "MarketStateView", "NativeKernel", "NativeKernelFactory", "NativeKernelRunner", "NativeStrategyContext", "StrategyContext", "StrategyDataClient", "StrategyHandler", "StrategyLogger", "StrategyRuntime", "Telemetry", "TimerHandle", "WorkHandle"],
+        "rust_broad": ["Broker", "EngineClock", "HttpClient", "MarketStateView", "NativeKernel", "NativeKernelFactory", "NativeKernelRunner", "NativeStrategyContext", "StrategyContext", "StrategyDataClient", "StrategyHandler", "StrategyLogger", "StrategyRuntime", "Telemetry", "TimerHandle", "WorkHandle"]
+      }
+    },
+    {
+      "id": "shared-type-aliases",
+      "ownership": "broad-parity-required",
+      "evidence_profile": "shared-alias",
+      "rationale": "These aliases name equivalent contract domains but have no independent runtime representation; owning surfaces provide evidence.",
+      "surfaces": {
+        "python": ["FeeType", "JSONObject", "JSONValue", "LocalDateLike", "OrderId", "TelemetryField", "TelemetryFields"],
+        "rust_broad": ["FeeType", "JSONObject", "JSONValue", "LocalDateLike", "OrderId", "TelemetryField", "TelemetryFields"]
+      }
+    },
+    {
+      "id": "python-only-fallback-handler",
+      "ownership": "python-only",
+      "evidence_profile": "language-specific-exclusion",
+      "rationale": "FallbackHandler is a Python Awaitable callable alias; Rust expresses the same call site with a generic Future closure rather than an exported alias.",
+      "surfaces": {"python": ["FallbackHandler"]}
+    },
+    {
+      "id": "shared-native-unavailable-error-carriers",
+      "ownership": "broad-parity-required",
+      "evidence_profile": "language-specific-exclusion",
+      "rationale": "NativeKernelUnavailable is an alias and NativeKernelUnavailableError is a language-native exception/error; parity is the failure category and message behavior at run_native_or_fallback.",
+      "surfaces": {
+        "python": ["NativeKernelUnavailable", "NativeKernelUnavailableError"],
+        "rust_broad": ["NativeKernelUnavailable", "NativeKernelUnavailableError"]
+      }
+    },
+    {
+      "id": "rust-broad-serialized-support",
+      "ownership": "broad-parity-required",
+      "evidence_profile": "serializable-contract",
+      "rationale": "These Rust support enums and aliases encode Python literal, union, object, or price-level domains and are covered through the owning fixture family.",
+      "surfaces": {"rust_broad": ["DateLike", "EventDelivery", "JsonObject", "JsonValue", "MarketType", "PersistenceStatus", "PriceLevel"]}
+    },
+    {
+      "id": "rust-broad-trait-support",
+      "ownership": "broad-parity-required",
+      "evidence_profile": "strategy-trait",
+      "rationale": "ForecastRunLookup and OracleScoreDays are Rust representations of Python union-style method inputs and are proven through trait behavior.",
+      "surfaces": {"rust_broad": ["ForecastRunLookup", "OracleScoreDays"]}
+    },
+    {
+      "id": "rust-specific-errors-and-result-alias",
+      "ownership": "broad-parity-required",
+      "evidence_profile": "language-specific-exclusion",
+      "rationale": "Rust errors and FeeResult are language-specific carriers; parity compares normalized error categories at the helper boundary, not concrete exception identity.",
+      "surfaces": {"rust_broad": ["ClimateDayError", "FeeError", "FeeResult", "NativeKernelRunError", "StationError"]}
+    },
+    {
+      "id": "borrowed-native-kernel-contract",
+      "ownership": "kernel-only",
+      "evidence_profile": "kernel-borrowed-contract",
+      "rationale": "The allocation-sensitive borrowed kernel remains a separate contract whose actions, views, errors, and traits are proven by kernel contract tests rather than broad JSON fixtures.",
+      "surfaces": {
+        "rust_kernel": ["CancelAllOrdersRequest", "CancelOrderRequest", "ContractSide", "ForecastHourlySnapshot", "ForecastInputSnapshot", "ForecastModelSnapshot", "ForecastUpdatedView", "ForecastVersionsView", "HighLowView", "KernelAction", "KernelError", "KernelResult", "LogAction", "MarketBracketView", "NativeKernel", "ObservationView", "OracleInputSnapshot", "OracleModelScoreSnapshot", "OracleScoresUpdatedView", "OrderAction", "OrderResult", "OrderStatus", "OrderType", "PendingOrderView", "PlaceOrderRequest", "PriceLevelView", "PriceUpdateView", "ShutdownView", "StateReadDiagnostic", "StationReportView", "StationWeatherView", "StopAction", "StrategyEventView", "StrategyKernelBroker", "StrategyKernelContext", "StrategyKernelData", "StrategyKernelRuntime", "StrategyKernelState", "StrategyKernelTelemetry", "TelemetryAction", "TickerPriceView", "TimerWakeView", "WakeAtRequest", "WeatherEventSourceView", "WeatherEventView"]
+      }
+    }
+  ]
+}

@@ -92,8 +92,8 @@ pub use runtime::{
 pub use signals::{SIGNAL_DSM_REACTION, SIGNAL_METAR_6HR_LOW, SIGNAL_METAR_6HR_NEW_LOW};
 pub use state::{
     ForecastHourly, FreshnessDomain, FreshnessDomainSummary, FreshnessSnapshot, FreshnessStatus,
-    FreshnessSummary, MarketStateView, ModelForecast, OracleModelScore, PriceLevel,
-    StationForecast, StationOracleScores, StationWeather, TickerPrices,
+    FreshnessSummary, MarketStateView, ModelForecast, OracleModelScore, OracleScoreDays,
+    PriceLevel, StationForecast, StationOracleScores, StationWeather, TickerPrices,
 };
 pub use stations::{
     CITY_TO_ICAO, ICAO_TO_CITY_CODES, MARKET_TYPE_PREFIX, STATION_TIMEZONES, StationError,
