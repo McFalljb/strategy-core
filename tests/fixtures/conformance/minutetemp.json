@@ -1,0 +1,977 @@
+{
+  "authority": "python",
+  "comparison": "structural-json",
+  "family": "minutetemp",
+  "invalid": [
+    {
+      "category": "required_field",
+      "id": "interval-missing-minutes",
+      "rust_type": "ReportIntervalSchedule",
+      "wire": {
+        "label": "bad"
+      }
+    },
+    {
+      "category": "format",
+      "id": "observation-invalid-time",
+      "rust_type": "ObservationRecord",
+      "wire": {
+        "observation_time": "bad"
+      }
+    },
+    {
+      "category": "type",
+      "id": "limits-invalid-ip-guard",
+      "rust_type": "EffectiveLimits",
+      "wire": {
+        "ip_guard": []
+      }
+    }
+  ],
+  "schema_version": 1,
+  "valid": [
+    {
+      "coverage_paths": {
+        "CityInfo": [
+          "city"
+        ],
+        "LatestObservationData": [],
+        "ObservationRecord": [
+          "observation"
+        ],
+        "ReportType": [
+          "observation",
+          "report_type"
+        ],
+        "StationInfo": [
+          "station"
+        ],
+        "TemperatureUnit": [
+          "station",
+          "temperature_unit"
+        ]
+      },
+      "expected": {
+        "asos_daily_high_c": 32.2,
+        "asos_daily_high_f": 90.0,
+        "asos_daily_low_c": 26.1,
+        "asos_daily_low_f": 79.0,
+        "city": {
+          "id": "city-1",
+          "name": "Miami",
+          "slug": "miami",
+          "timezone": "America/New_York"
+        },
+        "daily_high_c": 32.8,
+        "daily_high_f": 91.0,
+        "daily_low_c": 25.6,
+        "daily_low_f": 78.0,
+        "observation": {
+          "barometric_pressure": 29.95,
+          "dewpoint": 72.0,
+          "heat_index": 101.0,
+          "is_from_report": true,
+          "is_locf": true,
+          "observation_time": "2026-07-13T12:34:56.123456Z",
+          "precipitation_1h": 0.0,
+          "precipitation_3h": 0.1,
+          "precipitation_6h": 0.2,
+          "relative_humidity": 64.0,
+          "report_type": "cli",
+          "sea_level_pressure": 1014.0,
+          "source_report_id": "cli-1",
+          "temp_max_c": 32.8,
+          "temp_max_f": 91.0,
+          "temp_min_c": 31.1,
+          "temp_min_f": 88.0,
+          "temperature_c": 32.5,
+          "temperature_f": 90.5,
+          "text_description": "Partly Cloudy",
+          "wind_chill": -0.0,
+          "wind_direction": 180.0,
+          "wind_gust": 14.0,
+          "wind_speed": 8.0
+        },
+        "station": {
+          "name": "Miami International",
+          "station_id": "KMIA",
+          "temperature_unit": "F",
+          "uses_nws_climate_day": true
+        },
+        "temperature_day_date": "2026-07-13",
+        "temperature_day_mode": "nws_climate_day",
+        "wu_current_temp_c": 32.2,
+        "wu_current_temp_f": 90.0,
+        "wu_daily_high_c": 33.3,
+        "wu_daily_high_f": 92.0,
+        "wu_daily_low_c": 25.0,
+        "wu_daily_low_f": 77.0,
+        "wu_day_date": "2026-07-13",
+        "wu_day_mode": "calendar_day",
+        "wu_fetched_at": "2026-07-13T13:45:01.987654Z",
+        "wu_observation_time": "2026-07-13T12:34:56.123456Z"
+      },
+      "id": "latest-observation-full",
+      "rust_type": "LatestObservationData",
+      "wire": {
+        "asos_daily_high_c": 32.2,
+        "asos_daily_high_f": 90.0,
+        "asos_daily_low_c": 26.1,
+        "asos_daily_low_f": 79.0,
+        "city": {
+          "id": "city-1",
+          "name": "Miami",
+          "slug": "miami",
+          "timezone": "America/New_York"
+        },
+        "daily_high_c": 32.8,
+        "daily_high_f": 91.0,
+        "daily_low_c": 25.6,
+        "daily_low_f": 78.0,
+        "observation": {
+          "barometric_pressure": 29.95,
+          "dewpoint": 72.0,
+          "heat_index": 101.0,
+          "is_from_report": true,
+          "is_locf": true,
+          "observation_time": "2026-07-13T12:34:56.123456Z",
+          "precipitation_1h": 0.0,
+          "precipitation_3h": 0.1,
+          "precipitation_6h": 0.2,
+          "relative_humidity": 64.0,
+          "report_type": "cli",
+          "sea_level_pressure": 1014.0,
+          "source_report_id": "cli-1",
+          "temp_max_c": 32.8,
+          "temp_max_f": 91.0,
+          "temp_min_c": 31.1,
+          "temp_min_f": 88.0,
+          "temperature_c": 32.5,
+          "temperature_f": 90.5,
+          "text_description": "Partly Cloudy",
+          "wind_chill": -0.0,
+          "wind_direction": 180.0,
+          "wind_gust": 14.0,
+          "wind_speed": 8.0
+        },
+        "station": {
+          "name": "Miami International",
+          "station_id": "KMIA",
+          "temperature_unit": "F",
+          "uses_nws_climate_day": true
+        },
+        "temperature_day_date": "2026-07-13",
+        "temperature_day_mode": "nws_climate_day",
+        "wu_current_temp_c": 32.2,
+        "wu_current_temp_f": 90.0,
+        "wu_daily_high_c": 33.3,
+        "wu_daily_high_f": 92.0,
+        "wu_daily_low_c": 25.0,
+        "wu_daily_low_f": 77.0,
+        "wu_day_date": "2026-07-13",
+        "wu_day_mode": "calendar_day",
+        "wu_fetched_at": "2026-07-13T13:45:01.987654Z",
+        "wu_observation_time": "2026-07-13T12:34:56.123456Z"
+      }
+    },
+    {
+      "coverage_paths": {
+        "ForecastBundle": [
+          "forecasts",
+          0
+        ],
+        "ForecastBundleRun": [
+          "forecasts",
+          0,
+          "forecast_run"
+        ],
+        "HourlyForecastRecord": [
+          "forecasts",
+          0,
+          "hourly",
+          0
+        ],
+        "StationForecastData": []
+      },
+      "expected": {
+        "city": {
+          "id": "city-1",
+          "name": "Miami",
+          "slug": "miami",
+          "timezone": "America/New_York"
+        },
+        "count": 1,
+        "forecasts": [
+          {
+            "forecast_run": {
+              "fetched_at": "2026-07-13T13:45:01.987654Z",
+              "id": "run-1",
+              "timezone": "America/New_York",
+              "utc_offset_seconds": -14400
+            },
+            "hourly": [
+              {
+                "apparent_temperature_f": 102.0,
+                "cloud_cover": 35.0,
+                "dew_point_2m": 73.0,
+                "precipitation_probability": 20.0,
+                "pressure_msl": 1012.5,
+                "relative_humidity_2m": 61.0,
+                "temperature_2m_c": 32.8,
+                "temperature_2m_f": 91.0,
+                "time": "2026-07-13T13:45:01.987654Z",
+                "wind_direction_10m": 185.0,
+                "wind_gusts_10m": 16.0,
+                "wind_speed_10m": 9.0
+              }
+            ],
+            "model_id": "ncep_hrrr_conus"
+          }
+        ],
+        "station": {
+          "name": "Miami International",
+          "station_id": "KMIA",
+          "temperature_unit": "F",
+          "uses_nws_climate_day": true
+        }
+      },
+      "id": "forecast-full",
+      "rust_type": "StationForecastData",
+      "wire": {
+        "city": {
+          "id": "city-1",
+          "name": "Miami",
+          "slug": "miami",
+          "timezone": "America/New_York"
+        },
+        "count": 1,
+        "forecasts": [
+          {
+            "forecast_run": {
+              "fetched_at": "2026-07-13T13:45:01.987654Z",
+              "id": "run-1",
+              "timezone": "America/New_York",
+              "utc_offset_seconds": -14400
+            },
+            "hourly": [
+              {
+                "apparent_temperature_f": 102.0,
+                "cloud_cover": 35.0,
+                "dew_point_2m": 73.0,
+                "precipitation_probability": 20.0,
+                "pressure_msl": 1012.5,
+                "relative_humidity_2m": 61.0,
+                "temperature_2m_c": 32.8,
+                "temperature_2m_f": 91.0,
+                "time": "2026-07-13T13:45:01.987654Z",
+                "wind_direction_10m": 185.0,
+                "wind_gusts_10m": 16.0,
+                "wind_speed_10m": 9.0
+              }
+            ],
+            "model_id": "ncep_hrrr_conus"
+          }
+        ],
+        "station": {
+          "name": "Miami International",
+          "station_id": "KMIA",
+          "temperature_unit": "F",
+          "uses_nws_climate_day": true
+        }
+      }
+    },
+    {
+      "coverage_paths": {
+        "OracleModelScoreRecord": [
+          "scores",
+          0
+        ],
+        "OracleRankBy": [
+          "rank_by"
+        ],
+        "OracleScoreData": []
+      },
+      "expected": {
+        "all_time": false,
+        "days_requested": 30,
+        "range_end": "2026-07-12",
+        "range_start": "2026-06-01",
+        "rank_by": "high",
+        "score_mode": "day_of",
+        "scores": [
+          {
+            "combined_mae": 1.25,
+            "day_count": 30,
+            "high_bias": -0.0,
+            "high_mae": 1.0,
+            "is_public": true,
+            "low_bias": -0.25,
+            "low_mae": 1.5,
+            "model_id": "ncep_hrrr_conus",
+            "model_name": "HRRR"
+          }
+        ],
+        "station_id": "KMIA"
+      },
+      "id": "oracle-scores-full",
+      "rust_type": "OracleScoreData",
+      "wire": {
+        "all_time": false,
+        "days_requested": 30,
+        "range_end": "2026-07-12",
+        "range_start": "2026-06-01",
+        "rank_by": "high",
+        "score_mode": "day_of",
+        "scores": [
+          {
+            "combined_mae": 1.25,
+            "day_count": 30,
+            "high_bias": -0.0,
+            "high_mae": 1.0,
+            "is_public": true,
+            "low_bias": -0.25,
+            "low_mae": 1.5,
+            "model_id": "ncep_hrrr_conus",
+            "model_name": "HRRR"
+          }
+        ],
+        "station_id": "KMIA"
+      }
+    },
+    {
+      "coverage_paths": {
+        "LatestReportsData": [],
+        "ReportClockSchedule": [
+          "report_schedules",
+          "cli"
+        ],
+        "ReportIntervalSchedule": [
+          "report_schedules",
+          "metar_tgroup"
+        ],
+        "ReportMultiHourSchedule": [
+          "report_schedules",
+          "dsm",
+          0
+        ],
+        "ReportSchedule": [
+          "report_schedules",
+          "cli"
+        ],
+        "ReportScheduleBasis": [
+          "report_schedules",
+          "cli",
+          "basis"
+        ],
+        "ReportScheduleEntry": [
+          "report_schedules",
+          "dsm"
+        ],
+        "StationReportRecord": [
+          "reports",
+          0
+        ]
+      },
+      "expected": {
+        "report_schedules": {
+          "cli": {
+            "basis": "local",
+            "hour": 8,
+            "label": "CLI",
+            "local_hour": 8,
+            "local_minute": 0,
+            "minute": 0,
+            "utc_hour": null,
+            "utc_minute": null
+          },
+          "dsm": [
+            {
+              "label": "DSM",
+              "local_hours": [
+                1,
+                7,
+                13,
+                19
+              ],
+              "local_minute": 0,
+              "utc_hours": [
+                0,
+                6,
+                12,
+                18
+              ],
+              "utc_minute": 0
+            }
+          ],
+          "metar_tgroup": {
+            "interval_minutes": 60,
+            "label": "Hourly",
+            "local_minute": null,
+            "utc_minute": 53
+          }
+        },
+        "reports": [
+          {
+            "fetched_at": "2026-07-13T13:45:01.987654Z",
+            "issuance_time": "2026-07-13T12:34:56.123456Z",
+            "max_temp_c": 32.8,
+            "max_temp_f": 91.0,
+            "max_temp_time_utc": "2026-07-13T12:34:56.123456Z",
+            "min_temp_c": 25.6,
+            "min_temp_f": 78.0,
+            "min_temp_time_utc": "2026-07-13T13:45:01.987654Z",
+            "report_date": "2026-07-13",
+            "report_id": "report-1",
+            "report_revision": 2,
+            "report_type": "dsm",
+            "report_updated_at": "2026-07-13T13:45:01.987654Z",
+            "temp_c": 32.2,
+            "temp_f": 90.0
+          }
+        ]
+      },
+      "id": "latest-reports-all-schedules",
+      "rust_type": "LatestReportsData",
+      "wire": {
+        "report_schedules": {
+          "cli": {
+            "basis": "local",
+            "hour": 8,
+            "label": "CLI",
+            "local_hour": 8,
+            "local_minute": 0,
+            "minute": 0,
+            "utc_hour": null,
+            "utc_minute": null
+          },
+          "dsm": [
+            {
+              "label": "DSM",
+              "local_hours": [
+                1,
+                7,
+                13,
+                19
+              ],
+              "local_minute": 0,
+              "utc_hours": [
+                0,
+                6,
+                12,
+                18
+              ],
+              "utc_minute": 0
+            }
+          ],
+          "metar_tgroup": {
+            "interval_minutes": 60,
+            "label": "Hourly",
+            "local_minute": null,
+            "utc_minute": 53
+          }
+        },
+        "reports": [
+          {
+            "fetched_at": "2026-07-13T13:45:01.987654Z",
+            "issuance_time": "2026-07-13T12:34:56.123456Z",
+            "max_temp_c": 32.8,
+            "max_temp_f": 91.0,
+            "max_temp_time_utc": "2026-07-13T12:34:56.123456Z",
+            "min_temp_c": 25.6,
+            "min_temp_f": 78.0,
+            "min_temp_time_utc": "2026-07-13T13:45:01.987654Z",
+            "report_date": "2026-07-13",
+            "report_id": "report-1",
+            "report_revision": 2,
+            "report_type": "dsm",
+            "report_updated_at": "2026-07-13T13:45:01.987654Z",
+            "temp_c": 32.2,
+            "temp_f": 90.0
+          }
+        ]
+      }
+    },
+    {
+      "coverage_paths": {
+        "ReportType": [
+          "reports",
+          0,
+          "report_type"
+        ],
+        "StationReportsData": []
+      },
+      "expected": {
+        "reports": [
+          {
+            "fetched_at": "2026-07-13T13:45:01.987654Z",
+            "issuance_time": "2026-07-13T12:34:56.123456Z",
+            "max_temp_c": 32.8,
+            "max_temp_f": 91.0,
+            "max_temp_time_utc": "2026-07-13T12:34:56.123456Z",
+            "min_temp_c": 25.6,
+            "min_temp_f": 78.0,
+            "min_temp_time_utc": "2026-07-13T13:45:01.987654Z",
+            "report_date": "2026-07-13",
+            "report_id": "report-1",
+            "report_revision": 2,
+            "report_type": "dsm",
+            "report_updated_at": "2026-07-13T13:45:01.987654Z",
+            "temp_c": 32.2,
+            "temp_f": 90.0
+          }
+        ]
+      },
+      "id": "reports-page",
+      "rust_type": "StationReportsData",
+      "wire": {
+        "reports": [
+          {
+            "fetched_at": "2026-07-13T13:45:01.987654Z",
+            "issuance_time": "2026-07-13T12:34:56.123456Z",
+            "max_temp_c": 32.8,
+            "max_temp_f": 91.0,
+            "max_temp_time_utc": "2026-07-13T12:34:56.123456Z",
+            "min_temp_c": 25.6,
+            "min_temp_f": 78.0,
+            "min_temp_time_utc": "2026-07-13T13:45:01.987654Z",
+            "report_date": "2026-07-13",
+            "report_id": "report-1",
+            "report_revision": 2,
+            "report_type": "dsm",
+            "report_updated_at": "2026-07-13T13:45:01.987654Z",
+            "temp_c": 32.2,
+            "temp_f": 90.0
+          }
+        ]
+      }
+    },
+    {
+      "coverage_paths": {
+        "CursorPage": [
+          "page"
+        ],
+        "StationReportHistoryPage": []
+      },
+      "expected": {
+        "city": {
+          "id": "city-1",
+          "name": "Miami",
+          "slug": "miami",
+          "timezone": "America/New_York"
+        },
+        "count": 1,
+        "page": {
+          "limit": 100,
+          "next_cursor": "next-1"
+        },
+        "report_schedules": {
+          "cli": {
+            "basis": "utc",
+            "hour": null,
+            "label": "",
+            "local_hour": null,
+            "local_minute": null,
+            "minute": null,
+            "utc_hour": 12,
+            "utc_minute": null
+          }
+        },
+        "reports": [
+          {
+            "fetched_at": "2026-07-13T13:45:01.987654Z",
+            "issuance_time": "2026-07-13T12:34:56.123456Z",
+            "max_temp_c": 32.8,
+            "max_temp_f": 91.0,
+            "max_temp_time_utc": "2026-07-13T12:34:56.123456Z",
+            "min_temp_c": 25.6,
+            "min_temp_f": 78.0,
+            "min_temp_time_utc": "2026-07-13T13:45:01.987654Z",
+            "report_date": "2026-07-13",
+            "report_id": "report-1",
+            "report_revision": 2,
+            "report_type": "dsm",
+            "report_updated_at": "2026-07-13T13:45:01.987654Z",
+            "temp_c": 32.2,
+            "temp_f": 90.0
+          }
+        ],
+        "station": {
+          "name": "Miami International",
+          "station_id": "KMIA",
+          "temperature_unit": "F",
+          "uses_nws_climate_day": true
+        }
+      },
+      "id": "report-history-page",
+      "rust_type": "StationReportHistoryPage",
+      "wire": {
+        "city": {
+          "id": "city-1",
+          "name": "Miami",
+          "slug": "miami",
+          "timezone": "America/New_York"
+        },
+        "count": 1,
+        "page": {
+          "limit": 100,
+          "next_cursor": "next-1"
+        },
+        "report_schedules": {
+          "cli": {
+            "basis": "utc",
+            "hour": null,
+            "label": "",
+            "local_hour": null,
+            "local_minute": null,
+            "minute": null,
+            "utc_hour": 12,
+            "utc_minute": null
+          }
+        },
+        "reports": [
+          {
+            "fetched_at": "2026-07-13T13:45:01.987654Z",
+            "issuance_time": "2026-07-13T12:34:56.123456Z",
+            "max_temp_c": 32.8,
+            "max_temp_f": 91.0,
+            "max_temp_time_utc": "2026-07-13T12:34:56.123456Z",
+            "min_temp_c": 25.6,
+            "min_temp_f": 78.0,
+            "min_temp_time_utc": "2026-07-13T13:45:01.987654Z",
+            "report_date": "2026-07-13",
+            "report_id": "report-1",
+            "report_revision": 2,
+            "report_type": "dsm",
+            "report_updated_at": "2026-07-13T13:45:01.987654Z",
+            "temp_c": 32.2,
+            "temp_f": 90.0
+          }
+        ],
+        "station": {
+          "name": "Miami International",
+          "station_id": "KMIA",
+          "temperature_unit": "F",
+          "uses_nws_climate_day": true
+        }
+      }
+    },
+    {
+      "coverage_paths": {
+        "ForecastRunSummary": [
+          "runs",
+          0
+        ],
+        "ForecastRunsPage": []
+      },
+      "expected": {
+        "city": {
+          "id": "city-1",
+          "name": "Miami",
+          "slug": "miami",
+          "timezone": "America/New_York"
+        },
+        "count": 1,
+        "page": {
+          "limit": 1,
+          "next_cursor": null
+        },
+        "runs": [
+          {
+            "data_hash": "sha256:abc",
+            "fetched_at": "2026-07-13T13:45:01.987654Z",
+            "forecast_time": "2026-07-13T12:34:56.123456Z",
+            "id": "run-1",
+            "model_id": "ncep_hrrr_conus",
+            "station_id": "KMIA",
+            "timezone": "America/New_York",
+            "utc_offset_seconds": -14400
+          }
+        ],
+        "station": {
+          "name": "Miami International",
+          "station_id": "KMIA",
+          "temperature_unit": "F",
+          "uses_nws_climate_day": true
+        }
+      },
+      "id": "forecast-runs-page",
+      "rust_type": "ForecastRunsPage",
+      "wire": {
+        "city": {
+          "id": "city-1",
+          "name": "Miami",
+          "slug": "miami",
+          "timezone": "America/New_York"
+        },
+        "count": 1,
+        "page": {
+          "limit": 1,
+          "next_cursor": null
+        },
+        "runs": [
+          {
+            "data_hash": "sha256:abc",
+            "fetched_at": "2026-07-13T13:45:01.987654Z",
+            "forecast_time": "2026-07-13T12:34:56.123456Z",
+            "id": "run-1",
+            "model_id": "ncep_hrrr_conus",
+            "station_id": "KMIA",
+            "timezone": "America/New_York",
+            "utc_offset_seconds": -14400
+          }
+        ],
+        "station": {
+          "name": "Miami International",
+          "station_id": "KMIA",
+          "temperature_unit": "F",
+          "uses_nws_climate_day": true
+        }
+      }
+    },
+    {
+      "coverage_paths": {
+        "ForecastRunData": []
+      },
+      "expected": {
+        "city": {
+          "id": "city-1",
+          "name": "Miami",
+          "slug": "miami",
+          "timezone": "America/New_York"
+        },
+        "count": 1,
+        "forecast_run": {
+          "data_hash": "sha256:abc",
+          "fetched_at": "2026-07-13T13:45:01.987654Z",
+          "forecast_time": "2026-07-13T12:34:56.123456Z",
+          "id": "run-1",
+          "model_id": "ncep_hrrr_conus",
+          "station_id": "KMIA",
+          "timezone": "America/New_York",
+          "utc_offset_seconds": -14400
+        },
+        "hourly": [
+          {
+            "apparent_temperature_f": 102.0,
+            "cloud_cover": 35.0,
+            "dew_point_2m": 73.0,
+            "precipitation_probability": 20.0,
+            "pressure_msl": 1012.5,
+            "relative_humidity_2m": 61.0,
+            "temperature_2m_c": 32.8,
+            "temperature_2m_f": 91.0,
+            "time": "2026-07-13T13:45:01.987654Z",
+            "wind_direction_10m": 185.0,
+            "wind_gusts_10m": 16.0,
+            "wind_speed_10m": 9.0
+          }
+        ],
+        "station": {
+          "name": "Miami International",
+          "station_id": "KMIA",
+          "temperature_unit": "F",
+          "uses_nws_climate_day": true
+        }
+      },
+      "id": "forecast-run-detail",
+      "rust_type": "ForecastRunData",
+      "wire": {
+        "city": {
+          "id": "city-1",
+          "name": "Miami",
+          "slug": "miami",
+          "timezone": "America/New_York"
+        },
+        "count": 1,
+        "forecast_run": {
+          "data_hash": "sha256:abc",
+          "fetched_at": "2026-07-13T13:45:01.987654Z",
+          "forecast_time": "2026-07-13T12:34:56.123456Z",
+          "id": "run-1",
+          "model_id": "ncep_hrrr_conus",
+          "station_id": "KMIA",
+          "timezone": "America/New_York",
+          "utc_offset_seconds": -14400
+        },
+        "hourly": [
+          {
+            "apparent_temperature_f": 102.0,
+            "cloud_cover": 35.0,
+            "dew_point_2m": 73.0,
+            "precipitation_probability": 20.0,
+            "pressure_msl": 1012.5,
+            "relative_humidity_2m": 61.0,
+            "temperature_2m_c": 32.8,
+            "temperature_2m_f": 91.0,
+            "time": "2026-07-13T13:45:01.987654Z",
+            "wind_direction_10m": 185.0,
+            "wind_gusts_10m": 16.0,
+            "wind_speed_10m": 9.0
+          }
+        ],
+        "station": {
+          "name": "Miami International",
+          "station_id": "KMIA",
+          "temperature_unit": "F",
+          "uses_nws_climate_day": true
+        }
+      }
+    },
+    {
+      "coverage_paths": {
+        "EffectiveLimits": [],
+        "IpGuardLimits": [
+          "ip_guard"
+        ],
+        "PlanTier": [
+          "tier"
+        ]
+      },
+      "expected": {
+        "daily_max": 100000,
+        "ip_guard": {
+          "burst": 20,
+          "requests_per_second": 10
+        },
+        "max_history_days": 365,
+        "rate_limit_remaining": 599,
+        "rate_limit_reset_seconds": 1,
+        "requests_per_minute": 600,
+        "tier": "clanker"
+      },
+      "id": "limits-full",
+      "rust_type": "EffectiveLimits",
+      "wire": {
+        "daily_max": 100000,
+        "ip_guard": {
+          "burst": 20,
+          "requests_per_second": 10
+        },
+        "max_history_days": 365,
+        "rate_limit_remaining": 599,
+        "rate_limit_reset_seconds": 1,
+        "requests_per_minute": 600,
+        "tier": "clanker"
+      }
+    },
+    {
+      "coverage_paths": {
+        "LatestObservationData": []
+      },
+      "expected": {
+        "asos_daily_high_c": null,
+        "asos_daily_high_f": null,
+        "asos_daily_low_c": null,
+        "asos_daily_low_f": null,
+        "city": null,
+        "daily_high_c": null,
+        "daily_high_f": null,
+        "daily_low_c": null,
+        "daily_low_f": null,
+        "observation": null,
+        "station": null,
+        "temperature_day_date": null,
+        "temperature_day_mode": null,
+        "wu_current_temp_c": null,
+        "wu_current_temp_f": null,
+        "wu_daily_high_c": null,
+        "wu_daily_high_f": null,
+        "wu_daily_low_c": null,
+        "wu_daily_low_f": null,
+        "wu_day_date": null,
+        "wu_day_mode": null,
+        "wu_fetched_at": null,
+        "wu_observation_time": null
+      },
+      "id": "latest-observation-defaults",
+      "rust_type": "LatestObservationData",
+      "wire": {
+        "asos_daily_high_c": null,
+        "asos_daily_high_f": null,
+        "asos_daily_low_c": null,
+        "asos_daily_low_f": null,
+        "city": null,
+        "daily_high_c": null,
+        "daily_high_f": null,
+        "daily_low_c": null,
+        "daily_low_f": null,
+        "observation": null,
+        "station": null,
+        "temperature_day_date": null,
+        "temperature_day_mode": null,
+        "wu_current_temp_c": null,
+        "wu_current_temp_f": null,
+        "wu_daily_high_c": null,
+        "wu_daily_high_f": null,
+        "wu_daily_low_c": null,
+        "wu_daily_low_f": null,
+        "wu_day_date": null,
+        "wu_day_mode": null,
+        "wu_fetched_at": null,
+        "wu_observation_time": null
+      }
+    },
+    {
+      "coverage_paths": {
+        "ForecastRunsPage": []
+      },
+      "expected": {
+        "city": null,
+        "count": null,
+        "page": null,
+        "runs": [],
+        "station": null
+      },
+      "id": "forecast-runs-empty-page",
+      "rust_type": "ForecastRunsPage",
+      "wire": {
+        "city": null,
+        "count": null,
+        "page": null,
+        "runs": [],
+        "station": null
+      }
+    },
+    {
+      "coverage_paths": {
+        "EffectiveLimits": []
+      },
+      "expected": {
+        "daily_max": null,
+        "ip_guard": null,
+        "max_history_days": null,
+        "rate_limit_remaining": null,
+        "rate_limit_reset_seconds": null,
+        "requests_per_minute": null,
+        "tier": "starter"
+      },
+      "id": "limits-defaults",
+      "rust_type": "EffectiveLimits",
+      "wire": {
+        "daily_max": null,
+        "ip_guard": null,
+        "max_history_days": null,
+        "rate_limit_remaining": null,
+        "rate_limit_reset_seconds": null,
+        "requests_per_minute": null,
+        "tier": "starter"
+      }
+    },
+    {
+      "coverage_paths": {
+        "DataResolution": []
+      },
+      "expected": "5m",
+      "id": "data-resolution",
+      "rust_type": "DataResolution",
+      "wire": "5m"
+    }
+  ],
+  "wire_policy": {
+    "enum_strings": "Literal aliases are exercised through fields that intentionally also accept strings for upstream extension.",
+    "non_finite_numbers": "excluded because they are not JSON-compatible values",
+    "optional_fields": "omitted inputs resolve through defaults; explicit null is retained when nullable",
+    "portable_integer_domain": "signed 64-bit",
+    "unknown_object_fields": "ignored and absent from canonical output"
+  }
+}

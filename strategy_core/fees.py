@@ -40,7 +40,7 @@ def calculate_trade_fee(
 ) -> float:
     """Return the base Kalshi trade fee before cent-alignment rounding."""
     multiplier = _resolve_fee_multiplier(liquidity_role, fee_type, fee_multiplier)
-    price_decimal = Decimal(str(price))
+    price_decimal = _decimal_from_float(price)
     quantity_decimal = Decimal(quantity)
     raw_fee = _raw_trade_fee(
         price_decimal,
@@ -58,9 +58,9 @@ def apply_fee_rounding(
     fee_accumulator: float = 0.0,
 ) -> FeeCalculation:
     """Apply Kalshi's cent-alignment rules to a fill."""
-    revenue_decimal = Decimal(str(revenue))
-    rounded_trade_fee = _ceil_to_increment(Decimal(str(trade_fee)), _CENTICENT)
-    accumulator_decimal = Decimal(str(fee_accumulator))
+    revenue_decimal = _decimal_from_float(revenue)
+    rounded_trade_fee = _ceil_to_increment(_decimal_from_float(trade_fee), _CENTICENT)
+    accumulator_decimal = _decimal_from_float(fee_accumulator)
 
     balance_change = revenue_decimal - rounded_trade_fee
     floored_balance_change = _floor_to_increment(balance_change, _CENT)
@@ -94,7 +94,7 @@ def calculate_fill_fee(
     fee_multiplier: float | None = None,
 ) -> FeeCalculation:
     """Return the fully rounded fee/cash impact for one Kalshi fill."""
-    price_decimal = Decimal(str(price))
+    price_decimal = _decimal_from_float(price)
     quantity_decimal = Decimal(quantity)
     revenue = price_decimal * quantity_decimal
     if action == "buy":
@@ -120,7 +120,7 @@ def _resolve_fee_multiplier(
     fee_multiplier: float | None,
 ) -> Decimal:
     normalized_fee_type = fee_type or "quadratic_with_maker_fees"
-    multiplier = Decimal(str(fee_multiplier)) if fee_multiplier is not None else Decimal("1")
+    multiplier = _decimal_from_float(fee_multiplier) if fee_multiplier is not None else Decimal("1")
 
     if normalized_fee_type == "quadratic":
         if liquidity_role == "maker":
@@ -153,6 +153,14 @@ def _raw_trade_fee(
         return multiplier * quantity * price * (_ONE - price)
     msg = f"unknown Kalshi fee type: {normalized_fee_type}"
     raise ValueError(msg)
+
+
+def _decimal_from_float(value: float) -> Decimal:
+    decimal_value = Decimal(str(value))
+    if not decimal_value.is_finite():
+        msg = f"invalid decimal value: {value}"
+        raise ValueError(msg)
+    return decimal_value
 
 
 def _ceil_to_increment(value: Decimal, increment: Decimal) -> Decimal:

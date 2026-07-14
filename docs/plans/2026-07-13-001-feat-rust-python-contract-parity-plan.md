@@ -353,7 +353,7 @@ newly exposed production drift.
 - Python and broad Rust tests consume the same checked-in corpus, and every core parity-required
   manifest entry has positive and applicable negative coverage.
 
-- [ ] **Unit 3: Complete helper and external-model conformance**
+- [x] **Unit 3: Complete helper and external-model conformance**
 
 **Goal:** Extend the same authority model to portable helper behavior and the complete public
 MinuteTemp, Kalshi, data, and HTTP model families.

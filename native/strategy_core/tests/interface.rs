@@ -203,67 +203,65 @@ fn market_state_oracle_selectors_match_python_contract() {
         oracle_scores: [("KMIA".to_string(), scores)].into_iter().collect(),
     };
 
-    assert!(state.get_oracle_scores("KMIA", None, None, None).is_some());
-    assert!(
-        state
-            .get_oracle_scores(
-                "KMIA",
-                Some(OracleScoreDays::from("7")),
-                Some("day_of"),
-                Some("high"),
-            )
-            .is_some()
-    );
-    assert!(
-        state
-            .get_oracle_scores(
-                "KMIA",
-                Some(OracleScoreDays::from(7_i64)),
-                Some("day_of"),
-                Some("high"),
-            )
-            .is_some()
-    );
-    assert!(
-        state
-            .get_oracle_scores(
-                "KMIA",
-                Some(OracleScoreDays::from("30")),
-                Some("day_of"),
-                Some("high"),
-            )
-            .is_none()
-    );
-    assert!(
-        state
-            .get_oracle_scores(
-                "KMIA",
-                Some(OracleScoreDays::from("7")),
-                Some("day_ahead"),
-                Some("high"),
-            )
-            .is_none()
-    );
-    assert!(
-        state
-            .get_oracle_scores(
-                "KMIA",
-                Some(OracleScoreDays::from("7")),
-                Some("day_of"),
-                Some("combined"),
-            )
-            .is_none()
-    );
-    assert!(
-        state
-            .get_oracle_scores(
-                "KORD",
-                Some(OracleScoreDays::from(7_i64)),
-                Some("day_of"),
-                Some("high"),
-            )
-            .is_none()
-    );
+    for (case_id, station, days, mode, rank_by, expected) in [
+        ("omitted", "KMIA", None, None, None, true),
+        (
+            "string days",
+            "KMIA",
+            Some(OracleScoreDays::from("7")),
+            Some("day_of"),
+            Some("high"),
+            true,
+        ),
+        (
+            "integer days",
+            "KMIA",
+            Some(OracleScoreDays::from(7_i64)),
+            Some("day_of"),
+            Some("high"),
+            true,
+        ),
+        (
+            "mismatched days",
+            "KMIA",
+            Some(OracleScoreDays::from("30")),
+            Some("day_of"),
+            Some("high"),
+            false,
+        ),
+        (
+            "mismatched mode",
+            "KMIA",
+            Some(OracleScoreDays::from("7")),
+            Some("day_ahead"),
+            Some("high"),
+            false,
+        ),
+        (
+            "mismatched rank",
+            "KMIA",
+            Some(OracleScoreDays::from("7")),
+            Some("day_of"),
+            Some("combined"),
+            false,
+        ),
+        (
+            "missing station",
+            "KORD",
+            Some(OracleScoreDays::from(7_i64)),
+            Some("day_of"),
+            Some("high"),
+            false,
+        ),
+    ] {
+        assert_eq!(
+            state
+                .get_oracle_scores(station, days, mode, rank_by,)
+                .is_some(),
+            expected,
+            "{case_id}",
+        );
+    }
 }
 
 #[test]

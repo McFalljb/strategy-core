@@ -1,0 +1,691 @@
+{
+  "authority": "python",
+  "cases": [
+    {
+      "covers": [
+        "calculate_trade_fee",
+        "LiquidityRole"
+      ],
+      "expected": {
+        "ok": 1.75
+      },
+      "helper": "calculate_trade_fee",
+      "id": "fee-taker-default",
+      "input": {
+        "liquidity_role": "taker",
+        "price": 0.5,
+        "quantity": 100
+      }
+    },
+    {
+      "covers": [
+        "calculate_trade_fee"
+      ],
+      "expected": {
+        "ok": 0.0
+      },
+      "helper": "calculate_trade_fee",
+      "id": "fee-maker-quadratic",
+      "input": {
+        "fee_type": "quadratic",
+        "liquidity_role": "maker",
+        "price": 0.25,
+        "quantity": 10
+      }
+    },
+    {
+      "covers": [
+        "calculate_trade_fee"
+      ],
+      "expected": {
+        "ok": 1.47
+      },
+      "helper": "calculate_trade_fee",
+      "id": "fee-flat-multiplier",
+      "input": {
+        "fee_multiplier": 2.0,
+        "fee_type": "flat",
+        "liquidity_role": "taker",
+        "price": 0.3,
+        "quantity": 100
+      }
+    },
+    {
+      "covers": [
+        "apply_fee_rounding",
+        "FeeCalculation"
+      ],
+      "expected": {
+        "ok": {
+          "fee_accumulator": 0.003,
+          "net_fee": 0.005,
+          "posted_balance_change": -0.06,
+          "rebate": 0.01,
+          "rounding_fee": 0.0065,
+          "trade_fee": 0.0085
+        }
+      },
+      "helper": "apply_fee_rounding",
+      "id": "fee-rounding-boundary",
+      "input": {
+        "fee_accumulator": 0.0065,
+        "revenue": -0.055,
+        "trade_fee": 0.0085
+      }
+    },
+    {
+      "covers": [
+        "calculate_fill_fee"
+      ],
+      "expected": {
+        "ok": {
+          "fee_accumulator": 0.001,
+          "net_fee": 0.01,
+          "posted_balance_change": 2.69,
+          "rebate": 0.01,
+          "rounding_fee": 0.0011,
+          "trade_fee": 0.0189
+        }
+      },
+      "helper": "calculate_fill_fee",
+      "id": "fill-fee-sell",
+      "input": {
+        "action": "sell",
+        "fee_accumulator": 0.0099,
+        "fee_multiplier": 1.0,
+        "fee_type": "quadratic_with_maker_fees",
+        "liquidity_role": "taker",
+        "price": 0.9,
+        "quantity": 3
+      }
+    },
+    {
+      "covers": [
+        "calculate_trade_fee"
+      ],
+      "expected": {
+        "error": "unknown_fee_type"
+      },
+      "helper": "calculate_trade_fee",
+      "id": "fee-unknown-type",
+      "input": {
+        "fee_type": "unknown",
+        "liquidity_role": "taker",
+        "price": 0.5,
+        "quantity": 1
+      }
+    },
+    {
+      "covers": [
+        "calculate_trade_fee"
+      ],
+      "expected": {
+        "error": "invalid_decimal"
+      },
+      "helper": "calculate_trade_fee",
+      "id": "fee-invalid-decimal",
+      "input": {
+        "liquidity_role": "taker",
+        "price": {
+          "non_finite": "nan"
+        },
+        "quantity": 1
+      }
+    },
+    {
+      "covers": [
+        "calculate_trade_fee"
+      ],
+      "expected": {
+        "error": "invalid_decimal"
+      },
+      "helper": "calculate_trade_fee",
+      "id": "fee-positive-infinity",
+      "input": {
+        "liquidity_role": "taker",
+        "price": {
+          "non_finite": "inf"
+        },
+        "quantity": 1
+      }
+    },
+    {
+      "covers": [
+        "calculate_trade_fee"
+      ],
+      "expected": {
+        "error": "invalid_decimal"
+      },
+      "helper": "calculate_trade_fee",
+      "id": "fee-negative-infinity",
+      "input": {
+        "liquidity_role": "taker",
+        "price": {
+          "non_finite": "-inf"
+        },
+        "quantity": 1
+      }
+    },
+    {
+      "covers": [
+        "CITY_TO_ICAO",
+        "ICAO_TO_CITY_CODES",
+        "MARKET_TYPE_PREFIX",
+        "STATION_TIMEZONES",
+        "TICKER_PREFIXES"
+      ],
+      "expected": {
+        "ok": {
+          "city_to_icao": {
+            "ATL": "KATL",
+            "AU": "KAUS",
+            "AUS": "KAUS",
+            "BOS": "KBOS",
+            "CHI": "KMDW",
+            "DAL": "KDFW",
+            "DC": "KDCA",
+            "DCA": "KDCA",
+            "DEN": "KDEN",
+            "DFW": "KDFW",
+            "HOU": "KHOU",
+            "JFK": "KJFK",
+            "LA": "KLAX",
+            "LAS": "KLAS",
+            "LAX": "KLAX",
+            "LV": "KLAS",
+            "MDW": "KMDW",
+            "MI": "KMIA",
+            "MIA": "KMIA",
+            "MIN": "KMSP",
+            "MSP": "KMSP",
+            "MSY": "KMSY",
+            "MW": "KMDW",
+            "NOLA": "KMSY",
+            "NY": "KNYC",
+            "OKC": "KOKC",
+            "ORD": "KORD",
+            "PHIL": "KPHL",
+            "PHL": "KPHL",
+            "PHX": "KPHX",
+            "SAT": "KSAT",
+            "SATX": "KSAT",
+            "SEA": "KSEA",
+            "SFO": "KSFO",
+            "TATL": "KATL",
+            "TBOS": "KBOS",
+            "TDAL": "KDFW",
+            "TDC": "KDCA",
+            "THOU": "KHOU",
+            "TLV": "KLAS",
+            "TMIN": "KMSP",
+            "TNOLA": "KMSY",
+            "TOKC": "KOKC",
+            "TPHX": "KPHX",
+            "TSATX": "KSAT",
+            "TSEA": "KSEA",
+            "TSFO": "KSFO"
+          },
+          "icao_to_city_codes": {
+            "KATL": [
+              "TATL",
+              "ATL"
+            ],
+            "KAUS": [
+              "AUS",
+              "AU"
+            ],
+            "KBOS": [
+              "TBOS",
+              "BOS"
+            ],
+            "KDCA": [
+              "TDC",
+              "DC",
+              "DCA"
+            ],
+            "KDEN": [
+              "DEN"
+            ],
+            "KDFW": [
+              "TDAL",
+              "DAL",
+              "DFW"
+            ],
+            "KHOU": [
+              "THOU",
+              "HOU"
+            ],
+            "KJFK": [
+              "JFK"
+            ],
+            "KLAS": [
+              "TLV",
+              "LV",
+              "LAS"
+            ],
+            "KLAX": [
+              "LAX",
+              "LA"
+            ],
+            "KMDW": [
+              "CHI",
+              "MDW",
+              "MW"
+            ],
+            "KMIA": [
+              "MIA",
+              "MI"
+            ],
+            "KMSP": [
+              "TMIN",
+              "MIN",
+              "MSP"
+            ],
+            "KMSY": [
+              "TNOLA",
+              "NOLA",
+              "MSY"
+            ],
+            "KNYC": [
+              "NY"
+            ],
+            "KOKC": [
+              "TOKC",
+              "OKC"
+            ],
+            "KORD": [
+              "ORD"
+            ],
+            "KPHL": [
+              "PHIL",
+              "PHL"
+            ],
+            "KPHX": [
+              "TPHX",
+              "PHX"
+            ],
+            "KSAT": [
+              "TSATX",
+              "SATX",
+              "SAT"
+            ],
+            "KSEA": [
+              "TSEA",
+              "SEA"
+            ],
+            "KSFO": [
+              "TSFO",
+              "SFO"
+            ]
+          },
+          "market_type_prefix": {
+            "high": "KXHIGH",
+            "low": "KXLOWT"
+          },
+          "station_timezones": {
+            "KATL": "America/New_York",
+            "KAUS": "America/Chicago",
+            "KBOS": "America/New_York",
+            "KDCA": "America/New_York",
+            "KDEN": "America/Denver",
+            "KDFW": "America/Chicago",
+            "KHOU": "America/Chicago",
+            "KJFK": "America/New_York",
+            "KLAS": "America/Los_Angeles",
+            "KLAX": "America/Los_Angeles",
+            "KMDW": "America/Chicago",
+            "KMIA": "America/New_York",
+            "KMSP": "America/Chicago",
+            "KMSY": "America/Chicago",
+            "KNYC": "America/New_York",
+            "KOKC": "America/Chicago",
+            "KORD": "America/Chicago",
+            "KPHL": "America/New_York",
+            "KPHX": "America/Phoenix",
+            "KSAT": "America/Chicago",
+            "KSEA": "America/Los_Angeles",
+            "KSFO": "America/Los_Angeles"
+          },
+          "ticker_prefixes": [
+            "KXHIGH",
+            "KXLOWT"
+          ]
+        }
+      },
+      "helper": "station_constants",
+      "id": "station-constants",
+      "input": {}
+    },
+    {
+      "covers": [
+        "SIGNAL_DSM_REACTION",
+        "SIGNAL_METAR_6HR_LOW",
+        "SIGNAL_METAR_6HR_NEW_LOW"
+      ],
+      "expected": {
+        "ok": {
+          "dsm_reaction": "dsm_reaction",
+          "metar_6hr_low": "metar_6hr_low",
+          "metar_6hr_new_low": "metar_6hr_new_low"
+        }
+      },
+      "helper": "signal_constants",
+      "id": "signal-constants",
+      "input": {}
+    },
+    {
+      "covers": [
+        "primary_city_code_for_series"
+      ],
+      "expected": {
+        "ok": "TDAL"
+      },
+      "helper": "primary_city_code_for_series",
+      "id": "primary-city-known",
+      "input": {
+        "station": "kdfw"
+      }
+    },
+    {
+      "covers": [
+        "primary_city_code_for_series"
+      ],
+      "expected": {
+        "ok": "XYZ"
+      },
+      "helper": "primary_city_code_for_series",
+      "id": "primary-city-fallback",
+      "input": {
+        "station": "KXYZ"
+      }
+    },
+    {
+      "covers": [
+        "city_codes_for_market_type"
+      ],
+      "expected": {
+        "ok": [
+          "CHI",
+          "MDW",
+          "MW"
+        ]
+      },
+      "helper": "city_codes_for_market_type",
+      "id": "market-city-high",
+      "input": {
+        "market_type": "high",
+        "station": "KMDW"
+      }
+    },
+    {
+      "covers": [
+        "city_codes_for_market_type"
+      ],
+      "expected": {
+        "ok": [
+          "DAL",
+          "DFW"
+        ]
+      },
+      "helper": "city_codes_for_market_type",
+      "id": "market-city-low",
+      "input": {
+        "market_type": "low",
+        "station": "KDFW"
+      }
+    },
+    {
+      "covers": [
+        "primary_city_code_for_market_type"
+      ],
+      "expected": {
+        "ok": "DAL"
+      },
+      "helper": "primary_city_code_for_market_type",
+      "id": "primary-market-city",
+      "input": {
+        "market_type": "low",
+        "station": "KDFW"
+      }
+    },
+    {
+      "covers": [
+        "ticker_prefixes_for_station"
+      ],
+      "expected": {
+        "ok": [
+          "KXHIGHMIA",
+          "KXHIGHMI"
+        ]
+      },
+      "helper": "ticker_prefixes_for_station",
+      "id": "ticker-prefixes",
+      "input": {
+        "market_type": "high",
+        "station": "KMIA"
+      }
+    },
+    {
+      "covers": [
+        "ticker_prefixes_for_station"
+      ],
+      "expected": {
+        "error": "unknown_market_type"
+      },
+      "helper": "ticker_prefixes_for_station",
+      "id": "ticker-prefixes-invalid",
+      "input": {
+        "market_type": "invalid",
+        "station": "KMIA"
+      }
+    },
+    {
+      "covers": [
+        "station_from_event_ticker"
+      ],
+      "expected": {
+        "ok": "KDFW"
+      },
+      "helper": "station_from_event_ticker",
+      "id": "ticker-station-known",
+      "input": {
+        "event_ticker": "kxlowtdal-260713"
+      }
+    },
+    {
+      "covers": [
+        "station_from_event_ticker"
+      ],
+      "expected": {
+        "ok": null
+      },
+      "helper": "station_from_event_ticker",
+      "id": "ticker-station-unknown",
+      "input": {
+        "event_ticker": "OTHER-260713"
+      }
+    },
+    {
+      "covers": [
+        "station_timezone"
+      ],
+      "expected": {
+        "ok": "America/New_York"
+      },
+      "helper": "station_timezone",
+      "id": "station-timezone-known",
+      "input": {
+        "station": "KMIA"
+      }
+    },
+    {
+      "covers": [
+        "station_timezone"
+      ],
+      "expected": {
+        "ok": "UTC"
+      },
+      "helper": "station_timezone",
+      "id": "station-timezone-default",
+      "input": {
+        "station": null
+      }
+    },
+    {
+      "covers": [
+        "station_timezone"
+      ],
+      "expected": {
+        "ok": "Europe/London"
+      },
+      "helper": "station_timezone",
+      "id": "station-timezone-custom",
+      "input": {
+        "station": "EGLL",
+        "station_timezones": {
+          "EGLL": "Europe/London"
+        }
+      }
+    },
+    {
+      "covers": [
+        "station_timezone"
+      ],
+      "expected": {
+        "error": "timezone"
+      },
+      "helper": "station_timezone",
+      "id": "station-timezone-unknown",
+      "input": {
+        "station": "EGLL"
+      }
+    },
+    {
+      "covers": [
+        "parse_climate_date"
+      ],
+      "expected": {
+        "ok": "2026-07-13"
+      },
+      "helper": "parse_climate_date",
+      "id": "parse-date-iso",
+      "input": {
+        "raw": "2026-07-13"
+      }
+    },
+    {
+      "covers": [
+        "parse_climate_date"
+      ],
+      "expected": {
+        "ok": "2026-07-13"
+      },
+      "helper": "parse_climate_date",
+      "id": "parse-date-compact",
+      "input": {
+        "raw": "20260713"
+      }
+    },
+    {
+      "covers": [
+        "parse_climate_date"
+      ],
+      "expected": {
+        "ok": "2026-07-13"
+      },
+      "helper": "parse_climate_date",
+      "id": "parse-date-short",
+      "input": {
+        "raw": "260713"
+      }
+    },
+    {
+      "covers": [
+        "parse_climate_date"
+      ],
+      "expected": {
+        "ok": null
+      },
+      "helper": "parse_climate_date",
+      "id": "parse-date-invalid",
+      "input": {
+        "raw": "2026-99-99"
+      }
+    },
+    {
+      "covers": [
+        "climate_day_date"
+      ],
+      "expected": {
+        "ok": "2026-07-12"
+      },
+      "helper": "climate_day_date",
+      "id": "climate-date-before-standard-midnight",
+      "input": {
+        "now": "2026-07-13T04:59:59Z",
+        "station": "KMIA"
+      }
+    },
+    {
+      "covers": [
+        "climate_day_date"
+      ],
+      "expected": {
+        "ok": "2026-07-13"
+      },
+      "helper": "climate_day_date",
+      "id": "climate-date-after-standard-midnight",
+      "input": {
+        "now": "2026-07-13T05:00:00Z",
+        "station": "KMIA"
+      }
+    },
+    {
+      "covers": [
+        "climate_day_end"
+      ],
+      "expected": {
+        "ok": "2026-07-14T05:00:00Z"
+      },
+      "helper": "climate_day_end",
+      "id": "climate-day-end-dst",
+      "input": {
+        "event_date": "2026-07-13",
+        "station": "KMIA"
+      }
+    },
+    {
+      "covers": [
+        "climate_day_has_ended"
+      ],
+      "expected": {
+        "ok": false
+      },
+      "helper": "climate_day_has_ended",
+      "id": "climate-day-open",
+      "input": {
+        "event_date": "2026-07-13",
+        "now": "2026-07-14T04:59:59Z",
+        "station": "KMIA"
+      }
+    },
+    {
+      "covers": [
+        "climate_day_has_ended"
+      ],
+      "expected": {
+        "ok": true
+      },
+      "helper": "climate_day_has_ended",
+      "id": "climate-day-ended",
+      "input": {
+        "event_date": "2026-07-13",
+        "now": "2026-07-14T05:00:00Z",
+        "station": "KMIA"
+      }
+    }
+  ],
+  "comparison": "result-or-normalized-error",
+  "family": "helpers",
+  "schema_version": 1
+}

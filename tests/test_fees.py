@@ -154,3 +154,14 @@ def test_maker_fee_exemptions_and_unknown_fee_type() -> None:
             liquidity_role="taker",
             fee_type="unknown",
         )
+
+
+@pytest.mark.parametrize("price", [float("nan"), float("inf"), float("-inf")])
+def test_non_finite_fee_inputs_are_rejected(price: float) -> None:
+    with pytest.raises(ValueError, match="invalid decimal value"):
+        calculate_fill_fee(
+            action="buy",
+            price=price,
+            quantity=1,
+            liquidity_role="taker",
+        )

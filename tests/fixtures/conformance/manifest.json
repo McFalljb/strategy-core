@@ -2,6 +2,15 @@
   "schema_version": 1,
   "authority": "python",
   "comparison": "structural-json",
+  "mismatch_adjudications": [
+    {
+      "id": "fee-non-finite-inputs",
+      "classification": "coordinated-change",
+      "canonical_behavior": "Reject non-finite helper inputs with the normalized invalid_decimal category.",
+      "characterization": "Python previously returned non-finite values or leaked decimal.InvalidOperation while Rust returned FeeError::InvalidDecimal.",
+      "compatibility_impact": "Finite fee calculations are unchanged; callers passing NaN or infinity now receive a stable Python ValueError instead of a non-JSON result or decimal implementation error."
+    }
+  ],
   "ownership_classes": [
     "broad-parity-required",
     "kernel-only",
@@ -187,6 +196,47 @@
         "StationWeather", "StrategyConfig", "StrategyEvent", "StrategyScope", "TelemetryField",
         "TelemetryFields", "TemperatureDayMode", "TickerPrices", "TimerWake", "WeatherEvent",
         "WeatherEventSource", "WuDayMode"
+      ]
+    },
+    "external": {
+      "files": ["minutetemp", "kalshi", "http-data"],
+      "surfaces": [
+        "CityInfo", "CursorPage", "DataResolution", "EffectiveLimits", "ForecastBundle",
+        "ForecastBundleRun", "ForecastRunData", "ForecastRunSummary", "ForecastRunsPage",
+        "HourlyForecastRecord", "HttpMethod", "HttpRequest", "HttpResponse", "IpGuardLimits",
+        "KalshiCollateralReturnType", "KalshiCreateOrderResponse", "KalshiEventLifecycleMessage",
+        "KalshiFixedCount", "KalshiFixedPrice", "KalshiGetMarketResponse",
+        "KalshiGetOrderResponse", "KalshiGetOrderbookResponse", "KalshiGetOrderbooksResponse",
+        "KalshiGetOrdersResponse", "KalshiImmediateTimeInForce", "KalshiListSubscriptionsCommand",
+        "KalshiMarket", "KalshiMarketLifecycleEventType", "KalshiMarketLifecycleMessage",
+        "KalshiMarketLifecycleMetadata", "KalshiMarketOrderbook", "KalshiMarketPositionMessage",
+        "KalshiMarketResult", "KalshiMarketSide", "KalshiMarketStatus", "KalshiMarketsPage",
+        "KalshiMveSelectedLeg", "KalshiOrder", "KalshiOrderAction", "KalshiOrderCreateRequest",
+        "KalshiOrderStatus", "KalshiOrderType", "KalshiOrderbook", "KalshiOrderbookDeltaMessage",
+        "KalshiOrderbookLevel", "KalshiOrderbookSnapshotMessage", "KalshiPriceLevelStructure",
+        "KalshiPriceRange", "KalshiSelfTradePreventionType", "KalshiSubscribeCommand",
+        "KalshiSubscriptionUpdateAction", "KalshiTickerMessage", "KalshiTimeInForce",
+        "KalshiTradeMessage", "KalshiUnsubscribeCommand", "KalshiUpdateSubscriptionCommand",
+        "KalshiUserFillMessage", "KalshiUserOrderMessage", "KalshiWsChannel", "KalshiWsMessage",
+        "LatestObservationData", "LatestReportsData", "ObservationRecord",
+        "OracleModelScoreRecord", "OracleRankBy", "OracleScoreData", "PlanTier",
+        "ReportClockSchedule", "ReportIntervalSchedule", "ReportMultiHourSchedule",
+        "ReportSchedule", "ReportScheduleBasis", "ReportScheduleEntry", "ReportType",
+        "StationForecastData", "StationInfo", "StationReportHistoryPage", "StationReportRecord",
+        "StationReportsData", "TemperatureUnit"
+      ]
+    },
+    "helpers": {
+      "files": ["helpers"],
+      "surfaces": [
+        "CITY_TO_ICAO", "FeeCalculation", "ICAO_TO_CITY_CODES", "LiquidityRole",
+        "MARKET_TYPE_PREFIX", "SIGNAL_DSM_REACTION", "SIGNAL_METAR_6HR_LOW",
+        "SIGNAL_METAR_6HR_NEW_LOW", "STATION_TIMEZONES", "TICKER_PREFIXES",
+        "apply_fee_rounding", "calculate_fill_fee", "calculate_trade_fee",
+        "city_codes_for_market_type", "climate_day_date", "climate_day_end",
+        "climate_day_has_ended", "parse_climate_date", "primary_city_code_for_market_type",
+        "primary_city_code_for_series", "station_from_event_ticker", "station_timezone",
+        "ticker_prefixes_for_station"
       ]
     }
   },

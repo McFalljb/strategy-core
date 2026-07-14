@@ -19,6 +19,14 @@ from tests.conformance_cases import (
     python_invalid_category,
     python_round_trip_valid_case,
 )
+from tests.external_conformance_cases import (
+    EXTERNAL_FIXTURE_NAMES,
+    build_external_fixtures,
+    evaluate_python_helper_case,
+    load_external_fixture,
+    python_external_invalid_category,
+    python_external_round_trip_valid_case,
+)
 
 ROOT = Path(__file__).parents[1]
 MANIFEST_PATH = ROOT / "tests" / "fixtures" / "conformance" / "manifest.json"
@@ -88,6 +96,15 @@ def _validate_manifest(manifest: dict[str, Any], actual: dict[str, set[str]]) ->
     assert set(manifest["ownership_classes"]) == OWNERSHIP_CLASSES
     assert set(manifest["evidence_mechanisms"]) == EVIDENCE_MECHANISMS
     assert set(manifest["evidence_dimensions"]) == EVIDENCE_DIMENSIONS
+    for adjudication in manifest.get("mismatch_adjudications", []):
+        assert adjudication["classification"] in {
+            "python-canonical",
+            "coordinated-change",
+            "intentional-divergence",
+        }
+        assert adjudication["canonical_behavior"].strip()
+        assert adjudication["characterization"].strip()
+        assert adjudication["compatibility_impact"].strip()
 
     profiles = manifest["evidence_profiles"]
     assert profiles
@@ -230,3 +247,106 @@ def test_manifest_rejects_non_exported_symbol_reference() -> None:
 
     with pytest.raises(AssertionError):
         _validate_manifest(manifest, _actual_exports())
+
+
+def test_external_conformance_fixtures_match_python_contract_objects() -> None:
+    expected = build_external_fixtures()
+
+    assert set(expected) == set(EXTERNAL_FIXTURE_NAMES)
+    for name in EXTERNAL_FIXTURE_NAMES:
+        assert load_external_fixture(name) == expected[name]
+
+
+def _covered_external_surfaces(document: dict[str, Any]) -> set[str]:
+    covered: set[str] = set()
+    for case in document["valid"]:
+        expected = case["expected"]
+        for surface, path in case["coverage_paths"].items():
+            value = expected
+            for component in path:
+                value = value[component] if isinstance(component, int) else value.get(component)
+            assert value is not None, (case["id"], surface, path)
+            if isinstance(value, (list, dict)):
+                assert value, (case["id"], surface, path)
+            covered.add(surface)
+    return covered
+
+
+def _validate_external_fixture_coverage(manifest: dict[str, Any], fixtures: dict[str, dict[str, Any]]) -> None:
+    external = manifest["fixture_partitions"]["external"]
+    helpers = manifest["fixture_partitions"]["helpers"]
+    assert set(external["files"]) == {"minutetemp", "kalshi", "http-data"}
+    assert set(helpers["files"]) == {"helpers"}
+
+    covered = set().union(*(_covered_external_surfaces(fixtures[name]) for name in external["files"]))
+    assert covered == set(external["surfaces"]), {
+        "missing": sorted(set(external["surfaces"]) - covered),
+        "unknown": sorted(covered - set(external["surfaces"])),
+    }
+
+    helper_surfaces = {surface for case in fixtures["helpers"]["cases"] for surface in case["covers"]}
+    assert helper_surfaces == set(helpers["surfaces"]), {
+        "missing": sorted(set(helpers["surfaces"]) - helper_surfaces),
+        "unknown": sorted(helper_surfaces - set(helpers["surfaces"])),
+    }
+
+    serializable = next(group for group in manifest["export_groups"] if group["id"] == "shared-serializable-contract")
+    shared_serializable = set(serializable["surfaces"]["python"])
+    assert (
+        (set(manifest["fixture_partitions"]["core"]["surfaces"]) & shared_serializable)
+        | set(external["surfaces"])
+        | (set(helpers["surfaces"]) & shared_serializable)
+    ) == shared_serializable
+
+
+def test_manifest_external_partitions_have_complete_evidence() -> None:
+    _validate_external_fixture_coverage(_load_manifest(), build_external_fixtures())
+
+
+def test_manifest_rejects_claimed_nested_surface_without_evidence() -> None:
+    fixtures = build_external_fixtures()
+    case = next(case for case in fixtures["kalshi"]["valid"] if len(case["coverage_paths"]) > 1)
+    nested_surface = next(iter(set(case["coverage_paths"]) - {case["rust_type"]}))
+    case["coverage_paths"][nested_surface] = ["missing"]
+
+    with pytest.raises(AssertionError):
+        _validate_external_fixture_coverage(_load_manifest(), fixtures)
+
+
+@pytest.mark.parametrize(
+    ("family", "case"),
+    [
+        (family, case)
+        for family, document in build_external_fixtures().items()
+        if family != "helpers"
+        for case in document["valid"]
+    ],
+    ids=lambda value: value if isinstance(value, str) else cast("str", value["id"]),
+)
+def test_python_authored_external_values_round_trip_structurally(family: str, case: dict[str, Any]) -> None:
+    assert family in EXTERNAL_FIXTURE_NAMES
+    assert python_external_round_trip_valid_case(case) == case["expected"], case["id"]
+
+
+@pytest.mark.parametrize(
+    ("family", "case"),
+    [
+        (family, case)
+        for family, document in build_external_fixtures().items()
+        if family != "helpers"
+        for case in document["invalid"]
+    ],
+    ids=lambda value: value if isinstance(value, str) else cast("str", value["id"]),
+)
+def test_python_rejects_declared_invalid_external_cases(family: str, case: dict[str, Any]) -> None:
+    assert family in EXTERNAL_FIXTURE_NAMES
+    assert python_external_invalid_category(case) == case["category"], case["id"]
+
+
+@pytest.mark.parametrize(
+    "case",
+    build_external_fixtures()["helpers"]["cases"],
+    ids=lambda case: cast("str", case["id"]),
+)
+def test_python_helper_vectors_match_canonical_results(case: dict[str, Any]) -> None:
+    assert evaluate_python_helper_case(case) == case["expected"], case["id"]
