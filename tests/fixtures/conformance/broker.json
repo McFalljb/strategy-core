@@ -1,0 +1,567 @@
+{
+  "authority": "python",
+  "comparison": "structural-json",
+  "drift_decisions": [
+    {
+      "classification": "python-canonical",
+      "consumer_impact": "Omitted and null inputs both decode as None; emitting null is an additive structural-output correction.",
+      "id": "optional-expiry-null-serialization",
+      "python_before": "Dataclass serialization includes optional expiry fields as explicit null.",
+      "resolution": "Rust serializes expires_at and expires_after_ms as null when unset.",
+      "rust_before": "Serde omitted optional expiry fields when their value was None."
+    }
+  ],
+  "family": "broker",
+  "invalid": [
+    {
+      "category": "enum",
+      "id": "unknown-action",
+      "rust_type": "OrderIntent",
+      "wire": {
+        "action": "hold",
+        "client_order_id": "client-2",
+        "contract_side": "no",
+        "execution_style": "sweep",
+        "expires_after_ms": 86400000,
+        "limit_price": 0.39,
+        "max_cost": 400000.0,
+        "max_price": 0.4,
+        "order_type": "limit",
+        "post_only": false,
+        "quantity": 1000000,
+        "reduce_only": true,
+        "signal_metadata": "{\"reason\":\"limit\"}",
+        "signal_type": "risk_exit",
+        "ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "time_policy": "fill_or_kill"
+      }
+    },
+    {
+      "category": "required_field",
+      "id": "missing-ticker",
+      "rust_type": "OrderIntent",
+      "wire": {
+        "action": "buy"
+      }
+    },
+    {
+      "category": "type",
+      "id": "wrong-quantity-type",
+      "rust_type": "BrokerOrderUpdate",
+      "wire": {
+        "action": "sell",
+        "average_fill_price": 0.605,
+        "client_order_id": "client-2",
+        "contract_side": "no",
+        "expires_at": null,
+        "fee_cost": 123.45,
+        "fill_price": 0.6,
+        "filled_quantity": 500000,
+        "order_id": "order-1",
+        "provider_order_id": "provider-1",
+        "provider_sequence": "999999999999999999",
+        "reason": "provider replay",
+        "remaining_quantity": 500000,
+        "requested_quantity": [],
+        "sleeve_id": "demo:KMIA",
+        "status": "reconciled",
+        "ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "updated_at": "2026-07-13T08:35:01.987-04:00"
+      }
+    }
+  ],
+  "schema_version": 1,
+  "valid": [
+    {
+      "covers": [
+        "Position"
+      ],
+      "expected": {
+        "avg_price": 0.61,
+        "quantity": 1000000,
+        "side": "yes",
+        "ticker": "KXHIGHMIA-26JUL13-B90.5"
+      },
+      "id": "position",
+      "rust_type": "Position",
+      "wire": {
+        "avg_price": 0.61,
+        "quantity": 1000000,
+        "side": "yes",
+        "ticker": "KXHIGHMIA-26JUL13-B90.5"
+      }
+    },
+    {
+      "covers": [
+        "PendingOrder",
+        "OrderId"
+      ],
+      "expected": {
+        "action": "buy",
+        "client_order_id": "client-1",
+        "contract_side": "yes",
+        "created_at": "2026-07-13T08:34:56.123456-04:00",
+        "expires_at": "2026-07-13T09:34:56.123456-04:00",
+        "fee_accumulator": -0.0,
+        "fee_multiplier": 1.5,
+        "fee_type": "quadratic",
+        "filled_quantity": 0,
+        "limit_price": 0.61,
+        "order_id": "order-1",
+        "requested_quantity": 1000000,
+        "reserved_global": 610000.0,
+        "reserved_sleeve": 610000.0,
+        "signal_metadata": "{\"model\":\"hrrr\"}",
+        "signal_type": "forecast_edge",
+        "sleeve_id": "demo:KMIA",
+        "ticker": "KXHIGHMIA-26JUL13-B90.5"
+      },
+      "id": "pending-order-full",
+      "rust_type": "PendingOrder",
+      "wire": {
+        "action": "buy",
+        "client_order_id": "client-1",
+        "contract_side": "yes",
+        "created_at": "2026-07-13T08:34:56.123456-04:00",
+        "expires_at": "2026-07-13T09:34:56.123456-04:00",
+        "fee_accumulator": -0.0,
+        "fee_multiplier": 1.5,
+        "fee_type": "quadratic",
+        "filled_quantity": 0,
+        "limit_price": 0.61,
+        "order_id": "order-1",
+        "requested_quantity": 1000000,
+        "reserved_global": 610000.0,
+        "reserved_sleeve": 610000.0,
+        "signal_metadata": "{\"model\":\"hrrr\"}",
+        "signal_type": "forecast_edge",
+        "sleeve_id": "demo:KMIA",
+        "ticker": "KXHIGHMIA-26JUL13-B90.5"
+      }
+    },
+    {
+      "covers": [
+        "PendingOrder"
+      ],
+      "expected": {
+        "action": "buy",
+        "client_order_id": null,
+        "contract_side": "yes",
+        "created_at": "",
+        "expires_at": null,
+        "fee_accumulator": 0.0,
+        "fee_multiplier": null,
+        "fee_type": "",
+        "filled_quantity": 0,
+        "limit_price": 0.5,
+        "order_id": "order-2",
+        "requested_quantity": 1,
+        "reserved_global": 0.0,
+        "reserved_sleeve": 0.0,
+        "signal_metadata": null,
+        "signal_type": null,
+        "sleeve_id": "demo:KMIA",
+        "ticker": "KXHIGHMIA-26JUL13-B90.5"
+      },
+      "id": "pending-order-defaults-and-null",
+      "rust_type": "PendingOrder",
+      "wire": {
+        "action": "buy",
+        "client_order_id": null,
+        "contract_side": "yes",
+        "limit_price": 0.5,
+        "order_id": "order-2",
+        "requested_quantity": 1,
+        "sleeve_id": "demo:KMIA",
+        "ticker": "KXHIGHMIA-26JUL13-B90.5"
+      }
+    },
+    {
+      "covers": [
+        "OrderResult",
+        "OrderStatus"
+      ],
+      "expected": {
+        "fee_cost": 123.45,
+        "fill_price": 0.6,
+        "filled_quantity": 500000,
+        "order_id": "order-1",
+        "reason": "partial liquidity",
+        "sleeve_id": "demo:KMIA",
+        "status": "partial"
+      },
+      "id": "order-result",
+      "rust_type": "OrderResult",
+      "wire": {
+        "fee_cost": 123.45,
+        "fill_price": 0.6,
+        "filled_quantity": 500000,
+        "order_id": "order-1",
+        "reason": "partial liquidity",
+        "sleeve_id": "demo:KMIA",
+        "status": "partial"
+      }
+    },
+    {
+      "covers": [
+        "OrderIntent",
+        "OrderType",
+        "OrderExecutionStyle",
+        "OrderTimePolicy"
+      ],
+      "expected": {
+        "action": "sell",
+        "client_order_id": "client-2",
+        "contract_side": "no",
+        "execution_style": "sweep",
+        "expires_after_ms": 86400000,
+        "limit_price": 0.39,
+        "max_cost": 400000.0,
+        "max_price": 0.4,
+        "order_type": "limit",
+        "post_only": false,
+        "quantity": 1000000,
+        "reduce_only": true,
+        "signal_metadata": "{\"reason\":\"limit\"}",
+        "signal_type": "risk_exit",
+        "ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "time_policy": "fill_or_kill"
+      },
+      "id": "order-intent-full",
+      "rust_type": "OrderIntent",
+      "wire": {
+        "action": "sell",
+        "client_order_id": "client-2",
+        "contract_side": "no",
+        "execution_style": "sweep",
+        "expires_after_ms": 86400000,
+        "limit_price": 0.39,
+        "max_cost": 400000.0,
+        "max_price": 0.4,
+        "order_type": "limit",
+        "post_only": false,
+        "quantity": 1000000,
+        "reduce_only": true,
+        "signal_metadata": "{\"reason\":\"limit\"}",
+        "signal_type": "risk_exit",
+        "ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "time_policy": "fill_or_kill"
+      }
+    },
+    {
+      "covers": [
+        "BrokerOrderUpdate",
+        "BrokerUpdateStatus"
+      ],
+      "expected": {
+        "action": "sell",
+        "average_fill_price": 0.605,
+        "client_order_id": "client-2",
+        "contract_side": "no",
+        "expires_at": null,
+        "fee_cost": 123.45,
+        "fill_price": 0.6,
+        "filled_quantity": 500000,
+        "order_id": "order-1",
+        "provider_order_id": "provider-1",
+        "provider_sequence": "999999999999999999",
+        "reason": "provider replay",
+        "remaining_quantity": 500000,
+        "requested_quantity": 1000000,
+        "sleeve_id": "demo:KMIA",
+        "status": "reconciled",
+        "ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "updated_at": "2026-07-13T08:35:01.987-04:00"
+      },
+      "id": "broker-order-update",
+      "rust_type": "BrokerOrderUpdate",
+      "wire": {
+        "action": "sell",
+        "average_fill_price": 0.605,
+        "client_order_id": "client-2",
+        "contract_side": "no",
+        "expires_at": null,
+        "fee_cost": 123.45,
+        "fill_price": 0.6,
+        "filled_quantity": 500000,
+        "order_id": "order-1",
+        "provider_order_id": "provider-1",
+        "provider_sequence": "999999999999999999",
+        "reason": "provider replay",
+        "remaining_quantity": 500000,
+        "requested_quantity": 1000000,
+        "sleeve_id": "demo:KMIA",
+        "status": "reconciled",
+        "ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "updated_at": "2026-07-13T08:35:01.987-04:00"
+      }
+    },
+    {
+      "covers": [
+        "Action"
+      ],
+      "expected": "buy",
+      "id": "Action-buy",
+      "rust_type": "Action",
+      "wire": "buy"
+    },
+    {
+      "covers": [
+        "Action"
+      ],
+      "expected": "sell",
+      "id": "Action-sell",
+      "rust_type": "Action",
+      "wire": "sell"
+    },
+    {
+      "covers": [
+        "ContractSide"
+      ],
+      "expected": "yes",
+      "id": "ContractSide-yes",
+      "rust_type": "ContractSide",
+      "wire": "yes"
+    },
+    {
+      "covers": [
+        "ContractSide"
+      ],
+      "expected": "no",
+      "id": "ContractSide-no",
+      "rust_type": "ContractSide",
+      "wire": "no"
+    },
+    {
+      "covers": [
+        "OrderType"
+      ],
+      "expected": "market",
+      "id": "OrderType-market",
+      "rust_type": "OrderType",
+      "wire": "market"
+    },
+    {
+      "covers": [
+        "OrderType"
+      ],
+      "expected": "limit",
+      "id": "OrderType-limit",
+      "rust_type": "OrderType",
+      "wire": "limit"
+    },
+    {
+      "covers": [
+        "OrderStatus"
+      ],
+      "expected": "filled",
+      "id": "OrderStatus-filled",
+      "rust_type": "OrderStatus",
+      "wire": "filled"
+    },
+    {
+      "covers": [
+        "OrderStatus"
+      ],
+      "expected": "partial",
+      "id": "OrderStatus-partial",
+      "rust_type": "OrderStatus",
+      "wire": "partial"
+    },
+    {
+      "covers": [
+        "OrderStatus"
+      ],
+      "expected": "pending",
+      "id": "OrderStatus-pending",
+      "rust_type": "OrderStatus",
+      "wire": "pending"
+    },
+    {
+      "covers": [
+        "OrderStatus"
+      ],
+      "expected": "rejected",
+      "id": "OrderStatus-rejected",
+      "rust_type": "OrderStatus",
+      "wire": "rejected"
+    },
+    {
+      "covers": [
+        "OrderStatus"
+      ],
+      "expected": "cancelled",
+      "id": "OrderStatus-cancelled",
+      "rust_type": "OrderStatus",
+      "wire": "cancelled"
+    },
+    {
+      "covers": [
+        "OrderExecutionStyle"
+      ],
+      "expected": "resting_limit",
+      "id": "OrderExecutionStyle-resting_limit",
+      "rust_type": "OrderExecutionStyle",
+      "wire": "resting_limit"
+    },
+    {
+      "covers": [
+        "OrderExecutionStyle"
+      ],
+      "expected": "direct",
+      "id": "OrderExecutionStyle-direct",
+      "rust_type": "OrderExecutionStyle",
+      "wire": "direct"
+    },
+    {
+      "covers": [
+        "OrderExecutionStyle"
+      ],
+      "expected": "sweep",
+      "id": "OrderExecutionStyle-sweep",
+      "rust_type": "OrderExecutionStyle",
+      "wire": "sweep"
+    },
+    {
+      "covers": [
+        "OrderTimePolicy"
+      ],
+      "expected": "good_till_canceled",
+      "id": "OrderTimePolicy-good_till_canceled",
+      "rust_type": "OrderTimePolicy",
+      "wire": "good_till_canceled"
+    },
+    {
+      "covers": [
+        "OrderTimePolicy"
+      ],
+      "expected": "immediate_or_cancel",
+      "id": "OrderTimePolicy-immediate_or_cancel",
+      "rust_type": "OrderTimePolicy",
+      "wire": "immediate_or_cancel"
+    },
+    {
+      "covers": [
+        "OrderTimePolicy"
+      ],
+      "expected": "fill_or_kill",
+      "id": "OrderTimePolicy-fill_or_kill",
+      "rust_type": "OrderTimePolicy",
+      "wire": "fill_or_kill"
+    },
+    {
+      "covers": [
+        "BrokerUpdateStatus"
+      ],
+      "expected": "accepted",
+      "id": "BrokerUpdateStatus-accepted",
+      "rust_type": "BrokerUpdateStatus",
+      "wire": "accepted"
+    },
+    {
+      "covers": [
+        "BrokerUpdateStatus"
+      ],
+      "expected": "rejected",
+      "id": "BrokerUpdateStatus-rejected",
+      "rust_type": "BrokerUpdateStatus",
+      "wire": "rejected"
+    },
+    {
+      "covers": [
+        "BrokerUpdateStatus"
+      ],
+      "expected": "submitted",
+      "id": "BrokerUpdateStatus-submitted",
+      "rust_type": "BrokerUpdateStatus",
+      "wire": "submitted"
+    },
+    {
+      "covers": [
+        "BrokerUpdateStatus"
+      ],
+      "expected": "resting",
+      "id": "BrokerUpdateStatus-resting",
+      "rust_type": "BrokerUpdateStatus",
+      "wire": "resting"
+    },
+    {
+      "covers": [
+        "BrokerUpdateStatus"
+      ],
+      "expected": "partially_filled",
+      "id": "BrokerUpdateStatus-partially_filled",
+      "rust_type": "BrokerUpdateStatus",
+      "wire": "partially_filled"
+    },
+    {
+      "covers": [
+        "BrokerUpdateStatus"
+      ],
+      "expected": "filled",
+      "id": "BrokerUpdateStatus-filled",
+      "rust_type": "BrokerUpdateStatus",
+      "wire": "filled"
+    },
+    {
+      "covers": [
+        "BrokerUpdateStatus"
+      ],
+      "expected": "cancel_requested",
+      "id": "BrokerUpdateStatus-cancel_requested",
+      "rust_type": "BrokerUpdateStatus",
+      "wire": "cancel_requested"
+    },
+    {
+      "covers": [
+        "BrokerUpdateStatus"
+      ],
+      "expected": "cancelled",
+      "id": "BrokerUpdateStatus-cancelled",
+      "rust_type": "BrokerUpdateStatus",
+      "wire": "cancelled"
+    },
+    {
+      "covers": [
+        "BrokerUpdateStatus"
+      ],
+      "expected": "expired",
+      "id": "BrokerUpdateStatus-expired",
+      "rust_type": "BrokerUpdateStatus",
+      "wire": "expired"
+    },
+    {
+      "covers": [
+        "BrokerUpdateStatus"
+      ],
+      "expected": "closed",
+      "id": "BrokerUpdateStatus-closed",
+      "rust_type": "BrokerUpdateStatus",
+      "wire": "closed"
+    },
+    {
+      "covers": [
+        "BrokerUpdateStatus"
+      ],
+      "expected": "submission_unknown",
+      "id": "BrokerUpdateStatus-submission_unknown",
+      "rust_type": "BrokerUpdateStatus",
+      "wire": "submission_unknown"
+    },
+    {
+      "covers": [
+        "BrokerUpdateStatus"
+      ],
+      "expected": "reconciled",
+      "id": "BrokerUpdateStatus-reconciled",
+      "rust_type": "BrokerUpdateStatus",
+      "wire": "reconciled"
+    }
+  ],
+  "wire_policy": {
+    "non_finite_numbers": "excluded because they are not JSON-compatible values",
+    "optional_fields": "omitted inputs resolve through defaults; explicit null is retained when nullable",
+    "portable_integer_domain": "signed 64-bit",
+    "unknown_object_fields": "ignored and absent from canonical output"
+  }
+}

@@ -167,6 +167,29 @@
       }
     }
   },
+  "fixture_partitions": {
+    "core": {
+      "files": ["events", "state", "broker", "runtime", "queries"],
+      "surfaces": [
+        "Action", "BrokerOrderUpdate", "BrokerUpdateStatus", "ContractSide", "DateLike",
+        "EngineEvent", "EventDelivery", "FeeType", "ForecastHourly", "ForecastQuery",
+        "ForecastRunQuery", "ForecastRunsQuery", "ForecastUpdated", "ForecastVersions",
+        "FreshnessDomain", "FreshnessDomainSummary", "FreshnessSnapshot", "FreshnessStatus",
+        "FreshnessSummary", "JSONObject", "JSONValue", "LatestObservationQuery",
+        "LatestReportsQuery", "LimitsQuery", "LocalDateLike", "MarketBracket", "MarketType",
+        "ModelForecast", "NativeKernelResult", "NativeKernelStatus", "NewHigh", "NewLow",
+        "Observation", "OracleModelScore", "OracleScoreMode", "OracleScoreRow",
+        "OracleScoreTable", "OracleScoresQuery", "OracleScoresUpdated", "OrderExecutionStyle",
+        "OrderId", "OrderIntent", "OrderResult", "OrderStatus", "OrderTimePolicy", "OrderType",
+        "PendingOrder", "PersistenceStatus", "Position", "PriceLevel", "PriceUpdate",
+        "ReportHistoryQuery", "ReportsQuery", "RuntimeCapabilities", "RuntimeMode",
+        "ShutdownEvent", "StationForecast", "StationOracleScores", "StationReport",
+        "StationWeather", "StrategyConfig", "StrategyEvent", "StrategyScope", "TelemetryField",
+        "TelemetryFields", "TemperatureDayMode", "TickerPrices", "TimerWake", "WeatherEvent",
+        "WeatherEventSource", "WuDayMode"
+      ]
+    }
+  },
   "export_groups": [
     {
       "id": "shared-serializable-contract",

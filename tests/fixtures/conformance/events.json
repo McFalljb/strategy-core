@@ -1,0 +1,802 @@
+{
+  "authority": "python",
+  "comparison": "structural-json",
+  "family": "events",
+  "invalid": [
+    {
+      "category": "required_field",
+      "id": "missing-discriminator",
+      "rust_type": "StrategyEvent",
+      "wire": {
+        "station_id": "KMIA"
+      }
+    },
+    {
+      "category": "enum",
+      "id": "unknown-discriminator",
+      "rust_type": "StrategyEvent",
+      "wire": {
+        "type": "unknown"
+      }
+    },
+    {
+      "category": "range",
+      "id": "blank-required-station",
+      "rust_type": "StrategyEvent",
+      "wire": {
+        "station_id": "",
+        "type": "observation"
+      }
+    },
+    {
+      "category": "type",
+      "id": "malformed-nested-market",
+      "rust_type": "StrategyEvent",
+      "wire": {
+        "markets": [
+          "bad"
+        ],
+        "source": "kalshi",
+        "station_id": "KMIA",
+        "type": "price_update"
+      }
+    }
+  ],
+  "schema_version": 1,
+  "valid": [
+    {
+      "covers": [
+        "Observation",
+        "TemperatureDayMode",
+        "WuDayMode",
+        "StrategyEvent",
+        "EngineEvent"
+      ],
+      "expected": {
+        "city_sequence": 0,
+        "dewpoint": 73.0,
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "event_id": "obs-1",
+        "heat_index": 101.0,
+        "is_from_report": true,
+        "lag_seconds": 0,
+        "observed_at": "2026-07-13T12:35:01.987654Z",
+        "preliminary": true,
+        "relative_humidity": 60.0,
+        "report_type": "cli",
+        "sequence": 9007199254740991,
+        "slug": "miami",
+        "source_report_id": "cli-1",
+        "station_id": "KMIA",
+        "temp_max_c": 32.8,
+        "temp_max_f": 91.0,
+        "temp_min_c": 31.1,
+        "temp_min_f": 88.0,
+        "temperature_c": 32.5,
+        "temperature_day_date": "2026-07-13",
+        "temperature_day_mode": "nws_climate_day",
+        "temperature_f": 90.5,
+        "text_description": "Partly Cloudy",
+        "type": "observation",
+        "wind_chill": -0.0,
+        "wind_direction": 180.0,
+        "wind_gust": 15.0,
+        "wind_speed": 8.0,
+        "wu_current_temp_c": 32.2,
+        "wu_current_temp_f": 90.0,
+        "wu_daily_high_c": 32.8,
+        "wu_daily_high_f": 91.0,
+        "wu_daily_low_c": 25.0,
+        "wu_daily_low_f": 77.0,
+        "wu_day_date": "2026-07-13",
+        "wu_day_mode": "calendar_day",
+        "wu_fetched_at": "2026-07-13T12:35:01.987654Z",
+        "wu_observation_time": "2026-07-13T12:34:56.123456Z"
+      },
+      "id": "observation-full",
+      "rust_type": "StrategyEvent",
+      "wire": {
+        "city_sequence": 0,
+        "dewpoint": 73.0,
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "event_id": "obs-1",
+        "heat_index": 101.0,
+        "is_from_report": true,
+        "lag_seconds": 0,
+        "observed_at": "2026-07-13T12:35:01.987654Z",
+        "preliminary": true,
+        "relative_humidity": 60.0,
+        "report_type": "cli",
+        "sequence": 9007199254740991,
+        "slug": "miami",
+        "source_report_id": "cli-1",
+        "station_id": "KMIA",
+        "temp_max_c": 32.8,
+        "temp_max_f": 91.0,
+        "temp_min_c": 31.1,
+        "temp_min_f": 88.0,
+        "temperature_c": 32.5,
+        "temperature_day_date": "2026-07-13",
+        "temperature_day_mode": "nws_climate_day",
+        "temperature_f": 90.5,
+        "text_description": "Partly Cloudy",
+        "type": "observation",
+        "wind_chill": -0.0,
+        "wind_direction": 180.0,
+        "wind_gust": 15.0,
+        "wind_speed": 8.0,
+        "wu_current_temp_c": 32.2,
+        "wu_current_temp_f": 90.0,
+        "wu_daily_high_c": 32.8,
+        "wu_daily_high_f": 91.0,
+        "wu_daily_low_c": 25.0,
+        "wu_daily_low_f": 77.0,
+        "wu_day_date": "2026-07-13",
+        "wu_day_mode": "calendar_day",
+        "wu_fetched_at": "2026-07-13T12:35:01.987654Z",
+        "wu_observation_time": "2026-07-13T12:34:56.123456Z"
+      }
+    },
+    {
+      "covers": [
+        "PriceUpdate",
+        "MarketBracket",
+        "PriceLevel",
+        "StrategyEvent",
+        "EngineEvent"
+      ],
+      "expected": {
+        "city_id": "MIA",
+        "city_sequence": 3,
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "event_id": "prices-1",
+        "markets": [
+          {
+            "cap_strike": 90.5,
+            "event_date": "2026-07-13",
+            "event_ticker": "KXHIGHMIA-26JUL13",
+            "floor_strike": 89.5,
+            "market_id": "market-1",
+            "no_ask": 0.4,
+            "no_ask_depth": 40,
+            "no_ask_levels": [
+              [
+                0.4,
+                8
+              ]
+            ],
+            "no_bid": 0.38,
+            "no_bid_depth": 30,
+            "no_bid_levels": [],
+            "no_price": 0.39,
+            "orderbook_depth": 50,
+            "snapshot_time": "2026-07-13T12:34:56.123456Z",
+            "strike_type": "between",
+            "ticker": "KXHIGHMIA-26JUL13-B90.5",
+            "volume": 0.0,
+            "yes_ask": 0.62,
+            "yes_ask_depth": 20,
+            "yes_ask_levels": [
+              [
+                0.62,
+                12
+              ]
+            ],
+            "yes_bid": 0.6,
+            "yes_bid_depth": 1000000,
+            "yes_bid_levels": [
+              [
+                0.6,
+                10
+              ],
+              [
+                0.59,
+                20
+              ]
+            ],
+            "yes_price": 0.61
+          }
+        ],
+        "sequence": 2,
+        "slug": "miami",
+        "source": "kalshi",
+        "station_id": "KMIA",
+        "timestamp": "2026-07-13T12:35:01.987654Z",
+        "type": "price_update"
+      },
+      "id": "price-update-full",
+      "rust_type": "StrategyEvent",
+      "wire": {
+        "city_id": "MIA",
+        "city_sequence": 3,
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "event_id": "prices-1",
+        "markets": [
+          {
+            "cap_strike": 90.5,
+            "event_date": "2026-07-13",
+            "event_ticker": "KXHIGHMIA-26JUL13",
+            "floor_strike": 89.5,
+            "market_id": "market-1",
+            "no_ask": 0.4,
+            "no_ask_depth": 40,
+            "no_ask_levels": [
+              [
+                0.4,
+                8
+              ]
+            ],
+            "no_bid": 0.38,
+            "no_bid_depth": 30,
+            "no_bid_levels": [],
+            "no_price": 0.39,
+            "orderbook_depth": 50,
+            "snapshot_time": "2026-07-13T12:34:56.123456Z",
+            "strike_type": "between",
+            "ticker": "KXHIGHMIA-26JUL13-B90.5",
+            "volume": 0.0,
+            "yes_ask": 0.62,
+            "yes_ask_depth": 20,
+            "yes_ask_levels": [
+              [
+                0.62,
+                12
+              ]
+            ],
+            "yes_bid": 0.6,
+            "yes_bid_depth": 1000000,
+            "yes_bid_levels": [
+              [
+                0.6,
+                10
+              ],
+              [
+                0.59,
+                20
+              ]
+            ],
+            "yes_price": 0.61
+          }
+        ],
+        "sequence": 2,
+        "slug": "miami",
+        "source": "kalshi",
+        "station_id": "KMIA",
+        "timestamp": "2026-07-13T12:35:01.987654Z",
+        "type": "price_update"
+      }
+    },
+    {
+      "covers": [
+        "ForecastUpdated",
+        "StrategyEvent",
+        "EngineEvent"
+      ],
+      "expected": {
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "event_id": "forecast-1",
+        "model_id": "ncep_hrrr_conus",
+        "sequence": 3,
+        "slug": "miami",
+        "station_id": "KMIA",
+        "type": "forecast_updated",
+        "version": "2026-07-13T12:00:00Z"
+      },
+      "id": "forecast-updated",
+      "rust_type": "StrategyEvent",
+      "wire": {
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "event_id": "forecast-1",
+        "model_id": "ncep_hrrr_conus",
+        "sequence": 3,
+        "slug": "miami",
+        "station_id": "KMIA",
+        "type": "forecast_updated",
+        "version": "2026-07-13T12:00:00Z"
+      }
+    },
+    {
+      "covers": [
+        "ForecastVersions",
+        "StrategyEvent",
+        "EngineEvent"
+      ],
+      "expected": {
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "event_id": "versions-1",
+        "sequence": 4,
+        "slug": "",
+        "station_id": "KMIA",
+        "type": "forecast_versions",
+        "versions": {
+          "ncep_gfs": "v1",
+          "ncep_hrrr_conus": "v2"
+        }
+      },
+      "id": "forecast-versions",
+      "rust_type": "StrategyEvent",
+      "wire": {
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "event_id": "versions-1",
+        "sequence": 4,
+        "slug": "",
+        "station_id": "KMIA",
+        "type": "forecast_versions",
+        "versions": {
+          "ncep_gfs": "v1",
+          "ncep_hrrr_conus": "v2"
+        }
+      }
+    },
+    {
+      "covers": [
+        "OracleScoresUpdated",
+        "OracleScoreTable",
+        "OracleScoreRow",
+        "OracleScoreMode",
+        "StrategyEvent",
+        "EngineEvent"
+      ],
+      "expected": {
+        "day_ahead": {
+          "all_time": false,
+          "days_requested": 30,
+          "range_end": "2026-07-12",
+          "range_start": "2026-06-01",
+          "rank_by": "high",
+          "score_mode": "day_ahead",
+          "scores": [
+            {
+              "combined_mae": 1.25,
+              "day_count": 30,
+              "high_bias": -0.0,
+              "high_mae": 1.0,
+              "is_public": true,
+              "low_bias": -0.25,
+              "low_mae": 1.5,
+              "model_id": "ncep_hrrr_conus",
+              "model_name": "HRRR"
+            }
+          ],
+          "station_id": "KMIA"
+        },
+        "day_of": {
+          "all_time": false,
+          "days_requested": 30,
+          "range_end": "2026-07-12",
+          "range_start": "2026-06-01",
+          "rank_by": "high",
+          "score_mode": "day_of",
+          "scores": [
+            {
+              "combined_mae": 1.25,
+              "day_count": 30,
+              "high_bias": -0.0,
+              "high_mae": 1.0,
+              "is_public": true,
+              "low_bias": -0.25,
+              "low_mae": 1.5,
+              "model_id": "ncep_hrrr_conus",
+              "model_name": "HRRR"
+            }
+          ],
+          "station_id": "KMIA"
+        },
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "event_id": "oracle-1",
+        "modes": [
+          "overall",
+          "day_ahead",
+          "day_of"
+        ],
+        "overall": {
+          "all_time": false,
+          "days_requested": 30,
+          "range_end": "2026-07-12",
+          "range_start": "2026-06-01",
+          "rank_by": "high",
+          "score_mode": "day_of",
+          "scores": [
+            {
+              "combined_mae": 1.25,
+              "day_count": 30,
+              "high_bias": -0.0,
+              "high_mae": 1.0,
+              "is_public": true,
+              "low_bias": -0.25,
+              "low_mae": 1.5,
+              "model_id": "ncep_hrrr_conus",
+              "model_name": "HRRR"
+            }
+          ],
+          "station_id": "KMIA"
+        },
+        "sequence": 5,
+        "slug": "",
+        "station_id": "KMIA",
+        "type": "oracle_scores_updated",
+        "updated_at": "2026-07-13T12:35:01.987654Z"
+      },
+      "id": "oracle-scores-updated",
+      "rust_type": "StrategyEvent",
+      "wire": {
+        "day_ahead": {
+          "all_time": false,
+          "days_requested": 30,
+          "range_end": "2026-07-12",
+          "range_start": "2026-06-01",
+          "rank_by": "high",
+          "score_mode": "day_ahead",
+          "scores": [
+            {
+              "combined_mae": 1.25,
+              "day_count": 30,
+              "high_bias": -0.0,
+              "high_mae": 1.0,
+              "is_public": true,
+              "low_bias": -0.25,
+              "low_mae": 1.5,
+              "model_id": "ncep_hrrr_conus",
+              "model_name": "HRRR"
+            }
+          ],
+          "station_id": "KMIA"
+        },
+        "day_of": {
+          "all_time": false,
+          "days_requested": 30,
+          "range_end": "2026-07-12",
+          "range_start": "2026-06-01",
+          "rank_by": "high",
+          "score_mode": "day_of",
+          "scores": [
+            {
+              "combined_mae": 1.25,
+              "day_count": 30,
+              "high_bias": -0.0,
+              "high_mae": 1.0,
+              "is_public": true,
+              "low_bias": -0.25,
+              "low_mae": 1.5,
+              "model_id": "ncep_hrrr_conus",
+              "model_name": "HRRR"
+            }
+          ],
+          "station_id": "KMIA"
+        },
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "event_id": "oracle-1",
+        "modes": [
+          "overall",
+          "day_ahead",
+          "day_of"
+        ],
+        "overall": {
+          "all_time": false,
+          "days_requested": 30,
+          "range_end": "2026-07-12",
+          "range_start": "2026-06-01",
+          "rank_by": "high",
+          "score_mode": "day_of",
+          "scores": [
+            {
+              "combined_mae": 1.25,
+              "day_count": 30,
+              "high_bias": -0.0,
+              "high_mae": 1.0,
+              "is_public": true,
+              "low_bias": -0.25,
+              "low_mae": 1.5,
+              "model_id": "ncep_hrrr_conus",
+              "model_name": "HRRR"
+            }
+          ],
+          "station_id": "KMIA"
+        },
+        "sequence": 5,
+        "slug": "",
+        "station_id": "KMIA",
+        "type": "oracle_scores_updated",
+        "updated_at": "2026-07-13T12:35:01.987654Z"
+      }
+    },
+    {
+      "covers": [
+        "StationReport",
+        "StrategyEvent",
+        "EngineEvent"
+      ],
+      "expected": {
+        "city_sequence": 7,
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "event_id": "report-event-1",
+        "fetched_at": "2026-07-13T12:35:01.987654Z",
+        "issuance_time": "2026-07-13T12:34:56.123456Z",
+        "max_temp_c": 32.8,
+        "max_temp_f": 91.0,
+        "max_temp_time_utc": "2026-07-13T12:34:56.123456Z",
+        "min_temp_c": 25.0,
+        "min_temp_f": 77.0,
+        "min_temp_time_utc": "2026-07-13T12:35:01.987654Z",
+        "provider": "nws",
+        "report_date": "2026-07-13",
+        "report_id": "cli-20260713",
+        "report_revision": 2,
+        "report_type": "cli",
+        "report_updated_at": "2026-07-13T12:35:01.987654Z",
+        "sequence": 6,
+        "slug": "miami",
+        "source_url": "https://example.test/report",
+        "station_id": "KMIA",
+        "temp_c": 32.2,
+        "temp_f": 90.0,
+        "type": "station_report"
+      },
+      "id": "station-report-full",
+      "rust_type": "StrategyEvent",
+      "wire": {
+        "city_sequence": 7,
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "event_id": "report-event-1",
+        "fetched_at": "2026-07-13T12:35:01.987654Z",
+        "issuance_time": "2026-07-13T12:34:56.123456Z",
+        "max_temp_c": 32.8,
+        "max_temp_f": 91.0,
+        "max_temp_time_utc": "2026-07-13T12:34:56.123456Z",
+        "min_temp_c": 25.0,
+        "min_temp_f": 77.0,
+        "min_temp_time_utc": "2026-07-13T12:35:01.987654Z",
+        "provider": "nws",
+        "report_date": "2026-07-13",
+        "report_id": "cli-20260713",
+        "report_revision": 2,
+        "report_type": "cli",
+        "report_updated_at": "2026-07-13T12:35:01.987654Z",
+        "sequence": 6,
+        "slug": "miami",
+        "source_url": "https://example.test/report",
+        "station_id": "KMIA",
+        "temp_c": 32.2,
+        "temp_f": 90.0,
+        "type": "station_report"
+      }
+    },
+    {
+      "covers": [
+        "WeatherEvent",
+        "WeatherEventSource",
+        "StrategyEvent",
+        "EngineEvent"
+      ],
+      "expected": {
+        "badge": "TS",
+        "city_sequence": 9,
+        "detail": "Nearby cell",
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "ended_at": null,
+        "event_id": "weather-1",
+        "event_type": "thunderstorm",
+        "id": "wx-1",
+        "last_confirmed_at": "2026-07-13T12:35:01.987654Z",
+        "name": "Thunderstorm",
+        "sequence": 8,
+        "slug": "miami",
+        "source": {
+          "cb_location": "NW",
+          "flight_category": "IFR",
+          "metar_type": "SPECI",
+          "peak_wind_direction": 270,
+          "peak_wind_kt": 45.0,
+          "visibility_mi": 0.5,
+          "wind_gust_kt": 40.0,
+          "wind_speed_kt": 25.0,
+          "wx_string": "+TSRA",
+          "wx_token": "TSRA"
+        },
+        "started_at": "2026-07-13T12:34:56.123456Z",
+        "state": "active",
+        "station_id": "KMIA",
+        "summary": "Storm observed",
+        "tier": "severe",
+        "type": "weather_event"
+      },
+      "id": "weather-event-full",
+      "rust_type": "StrategyEvent",
+      "wire": {
+        "badge": "TS",
+        "city_sequence": 9,
+        "detail": "Nearby cell",
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "ended_at": null,
+        "event_id": "weather-1",
+        "event_type": "thunderstorm",
+        "id": "wx-1",
+        "last_confirmed_at": "2026-07-13T12:35:01.987654Z",
+        "name": "Thunderstorm",
+        "sequence": 8,
+        "slug": "miami",
+        "source": {
+          "cb_location": "NW",
+          "flight_category": "IFR",
+          "metar_type": "SPECI",
+          "peak_wind_direction": 270,
+          "peak_wind_kt": 45.0,
+          "visibility_mi": 0.5,
+          "wind_gust_kt": 40.0,
+          "wind_speed_kt": 25.0,
+          "wx_string": "+TSRA",
+          "wx_token": "TSRA"
+        },
+        "started_at": "2026-07-13T12:34:56.123456Z",
+        "state": "active",
+        "station_id": "KMIA",
+        "summary": "Storm observed",
+        "tier": "severe",
+        "type": "weather_event"
+      }
+    },
+    {
+      "covers": [
+        "NewHigh",
+        "PersistenceStatus",
+        "StrategyEvent",
+        "EngineEvent"
+      ],
+      "expected": {
+        "city_sequence": 11,
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "event_id": "high-1",
+        "event_key": "KMIA:2026-07-13:high",
+        "is_from_report": true,
+        "live_published_at": "2026-07-13T12:35:01.987654Z",
+        "observed_at": "2026-07-13T12:34:56.123456Z",
+        "persistence_status": "committed",
+        "prev_value_f": 90.0,
+        "producer_received_at": "2026-07-13T12:35:01.987654Z",
+        "producer_sequence": 12,
+        "report_type": "cli",
+        "sequence": 10,
+        "slug": "miami",
+        "source_report_id": "cli-1",
+        "source_timestamp": "2026-07-13T12:34:56.123456Z",
+        "station_id": "KMIA",
+        "temperature_day_date": "2026-07-13",
+        "temperature_day_mode": "calendar_day",
+        "type": "new_high",
+        "value_c": 32.7777777778,
+        "value_f": 91.0,
+        "wmo_emit_time": "2026-07-13T12:34:56.123456Z"
+      },
+      "id": "new-high-full",
+      "rust_type": "StrategyEvent",
+      "wire": {
+        "city_sequence": 11,
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "event_id": "high-1",
+        "event_key": "KMIA:2026-07-13:high",
+        "is_from_report": true,
+        "live_published_at": "2026-07-13T12:35:01.987654Z",
+        "observed_at": "2026-07-13T12:34:56.123456Z",
+        "persistence_status": "committed",
+        "prev_value_f": 90.0,
+        "producer_received_at": "2026-07-13T12:35:01.987654Z",
+        "producer_sequence": 12,
+        "report_type": "cli",
+        "sequence": 10,
+        "slug": "miami",
+        "source_report_id": "cli-1",
+        "source_timestamp": "2026-07-13T12:34:56.123456Z",
+        "station_id": "KMIA",
+        "temperature_day_date": "2026-07-13",
+        "temperature_day_mode": "calendar_day",
+        "type": "new_high",
+        "value_c": 32.7777777778,
+        "value_f": 91.0,
+        "wmo_emit_time": "2026-07-13T12:34:56.123456Z"
+      }
+    },
+    {
+      "covers": [
+        "NewLow",
+        "StrategyEvent",
+        "EngineEvent"
+      ],
+      "expected": {
+        "city_sequence": 14,
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "event_id": "low-1",
+        "event_key": "KMIA:2026-07-13:low",
+        "is_from_report": false,
+        "live_published_at": "2026-07-13T12:35:01.987654Z",
+        "observed_at": "2026-07-13T12:34:56.123456Z",
+        "persistence_status": "failed",
+        "prev_value_f": 1.0,
+        "producer_received_at": "2026-07-13T12:35:01.987654Z",
+        "producer_sequence": 15,
+        "report_type": null,
+        "sequence": 13,
+        "slug": "miami",
+        "source_report_id": null,
+        "source_timestamp": "2026-07-13T12:34:56.123456Z",
+        "station_id": "KMIA",
+        "temperature_day_date": "2026-07-13",
+        "temperature_day_mode": "nws_climate_day",
+        "type": "new_low",
+        "value_c": -17.7777777778,
+        "value_f": -0.0,
+        "wmo_emit_time": "2026-07-13T12:34:56.123456Z"
+      },
+      "id": "new-low-full",
+      "rust_type": "StrategyEvent",
+      "wire": {
+        "city_sequence": 14,
+        "emitted_at": "2026-07-13T12:34:56.123456Z",
+        "event_id": "low-1",
+        "event_key": "KMIA:2026-07-13:low",
+        "is_from_report": false,
+        "live_published_at": "2026-07-13T12:35:01.987654Z",
+        "observed_at": "2026-07-13T12:34:56.123456Z",
+        "persistence_status": "failed",
+        "prev_value_f": 1.0,
+        "producer_received_at": "2026-07-13T12:35:01.987654Z",
+        "producer_sequence": 15,
+        "report_type": null,
+        "sequence": 13,
+        "slug": "miami",
+        "source_report_id": null,
+        "source_timestamp": "2026-07-13T12:34:56.123456Z",
+        "station_id": "KMIA",
+        "temperature_day_date": "2026-07-13",
+        "temperature_day_mode": "nws_climate_day",
+        "type": "new_low",
+        "value_c": -17.7777777778,
+        "value_f": -0.0,
+        "wmo_emit_time": "2026-07-13T12:34:56.123456Z"
+      }
+    },
+    {
+      "covers": [
+        "TimerWake",
+        "StrategyEvent",
+        "EngineEvent"
+      ],
+      "expected": {
+        "fired_at": "2026-07-13T12:35:01.987654Z",
+        "name": "rebalance",
+        "scheduled_for": "2026-07-13T12:34:56.123456Z",
+        "type": "timer_wake"
+      },
+      "id": "timer-wake",
+      "rust_type": "StrategyEvent",
+      "wire": {
+        "fired_at": "2026-07-13T12:35:01.987654Z",
+        "name": "rebalance",
+        "scheduled_for": "2026-07-13T12:34:56.123456Z",
+        "type": "timer_wake"
+      }
+    },
+    {
+      "covers": [
+        "ShutdownEvent",
+        "StrategyEvent",
+        "EngineEvent"
+      ],
+      "expected": {
+        "reason": "",
+        "type": "shutdown"
+      },
+      "id": "shutdown-defaults",
+      "rust_type": "StrategyEvent",
+      "wire": {
+        "reason": "",
+        "type": "shutdown"
+      }
+    }
+  ],
+  "wire_policy": {
+    "non_finite_numbers": "excluded because they are not JSON-compatible values",
+    "optional_fields": "omitted inputs resolve through defaults; explicit null is retained when nullable",
+    "portable_integer_domain": "signed 64-bit",
+    "unknown_object_fields": "ignored and absent from canonical output"
+  }
+}

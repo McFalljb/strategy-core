@@ -1,0 +1,602 @@
+{
+  "authority": "python",
+  "comparison": "structural-json",
+  "family": "state",
+  "invalid": [
+    {
+      "category": "enum",
+      "id": "unknown-freshness-status",
+      "rust_type": "FreshnessSnapshot",
+      "wire": {
+        "age_seconds": 31.25,
+        "detail": "waiting for price refresh",
+        "domain": "price",
+        "invalidation_reason": "forecast_updated",
+        "key": "KXHIGHMIA-26JUL13-B90.5",
+        "observed_at": "2026-07-13T12:34:56.123456Z",
+        "source": "kalshi",
+        "stale_after_seconds": 30.0,
+        "status": "unknown",
+        "updated_at": "2026-07-13T12:34:56.123456Z"
+      }
+    },
+    {
+      "category": "format",
+      "id": "malformed-freshness-count",
+      "rust_type": "FreshnessSummary",
+      "wire": {
+        "as_of": "not-a-time",
+        "domains": []
+      }
+    },
+    {
+      "category": "type",
+      "id": "wrong-hourly-shape",
+      "rust_type": "StationForecast",
+      "wire": {
+        "model_forecasts": []
+      }
+    }
+  ],
+  "schema_version": 1,
+  "valid": [
+    {
+      "covers": [
+        "FreshnessSnapshot",
+        "FreshnessDomain",
+        "FreshnessStatus"
+      ],
+      "expected": {
+        "age_seconds": 31.25,
+        "detail": "waiting for price refresh",
+        "domain": "price",
+        "invalidation_reason": "forecast_updated",
+        "key": "KXHIGHMIA-26JUL13-B90.5",
+        "observed_at": "2026-07-13T12:34:56.123456Z",
+        "source": "kalshi",
+        "stale_after_seconds": 30.0,
+        "status": "stale",
+        "updated_at": "2026-07-13T12:34:56.123456Z"
+      },
+      "id": "freshness-full",
+      "rust_type": "FreshnessSnapshot",
+      "wire": {
+        "age_seconds": 31.25,
+        "detail": "waiting for price refresh",
+        "domain": "price",
+        "invalidation_reason": "forecast_updated",
+        "key": "KXHIGHMIA-26JUL13-B90.5",
+        "observed_at": "2026-07-13T12:34:56.123456Z",
+        "source": "kalshi",
+        "stale_after_seconds": 30.0,
+        "status": "stale",
+        "updated_at": "2026-07-13T12:34:56.123456Z"
+      }
+    },
+    {
+      "covers": [
+        "FreshnessSummary",
+        "FreshnessDomainSummary"
+      ],
+      "expected": {
+        "as_of": "2026-07-13T12:35:01.987654Z",
+        "domains": [
+          {
+            "domain": "weather",
+            "fresh_count": 1,
+            "stale_count": 0,
+            "stalest_age_seconds": 0.0,
+            "tracked_count": 1
+          },
+          {
+            "domain": "price",
+            "fresh_count": 1,
+            "stale_count": 1,
+            "stalest_age_seconds": 31.25,
+            "tracked_count": 2
+          }
+        ]
+      },
+      "id": "freshness-summary-full",
+      "rust_type": "FreshnessSummary",
+      "wire": {
+        "as_of": "2026-07-13T12:35:01.987654Z",
+        "domains": [
+          {
+            "domain": "weather",
+            "fresh_count": 1,
+            "stale_count": 0,
+            "stalest_age_seconds": 0.0,
+            "tracked_count": 1
+          },
+          {
+            "domain": "price",
+            "fresh_count": 1,
+            "stale_count": 1,
+            "stalest_age_seconds": 31.25,
+            "tracked_count": 2
+          }
+        ]
+      }
+    },
+    {
+      "covers": [
+        "StationForecast",
+        "ModelForecast",
+        "ForecastHourly"
+      ],
+      "expected": {
+        "model_forecasts": {
+          "ncep_hrrr_conus": {
+            "hourly": [
+              {
+                "apparent_temperature_f": 101.0,
+                "cloud_cover": 0.0,
+                "dew_point_2m": 75.0,
+                "precipitation_probability": 25.0,
+                "pressure_msl": 1012.3,
+                "relative_humidity_2m": 70.0,
+                "temperature_2m_c": 32.2,
+                "temperature_2m_f": 90.0,
+                "time": "2026-07-13T13:00:00-04:00",
+                "wind_direction_10m": 180.0,
+                "wind_gusts_10m": 20.0,
+                "wind_speed_10m": 12.0
+              }
+            ],
+            "model_id": "ncep_hrrr_conus",
+            "run_issued_at": "2026-07-13T12:34:56.123456Z",
+            "updated_at": "2026-07-13T12:35:01.987654Z",
+            "value": 91.25,
+            "version": "v2"
+          }
+        },
+        "updated_at": "2026-07-13T12:35:01.987654Z"
+      },
+      "id": "forecast-full",
+      "rust_type": "StationForecast",
+      "wire": {
+        "model_forecasts": {
+          "ncep_hrrr_conus": {
+            "hourly": [
+              {
+                "apparent_temperature_f": 101.0,
+                "cloud_cover": 0.0,
+                "dew_point_2m": 75.0,
+                "precipitation_probability": 25.0,
+                "pressure_msl": 1012.3,
+                "relative_humidity_2m": 70.0,
+                "temperature_2m_c": 32.2,
+                "temperature_2m_f": 90.0,
+                "time": "2026-07-13T13:00:00-04:00",
+                "wind_direction_10m": 180.0,
+                "wind_gusts_10m": 20.0,
+                "wind_speed_10m": 12.0
+              }
+            ],
+            "model_id": "ncep_hrrr_conus",
+            "run_issued_at": "2026-07-13T12:34:56.123456Z",
+            "updated_at": "2026-07-13T12:35:01.987654Z",
+            "value": 91.25,
+            "version": "v2"
+          }
+        },
+        "updated_at": "2026-07-13T12:35:01.987654Z"
+      }
+    },
+    {
+      "covers": [
+        "StationOracleScores",
+        "OracleModelScore"
+      ],
+      "expected": {
+        "days_requested": "30",
+        "range_end": "2026-07-12",
+        "range_start": "2026-06-01",
+        "rank_by": "high",
+        "score_mode": "day_of",
+        "scores": [
+          {
+            "combined_mae": 1.1,
+            "day_count": 30,
+            "high_bias": -0.0,
+            "high_mae": 1.0,
+            "is_public": true,
+            "low_bias": -0.1,
+            "low_mae": 1.2,
+            "model_id": "ncep_hrrr_conus",
+            "model_name": "HRRR"
+          }
+        ],
+        "station_id": "KMIA",
+        "updated_at": "2026-07-13T12:35:01.987654Z"
+      },
+      "id": "oracle-scores-full",
+      "rust_type": "StationOracleScores",
+      "wire": {
+        "days_requested": "30",
+        "range_end": "2026-07-12",
+        "range_start": "2026-06-01",
+        "rank_by": "high",
+        "score_mode": "day_of",
+        "scores": [
+          {
+            "combined_mae": 1.1,
+            "day_count": 30,
+            "high_bias": -0.0,
+            "high_mae": 1.0,
+            "is_public": true,
+            "low_bias": -0.1,
+            "low_mae": 1.2,
+            "model_id": "ncep_hrrr_conus",
+            "model_name": "HRRR"
+          }
+        ],
+        "station_id": "KMIA",
+        "updated_at": "2026-07-13T12:35:01.987654Z"
+      }
+    },
+    {
+      "covers": [
+        "StationWeather"
+      ],
+      "expected": {
+        "asos_daily_high_f": 91.0,
+        "asos_daily_low_f": 77.0,
+        "current_temp": 90.0,
+        "dewpoint": 73.0,
+        "dsm_high": 91.0,
+        "dsm_high_time": "2026-07-13T12:34:56.123456Z",
+        "dsm_low": 77.0,
+        "dsm_low_time": "2026-07-13T12:34:56.123456Z",
+        "heat_index": 101.0,
+        "lag_seconds": 0,
+        "last_dsm_time": "2026-07-13T12:34:56.123456Z",
+        "last_metar_time": "2026-07-13T12:34:56.123456Z",
+        "last_six_hr_time": "2026-07-13T12:35:01.987654Z",
+        "preliminary": true,
+        "relative_humidity": 60.0,
+        "running_high": 91.0,
+        "running_low": 77.0,
+        "six_hr_high": 91.0,
+        "six_hr_low": 77.0,
+        "temp_max_c": 32.8,
+        "temp_max_f": 91.0,
+        "temp_min_c": 31.7,
+        "temp_min_f": 89.0,
+        "text_description": "Partly Cloudy",
+        "wind_chill": -0.0,
+        "wind_direction": 180.0,
+        "wind_gust": 15.0,
+        "wind_speed": 8.0,
+        "wu_current_temp_c": 32.2,
+        "wu_current_temp_f": 90.0,
+        "wu_daily_high_c": 32.8,
+        "wu_daily_high_f": 91.0,
+        "wu_daily_low_c": 25.0,
+        "wu_daily_low_f": 77.0,
+        "wu_fetched_at": "2026-07-13T12:35:01.987654Z",
+        "wu_observation_time": "2026-07-13T12:34:56.123456Z"
+      },
+      "id": "weather-full",
+      "rust_type": "StationWeather",
+      "wire": {
+        "asos_daily_high_f": 91.0,
+        "asos_daily_low_f": 77.0,
+        "current_temp": 90.0,
+        "dewpoint": 73.0,
+        "dsm_high": 91.0,
+        "dsm_high_time": "2026-07-13T12:34:56.123456Z",
+        "dsm_low": 77.0,
+        "dsm_low_time": "2026-07-13T12:34:56.123456Z",
+        "heat_index": 101.0,
+        "lag_seconds": 0,
+        "last_dsm_time": "2026-07-13T12:34:56.123456Z",
+        "last_metar_time": "2026-07-13T12:34:56.123456Z",
+        "last_six_hr_time": "2026-07-13T12:35:01.987654Z",
+        "preliminary": true,
+        "relative_humidity": 60.0,
+        "running_high": 91.0,
+        "running_low": 77.0,
+        "six_hr_high": 91.0,
+        "six_hr_low": 77.0,
+        "temp_max_c": 32.8,
+        "temp_max_f": 91.0,
+        "temp_min_c": 31.7,
+        "temp_min_f": 89.0,
+        "text_description": "Partly Cloudy",
+        "wind_chill": -0.0,
+        "wind_direction": 180.0,
+        "wind_gust": 15.0,
+        "wind_speed": 8.0,
+        "wu_current_temp_c": 32.2,
+        "wu_current_temp_f": 90.0,
+        "wu_daily_high_c": 32.8,
+        "wu_daily_high_f": 91.0,
+        "wu_daily_low_c": 25.0,
+        "wu_daily_low_f": 77.0,
+        "wu_fetched_at": "2026-07-13T12:35:01.987654Z",
+        "wu_observation_time": "2026-07-13T12:34:56.123456Z"
+      }
+    },
+    {
+      "covers": [
+        "StationWeather"
+      ],
+      "expected": {
+        "asos_daily_high_f": null,
+        "asos_daily_low_f": null,
+        "current_temp": null,
+        "dewpoint": null,
+        "dsm_high": null,
+        "dsm_high_time": null,
+        "dsm_low": null,
+        "dsm_low_time": null,
+        "heat_index": null,
+        "lag_seconds": null,
+        "last_dsm_time": null,
+        "last_metar_time": null,
+        "last_six_hr_time": null,
+        "preliminary": false,
+        "relative_humidity": null,
+        "running_high": null,
+        "running_low": null,
+        "six_hr_high": null,
+        "six_hr_low": null,
+        "temp_max_c": null,
+        "temp_max_f": null,
+        "temp_min_c": null,
+        "temp_min_f": null,
+        "text_description": null,
+        "wind_chill": null,
+        "wind_direction": null,
+        "wind_gust": null,
+        "wind_speed": null,
+        "wu_current_temp_c": null,
+        "wu_current_temp_f": null,
+        "wu_daily_high_c": null,
+        "wu_daily_high_f": null,
+        "wu_daily_low_c": null,
+        "wu_daily_low_f": null,
+        "wu_fetched_at": null,
+        "wu_observation_time": null
+      },
+      "id": "weather-defaults",
+      "rust_type": "StationWeather",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "TickerPrices",
+        "PriceLevel",
+        "FeeType"
+      ],
+      "expected": {
+        "cap_strike": 90.5,
+        "event_date": "2026-07-13",
+        "event_ticker": "KXHIGHMIA-26JUL13",
+        "fee_multiplier": 1.0,
+        "fee_type": "quadratic",
+        "floor_strike": 89.5,
+        "last_update": "2026-07-13T12:35:01.987654Z",
+        "no_ask": 0.4,
+        "no_ask_depth": 40,
+        "no_ask_levels": [
+          [
+            0.4,
+            40
+          ]
+        ],
+        "no_bid": 0.38,
+        "no_bid_depth": 30,
+        "no_bid_levels": [],
+        "no_price": 0.39,
+        "orderbook_depth": 50,
+        "peak_yes_ask": 0.99,
+        "series_ticker": "KXHIGHMIA",
+        "source": "kalshi",
+        "strike_type": "between",
+        "ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "volume": 1000000.0,
+        "yes_ask": 0.62,
+        "yes_ask_depth": 20,
+        "yes_ask_levels": [
+          [
+            0.62,
+            20
+          ]
+        ],
+        "yes_bid": 0.6,
+        "yes_bid_depth": 10,
+        "yes_bid_levels": [
+          [
+            0.6,
+            10
+          ]
+        ],
+        "yes_price": 0.61
+      },
+      "id": "ticker-prices-full",
+      "rust_type": "TickerPrices",
+      "wire": {
+        "cap_strike": 90.5,
+        "event_date": "2026-07-13",
+        "event_ticker": "KXHIGHMIA-26JUL13",
+        "fee_multiplier": 1.0,
+        "fee_type": "quadratic",
+        "floor_strike": 89.5,
+        "last_update": "2026-07-13T12:35:01.987654Z",
+        "no_ask": 0.4,
+        "no_ask_depth": 40,
+        "no_ask_levels": [
+          [
+            0.4,
+            40
+          ]
+        ],
+        "no_bid": 0.38,
+        "no_bid_depth": 30,
+        "no_bid_levels": [],
+        "no_price": 0.39,
+        "orderbook_depth": 50,
+        "peak_yes_ask": 0.99,
+        "series_ticker": "KXHIGHMIA",
+        "source": "kalshi",
+        "strike_type": "between",
+        "ticker": "KXHIGHMIA-26JUL13-B90.5",
+        "volume": 1000000.0,
+        "yes_ask": 0.62,
+        "yes_ask_depth": 20,
+        "yes_ask_levels": [
+          [
+            0.62,
+            20
+          ]
+        ],
+        "yes_bid": 0.6,
+        "yes_bid_depth": 10,
+        "yes_bid_levels": [
+          [
+            0.6,
+            10
+          ]
+        ],
+        "yes_price": 0.61
+      }
+    },
+    {
+      "covers": [
+        "TickerPrices"
+      ],
+      "expected": {
+        "cap_strike": null,
+        "event_date": "",
+        "event_ticker": "",
+        "fee_multiplier": null,
+        "fee_type": "",
+        "floor_strike": null,
+        "last_update": null,
+        "no_ask": null,
+        "no_ask_depth": null,
+        "no_ask_levels": [],
+        "no_bid": null,
+        "no_bid_depth": null,
+        "no_bid_levels": [],
+        "no_price": 0.0,
+        "orderbook_depth": null,
+        "peak_yes_ask": null,
+        "series_ticker": "",
+        "source": "",
+        "strike_type": "",
+        "ticker": "",
+        "volume": null,
+        "yes_ask": null,
+        "yes_ask_depth": null,
+        "yes_ask_levels": [],
+        "yes_bid": null,
+        "yes_bid_depth": null,
+        "yes_bid_levels": [],
+        "yes_price": 0.0
+      },
+      "id": "ticker-prices-defaults",
+      "rust_type": "TickerPrices",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "FreshnessStatus"
+      ],
+      "expected": "fresh",
+      "id": "freshness-status-fresh",
+      "rust_type": "FreshnessStatus",
+      "wire": "fresh"
+    },
+    {
+      "covers": [
+        "FreshnessStatus"
+      ],
+      "expected": "stale",
+      "id": "freshness-status-stale",
+      "rust_type": "FreshnessStatus",
+      "wire": "stale"
+    },
+    {
+      "covers": [
+        "FreshnessStatus"
+      ],
+      "expected": "missing",
+      "id": "freshness-status-missing",
+      "rust_type": "FreshnessStatus",
+      "wire": "missing"
+    },
+    {
+      "covers": [
+        "FreshnessDomain"
+      ],
+      "expected": "weather",
+      "id": "freshness-domain-weather",
+      "rust_type": "FreshnessDomain",
+      "wire": "weather"
+    },
+    {
+      "covers": [
+        "FreshnessDomain"
+      ],
+      "expected": "forecast",
+      "id": "freshness-domain-forecast",
+      "rust_type": "FreshnessDomain",
+      "wire": "forecast"
+    },
+    {
+      "covers": [
+        "FreshnessDomain"
+      ],
+      "expected": "oracle",
+      "id": "freshness-domain-oracle",
+      "rust_type": "FreshnessDomain",
+      "wire": "oracle"
+    },
+    {
+      "covers": [
+        "FreshnessDomain"
+      ],
+      "expected": "price",
+      "id": "freshness-domain-price",
+      "rust_type": "FreshnessDomain",
+      "wire": "price"
+    },
+    {
+      "covers": [
+        "FeeType"
+      ],
+      "expected": "quadratic",
+      "id": "fee-type-quadratic",
+      "rust_type": "FeeType",
+      "wire": "quadratic"
+    },
+    {
+      "covers": [
+        "FeeType"
+      ],
+      "expected": "quadratic_with_maker_fees",
+      "id": "fee-type-quadratic_with_maker_fees",
+      "rust_type": "FeeType",
+      "wire": "quadratic_with_maker_fees"
+    },
+    {
+      "covers": [
+        "FeeType"
+      ],
+      "expected": "flat",
+      "id": "fee-type-flat",
+      "rust_type": "FeeType",
+      "wire": "flat"
+    }
+  ],
+  "wire_policy": {
+    "non_finite_numbers": "excluded because they are not JSON-compatible values",
+    "optional_fields": "omitted inputs resolve through defaults; explicit null is retained when nullable",
+    "portable_integer_domain": "signed 64-bit",
+    "unknown_object_fields": "ignored and absent from canonical output"
+  }
+}

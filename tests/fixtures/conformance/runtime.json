@@ -1,0 +1,351 @@
+{
+  "authority": "python",
+  "comparison": "structural-json",
+  "family": "runtime",
+  "invalid": [
+    {
+      "category": "enum",
+      "id": "unknown-event-delivery",
+      "rust_type": "RuntimeCapabilities",
+      "wire": {
+        "event_delivery": "batch",
+        "queue_is_durable": true,
+        "replay_controls_event_progression": true,
+        "supports_data_queries": false,
+        "supports_http": true,
+        "supports_native_kernels": true,
+        "supports_one_shot_timers": true,
+        "supports_recurring_timers": true
+      }
+    },
+    {
+      "category": "enum",
+      "id": "unknown-market-type",
+      "rust_type": "StrategyScope",
+      "wire": {
+        "event_date": "2026-07-13",
+        "event_ticker": "KXHIGHMIA-26JUL13",
+        "market_type": "mid",
+        "sleeve_id": "demo:KMIA",
+        "station_id": "KMIA",
+        "strategy_name": "demo",
+        "tickers": [
+          "KXHIGHMIA-26JUL13-B90.5",
+          "KXLOWTMIA-26JUL13-B75.5"
+        ]
+      }
+    },
+    {
+      "category": "type",
+      "id": "invalid-telemetry-field",
+      "rust_type": "TelemetryFields",
+      "wire": {
+        "nested": []
+      }
+    }
+  ],
+  "schema_version": 1,
+  "valid": [
+    {
+      "covers": [
+        "RuntimeCapabilities",
+        "EventDelivery"
+      ],
+      "expected": {
+        "event_delivery": "decision",
+        "queue_is_durable": true,
+        "replay_controls_event_progression": true,
+        "supports_data_queries": false,
+        "supports_http": true,
+        "supports_native_kernels": true,
+        "supports_one_shot_timers": true,
+        "supports_recurring_timers": true
+      },
+      "id": "capabilities-full",
+      "rust_type": "RuntimeCapabilities",
+      "wire": {
+        "event_delivery": "decision",
+        "queue_is_durable": true,
+        "replay_controls_event_progression": true,
+        "supports_data_queries": false,
+        "supports_http": true,
+        "supports_native_kernels": true,
+        "supports_one_shot_timers": true,
+        "supports_recurring_timers": true
+      }
+    },
+    {
+      "covers": [
+        "RuntimeCapabilities"
+      ],
+      "expected": {
+        "event_delivery": "wake",
+        "queue_is_durable": false,
+        "replay_controls_event_progression": false,
+        "supports_data_queries": true,
+        "supports_http": false,
+        "supports_native_kernels": false,
+        "supports_one_shot_timers": false,
+        "supports_recurring_timers": false
+      },
+      "id": "capabilities-defaults",
+      "rust_type": "RuntimeCapabilities",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "RuntimeCapabilities"
+      ],
+      "expected": {
+        "event_delivery": "wake",
+        "queue_is_durable": false,
+        "replay_controls_event_progression": false,
+        "supports_data_queries": true,
+        "supports_http": false,
+        "supports_native_kernels": false,
+        "supports_one_shot_timers": false,
+        "supports_recurring_timers": false
+      },
+      "id": "capabilities-unknown-field-normalized",
+      "rust_type": "RuntimeCapabilities",
+      "wire": {
+        "future_flag": true
+      }
+    },
+    {
+      "covers": [
+        "StrategyScope",
+        "MarketType"
+      ],
+      "expected": {
+        "event_date": "2026-07-13",
+        "event_ticker": "KXHIGHMIA-26JUL13",
+        "market_type": "high",
+        "sleeve_id": "demo:KMIA",
+        "station_id": "KMIA",
+        "strategy_name": "demo",
+        "tickers": [
+          "KXHIGHMIA-26JUL13-B90.5",
+          "KXLOWTMIA-26JUL13-B75.5"
+        ]
+      },
+      "id": "strategy-scope",
+      "rust_type": "StrategyScope",
+      "wire": {
+        "event_date": "2026-07-13",
+        "event_ticker": "KXHIGHMIA-26JUL13",
+        "market_type": "high",
+        "sleeve_id": "demo:KMIA",
+        "station_id": "KMIA",
+        "strategy_name": "demo",
+        "tickers": [
+          "KXHIGHMIA-26JUL13-B90.5",
+          "KXLOWTMIA-26JUL13-B75.5"
+        ]
+      }
+    },
+    {
+      "covers": [
+        "StrategyScope"
+      ],
+      "expected": {
+        "event_date": null,
+        "event_ticker": null,
+        "market_type": null,
+        "sleeve_id": "demo:KMIA",
+        "station_id": null,
+        "strategy_name": "demo",
+        "tickers": []
+      },
+      "id": "strategy-scope-defaults",
+      "rust_type": "StrategyScope",
+      "wire": {
+        "sleeve_id": "demo:KMIA",
+        "strategy_name": "demo"
+      }
+    },
+    {
+      "covers": [
+        "NativeKernelResult",
+        "NativeKernelStatus",
+        "JSONValue",
+        "JSONObject"
+      ],
+      "expected": {
+        "actions_emitted": 0,
+        "events_handled": 1000000,
+        "fallback_used": true,
+        "metadata": {
+          "active": false,
+          "attempt": 1,
+          "detail": null,
+          "ratio": -0.0,
+          "reason": "unsupported"
+        },
+        "status": "fallback_completed"
+      },
+      "id": "native-result-full",
+      "rust_type": "NativeKernelResult",
+      "wire": {
+        "actions_emitted": 0,
+        "events_handled": 1000000,
+        "fallback_used": true,
+        "metadata": {
+          "active": false,
+          "attempt": 1,
+          "detail": null,
+          "ratio": -0.0,
+          "reason": "unsupported"
+        },
+        "status": "fallback_completed"
+      }
+    },
+    {
+      "covers": [
+        "NativeKernelResult"
+      ],
+      "expected": {
+        "actions_emitted": 0,
+        "events_handled": 0,
+        "fallback_used": false,
+        "metadata": {},
+        "status": "completed"
+      },
+      "id": "native-result-defaults",
+      "rust_type": "NativeKernelResult",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "StrategyConfig"
+      ],
+      "expected": {
+        "enabled": true,
+        "nested": {
+          "value": null
+        },
+        "retries": 3,
+        "station": "KMIA"
+      },
+      "id": "strategy-config",
+      "rust_type": "StrategyConfig",
+      "wire": {
+        "enabled": true,
+        "nested": {
+          "value": null
+        },
+        "retries": 3,
+        "station": "KMIA"
+      }
+    },
+    {
+      "covers": [
+        "TelemetryField",
+        "TelemetryFields"
+      ],
+      "expected": {
+        "active": true,
+        "count": 3,
+        "empty": null,
+        "ratio": -0.0,
+        "text": "ok"
+      },
+      "id": "telemetry-fields",
+      "rust_type": "TelemetryFields",
+      "wire": {
+        "active": true,
+        "count": 3,
+        "empty": null,
+        "ratio": -0.0,
+        "text": "ok"
+      }
+    },
+    {
+      "covers": [
+        "RuntimeMode"
+      ],
+      "expected": "paper",
+      "id": "runtime-mode-paper",
+      "rust_type": "RuntimeMode",
+      "wire": "paper"
+    },
+    {
+      "covers": [
+        "RuntimeMode"
+      ],
+      "expected": "replay",
+      "id": "runtime-mode-replay",
+      "rust_type": "RuntimeMode",
+      "wire": "replay"
+    },
+    {
+      "covers": [
+        "RuntimeMode"
+      ],
+      "expected": "live",
+      "id": "runtime-mode-live",
+      "rust_type": "RuntimeMode",
+      "wire": "live"
+    },
+    {
+      "covers": [
+        "MarketType"
+      ],
+      "expected": "high",
+      "id": "market-type-high",
+      "rust_type": "MarketType",
+      "wire": "high"
+    },
+    {
+      "covers": [
+        "MarketType"
+      ],
+      "expected": "low",
+      "id": "market-type-low",
+      "rust_type": "MarketType",
+      "wire": "low"
+    },
+    {
+      "covers": [
+        "EventDelivery"
+      ],
+      "expected": "wake",
+      "id": "event-delivery-wake",
+      "rust_type": "EventDelivery",
+      "wire": "wake"
+    },
+    {
+      "covers": [
+        "EventDelivery"
+      ],
+      "expected": "decision",
+      "id": "event-delivery-decision",
+      "rust_type": "EventDelivery",
+      "wire": "decision"
+    },
+    {
+      "covers": [
+        "NativeKernelStatus"
+      ],
+      "expected": "completed",
+      "id": "native-status-completed",
+      "rust_type": "NativeKernelStatus",
+      "wire": "completed"
+    },
+    {
+      "covers": [
+        "NativeKernelStatus"
+      ],
+      "expected": "fallback_completed",
+      "id": "native-status-fallback_completed",
+      "rust_type": "NativeKernelStatus",
+      "wire": "fallback_completed"
+    }
+  ],
+  "wire_policy": {
+    "non_finite_numbers": "excluded because they are not JSON-compatible values",
+    "optional_fields": "omitted inputs resolve through defaults; explicit null is retained when nullable",
+    "portable_integer_domain": "signed 64-bit",
+    "unknown_object_fields": "ignored and absent from canonical output"
+  }
+}

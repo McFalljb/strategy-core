@@ -12,6 +12,13 @@ from typing import Any, cast
 import pytest
 
 import strategy_core
+from tests.conformance_cases import (
+    CORE_FIXTURE_NAMES,
+    build_core_fixtures,
+    load_core_fixture,
+    python_invalid_category,
+    python_round_trip_valid_case,
+)
 
 ROOT = Path(__file__).parents[1]
 MANIFEST_PATH = ROOT / "tests" / "fixtures" / "conformance" / "manifest.json"
@@ -143,6 +150,78 @@ def test_manifest_rejects_missing_not_applicable_rationale() -> None:
 
     with pytest.raises(AssertionError):
         _validate_manifest(manifest, _actual_exports())
+
+
+def test_core_conformance_fixtures_match_python_contract_objects() -> None:
+    expected = build_core_fixtures()
+
+    assert set(expected) == set(CORE_FIXTURE_NAMES)
+    for name in CORE_FIXTURE_NAMES:
+        assert load_core_fixture(name) == expected[name]
+
+
+@pytest.mark.parametrize(
+    ("family", "case"),
+    [(family, case) for family, document in build_core_fixtures().items() for case in document["valid"]],
+    ids=lambda value: value if isinstance(value, str) else cast("str", value["id"]),
+)
+def test_python_authored_core_values_round_trip_structurally(family: str, case: dict[str, Any]) -> None:
+    assert family in CORE_FIXTURE_NAMES
+    assert python_round_trip_valid_case(case) == case["expected"], case["id"]
+
+
+def _validate_core_fixture_coverage(manifest: dict[str, Any], fixtures: dict[str, dict[str, Any]]) -> None:
+    partition = manifest["fixture_partitions"]["core"]
+    assert set(partition["files"]) == set(CORE_FIXTURE_NAMES)
+    covered = {surface for document in fixtures.values() for case in document["valid"] for surface in case["covers"]}
+    assert covered == set(partition["surfaces"]), {
+        "missing": sorted(set(partition["surfaces"]) - covered),
+        "unknown": sorted(covered - set(partition["surfaces"])),
+    }
+    for name, document in fixtures.items():
+        assert document["family"] == name
+        assert document["valid"], name
+        assert document["invalid"], name
+        assert all(
+            case["category"] in {"required_field", "type", "enum", "range", "format"} for case in document["invalid"]
+        )
+    assert {case["wire"]["type"] for case in fixtures["events"]["valid"]} == {
+        "observation",
+        "price_update",
+        "forecast_updated",
+        "forecast_versions",
+        "oracle_scores_updated",
+        "station_report",
+        "weather_event",
+        "new_high",
+        "new_low",
+        "timer_wake",
+        "shutdown",
+    }
+
+
+def test_manifest_core_partition_has_complete_fixture_evidence() -> None:
+    _validate_core_fixture_coverage(_load_manifest(), build_core_fixtures())
+
+
+def test_manifest_core_partition_rejects_missing_fixture_evidence() -> None:
+    fixtures = build_core_fixtures()
+    fixtures["events"]["valid"][0]["covers"] = []
+
+    with pytest.raises(AssertionError):
+        _validate_core_fixture_coverage(_load_manifest(), fixtures)
+
+
+@pytest.mark.parametrize(
+    ("family", "case"),
+    [(family, case) for family, document in build_core_fixtures().items() for case in document["invalid"]],
+    ids=lambda value: value if isinstance(value, str) else cast("str", value["id"]),
+)
+def test_python_rejects_declared_invalid_core_wire_cases_with_normalized_category(
+    family: str, case: dict[str, Any]
+) -> None:
+    assert family in CORE_FIXTURE_NAMES
+    assert python_invalid_category(case) == case["category"], case["id"]
 
 
 def test_manifest_rejects_non_exported_symbol_reference() -> None:

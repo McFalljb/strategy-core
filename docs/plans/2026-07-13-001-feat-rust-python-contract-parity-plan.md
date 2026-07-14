@@ -290,7 +290,7 @@ trait.
 - The manifest accounts for the full public surface and the known state-trait drift is covered by
   matching Python and Rust behavior tests.
 
-- [ ] **Unit 2: Add the core Python-authored conformance corpus**
+- [x] **Unit 2: Add the core Python-authored conformance corpus**
 
 **Goal:** Establish one canonical fixture corpus that proves Python-to-Rust structural serialization
 parity for the core contract surface.

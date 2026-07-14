@@ -1,0 +1,276 @@
+{
+  "authority": "python",
+  "comparison": "structural-json",
+  "family": "queries",
+  "invalid": [
+    {
+      "category": "type",
+      "id": "wrong-refresh-type",
+      "rust_type": "LimitsQuery",
+      "wire": {
+        "refresh": []
+      }
+    },
+    {
+      "category": "required_field",
+      "id": "missing-run-id",
+      "rust_type": "ForecastRunQuery",
+      "wire": {
+        "refresh": false
+      }
+    },
+    {
+      "category": "type",
+      "id": "wrong-limit-type",
+      "rust_type": "ForecastRunsQuery",
+      "wire": {
+        "limit": []
+      }
+    }
+  ],
+  "schema_version": 1,
+  "valid": [
+    {
+      "covers": [
+        "LimitsQuery"
+      ],
+      "expected": {
+        "refresh": false
+      },
+      "id": "limits-defaults",
+      "rust_type": "LimitsQuery",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "ForecastQuery"
+      ],
+      "expected": {
+        "model_id": "ncep_hrrr_conus",
+        "refresh": true
+      },
+      "id": "forecast-full",
+      "rust_type": "ForecastQuery",
+      "wire": {
+        "model_id": "ncep_hrrr_conus",
+        "refresh": true
+      }
+    },
+    {
+      "covers": [
+        "ForecastQuery"
+      ],
+      "expected": {
+        "model_id": null,
+        "refresh": false
+      },
+      "id": "forecast-defaults",
+      "rust_type": "ForecastQuery",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "OracleScoresQuery"
+      ],
+      "expected": {
+        "days": "30",
+        "mode": "day_of",
+        "rank_by": "combined",
+        "refresh": true
+      },
+      "id": "oracle-full",
+      "rust_type": "OracleScoresQuery",
+      "wire": {
+        "days": "30",
+        "mode": "day_of",
+        "rank_by": "combined",
+        "refresh": true
+      }
+    },
+    {
+      "covers": [
+        "OracleScoresQuery"
+      ],
+      "expected": {
+        "days": "7",
+        "mode": "day_ahead",
+        "rank_by": "high",
+        "refresh": false
+      },
+      "id": "oracle-defaults",
+      "rust_type": "OracleScoresQuery",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "ForecastRunsQuery",
+        "DateLike"
+      ],
+      "expected": {
+        "cursor": "cursor-1",
+        "end": "2026-07-14T12:00:00Z",
+        "limit": 1000000,
+        "model_id": "ncep_hrrr_conus",
+        "refresh": true,
+        "start": "2026-07-13T12:34:56.123456Z"
+      },
+      "id": "forecast-runs-full",
+      "rust_type": "ForecastRunsQuery",
+      "wire": {
+        "cursor": "cursor-1",
+        "end": "2026-07-14T12:00:00Z",
+        "limit": 1000000,
+        "model_id": "ncep_hrrr_conus",
+        "refresh": true,
+        "start": "2026-07-13T12:34:56.123456Z"
+      }
+    },
+    {
+      "covers": [
+        "ForecastRunsQuery"
+      ],
+      "expected": {
+        "cursor": null,
+        "end": null,
+        "limit": null,
+        "model_id": null,
+        "refresh": false,
+        "start": null
+      },
+      "id": "forecast-runs-defaults",
+      "rust_type": "ForecastRunsQuery",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "ForecastRunQuery"
+      ],
+      "expected": {
+        "refresh": true,
+        "run_id": "run-1"
+      },
+      "id": "forecast-run",
+      "rust_type": "ForecastRunQuery",
+      "wire": {
+        "refresh": true,
+        "run_id": "run-1"
+      }
+    },
+    {
+      "covers": [
+        "LatestReportsQuery"
+      ],
+      "expected": {
+        "refresh": false
+      },
+      "id": "latest-reports-defaults",
+      "rust_type": "LatestReportsQuery",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "ReportsQuery",
+        "LocalDateLike"
+      ],
+      "expected": {
+        "date": "2026-07-13",
+        "refresh": true,
+        "report_type": "cli"
+      },
+      "id": "reports-full",
+      "rust_type": "ReportsQuery",
+      "wire": {
+        "date": "2026-07-13",
+        "refresh": true,
+        "report_type": "cli"
+      }
+    },
+    {
+      "covers": [
+        "ReportsQuery"
+      ],
+      "expected": {
+        "date": null,
+        "refresh": false,
+        "report_type": null
+      },
+      "id": "reports-defaults",
+      "rust_type": "ReportsQuery",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "ReportHistoryQuery",
+        "LocalDateLike"
+      ],
+      "expected": {
+        "cursor": "cursor-2",
+        "end": "2026-07-13",
+        "limit": 1000000,
+        "refresh": true,
+        "report_type": "cli",
+        "start": "2026-07-01"
+      },
+      "id": "report-history-full",
+      "rust_type": "ReportHistoryQuery",
+      "wire": {
+        "cursor": "cursor-2",
+        "end": "2026-07-13",
+        "limit": 1000000,
+        "refresh": true,
+        "report_type": "cli",
+        "start": "2026-07-01"
+      }
+    },
+    {
+      "covers": [
+        "ReportHistoryQuery"
+      ],
+      "expected": {
+        "cursor": null,
+        "end": null,
+        "limit": null,
+        "refresh": false,
+        "report_type": null,
+        "start": null
+      },
+      "id": "report-history-defaults",
+      "rust_type": "ReportHistoryQuery",
+      "wire": {}
+    },
+    {
+      "covers": [
+        "LatestObservationQuery",
+        "TemperatureDayMode"
+      ],
+      "expected": {
+        "day_mode": "nws_climate_day",
+        "refresh": true
+      },
+      "id": "latest-observation-full",
+      "rust_type": "LatestObservationQuery",
+      "wire": {
+        "day_mode": "nws_climate_day",
+        "refresh": true
+      }
+    },
+    {
+      "covers": [
+        "LatestObservationQuery"
+      ],
+      "expected": {
+        "day_mode": null,
+        "refresh": false
+      },
+      "id": "latest-observation-defaults",
+      "rust_type": "LatestObservationQuery",
+      "wire": {}
+    }
+  ],
+  "wire_policy": {
+    "non_finite_numbers": "excluded because they are not JSON-compatible values",
+    "optional_fields": "omitted inputs resolve through defaults; explicit null is retained when nullable",
+    "portable_integer_domain": "signed 64-bit",
+    "unknown_object_fields": "ignored and absent from canonical output"
+  }
+}
