@@ -36,7 +36,7 @@ duplicates portable fee math. The replay-owned models are legitimate, but the st
 projection should be shared.
 
 There is no separate requirements document. The planning source of truth is the user's request plus
-`docs/rust-parity-strategy-core.md` and `docs/contract-map.md`.
+`docs/contract-map.md`.
 
 ## Requirements Trace
 
@@ -647,7 +647,6 @@ Backtester.
 - Reference and modify only if discovery is insufficient: `.github/workflows/ci.yml`
 - Reference and modify only if discovery is insufficient: `../trader/.github/workflows/ci.yml`
 - Reference and modify only if discovery is insufficient: `../backtester/.github/workflows/ci.yml`
-- Modify: `docs/rust-parity-strategy-core.md`
 - Modify: `docs/contract-map.md`
 - Reference: `../trader/AGENTS.md`
 - Reference: `../backtester/AGENTS.md`
@@ -660,10 +659,9 @@ Backtester.
   boundary obligations are satisfied.
 - Mark the already-present Rust CI item complete, distinguish Trader and Backtester adoption, and state
   intentional engine-owned exclusions.
-- Retain `docs/rust-parity-strategy-core.md` as an adoption/status record only while work remains. Once
-  all completion criteria are met, fold stable contract rules into `docs/contract-map.md` and either
-  convert the parity document to a concise completion record or retire it in a separate documentation
-  decision.
+- Retain the temporary parity status record only while work remains. Once all completion criteria are
+  met, fold stable contract rules into `docs/contract-map.md` and retire the status record in a
+  separate documentation decision.
 
 **Patterns to follow:**
 - Existing CI test jobs and the responsibility table in `docs/contract-map.md`.
@@ -770,7 +768,7 @@ Backtester.
 
 ## Sources & References
 
-- Planning context: `docs/rust-parity-strategy-core.md`
+- Planning context: the user request captured by this plan
 - Ownership boundaries: `docs/contract-map.md`
 - Python exports: `strategy_core/__init__.py`
 - Broad Rust exports: `native/strategy_core/src/lib.rs`
