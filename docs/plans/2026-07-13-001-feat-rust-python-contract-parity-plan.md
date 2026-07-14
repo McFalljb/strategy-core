@@ -586,7 +586,7 @@ single Backtester projection path.
 - Backtester's Python bridge contains no competing mapping from raw replay records to shared contract
   semantics; it consumes the tested canonical adapter output.
 
-- [ ] **Unit 7: Delegate Backtester portable fee math to Strategy Core**
+- [x] **Unit 7: Delegate Backtester portable fee math to Strategy Core**
 
 **Goal:** Remove duplicated portable fee formulas while preserving Backtester-owned accounting and
 zero-fee replay policy.
