@@ -16,4 +16,5 @@ chrono-tz = "0.10"
 rust_decimal = { version = "1", default-features = false, features = ["serde", "std"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "0.10"
 strategy-core-kernel = { path = "../strategy_core_kernel" }

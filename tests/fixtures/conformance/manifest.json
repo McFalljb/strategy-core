@@ -3045,6 +3045,21 @@
       }
     },
     {
+      "id": "rust-minutetemp-ingress-identity",
+      "ownership": "consumer-owned",
+      "evidence_profile": "language-specific-exclusion",
+      "rationale": "Native consumer runtimes share this transport-ingress identity contract; its deterministic identity, revision, and collision behavior is covered by the Rust module tests and is not part of the strategy-facing Python API.",
+      "surfaces": {
+        "rust_broad": [
+          "MinuteTempDeliveryIdentity",
+          "MinuteTempIdentityObservation",
+          "MinuteTempIdentityRegistry",
+          "MinuteTempStationReportIdentityInput",
+          "minutetemp_station_report_delivery_identity"
+        ]
+      }
+    },
+    {
       "id": "borrowed-native-kernel-contract",
       "ownership": "kernel-only",
       "evidence_profile": "kernel-borrowed-contract",

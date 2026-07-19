@@ -105,6 +105,10 @@ pub trait StrategyKernelBroker {
 }
 
 pub trait StrategyKernelRuntime {
+    fn now(&self) -> Option<DateTime<Utc>> {
+        None
+    }
+
     fn wake_at(&mut self, request: WakeAtRequest) -> KernelResult<()>;
 }
 

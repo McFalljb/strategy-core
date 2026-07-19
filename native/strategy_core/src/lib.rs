@@ -16,6 +16,7 @@ pub mod fees;
 pub mod http;
 pub mod kalshi;
 pub mod minutetemp;
+pub mod minutetemp_ingress;
 pub mod models;
 pub mod native;
 pub mod queries;
@@ -71,6 +72,10 @@ pub use minutetemp::{
     ReportMultiHourSchedule, ReportSchedule, ReportScheduleBasis, ReportScheduleEntry, ReportType,
     StationForecastData, StationInfo, StationReportHistoryPage, StationReportRecord,
     StationReportsData, TemperatureUnit,
+};
+pub use minutetemp_ingress::{
+    MinuteTempDeliveryIdentity, MinuteTempIdentityObservation, MinuteTempIdentityRegistry,
+    MinuteTempStationReportIdentityInput, minutetemp_station_report_delivery_identity,
 };
 pub use models::{
     JSONObject, JSONValue, JsonObject, JsonValue, OrderId, StrategyConfig, TelemetryField,
