@@ -125,8 +125,8 @@ async def test_limits_reports_and_latest_observation_accept_query_objects() -> N
 
     await data.fetch_limits(refresh=True)
     await data.fetch_limits(LimitsQuery(refresh=True))
-    await data.fetch_latest_reports(refresh=True)
-    await data.fetch_latest_reports(LatestReportsQuery(refresh=True))
+    await data.fetch_latest_reports(include_baseline=True, refresh=True)
+    await data.fetch_latest_reports(LatestReportsQuery(include_baseline=True, refresh=True))
     await data.fetch_reports(report_type="cli", date=report_day, refresh=True)
     await data.fetch_reports(ReportsQuery(report_type="cli", date=report_day, refresh=True))
     await data.fetch_report_history(report_type="cli", start=history_start, limit=50, refresh=True)
@@ -139,8 +139,8 @@ async def test_limits_reports_and_latest_observation_accept_query_objects() -> N
 
     assert data.limits_queries == [LimitsQuery(refresh=True), LimitsQuery(refresh=True)]
     assert data.latest_reports_queries == [
-        LatestReportsQuery(refresh=True),
-        LatestReportsQuery(refresh=True),
+        LatestReportsQuery(include_baseline=True, refresh=True),
+        LatestReportsQuery(include_baseline=True, refresh=True),
     ]
     assert data.reports_queries == [
         ReportsQuery(report_type="cli", date=report_day, refresh=True),

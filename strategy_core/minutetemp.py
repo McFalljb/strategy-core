@@ -90,6 +90,9 @@ class StationReportRecord:
     report_date: date | None = None
     issuance_time: datetime | None = None
     fetched_at: datetime | None = None
+    baseline: bool = False
+    provider_available_at: datetime | None = None
+    baseline_cached_at: datetime | None = None
     max_temp_f: float | None = None
     max_temp_c: float | None = None
     max_temp_time_utc: datetime | None = None

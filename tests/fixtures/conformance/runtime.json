@@ -334,10 +334,10 @@
       "evidence_dimensions": [
         "invalid_input"
       ],
-      "id": "direct-LatestReportsQuery-invalid-refresh",
+      "id": "direct-LatestReportsQuery-invalid-include_baseline",
       "rust_type": "LatestReportsQuery",
       "wire": {
-        "refresh": []
+        "include_baseline": []
       }
     },
     {
@@ -3146,19 +3146,24 @@
       ],
       "evidence": {
         "LatestReportsQuery": [
-          "non_default_round_trip"
+          "defaults",
+          "non_default_round_trip",
+          "omission"
         ]
       },
       "evidence_dimensions": [
-        "non_default_round_trip"
+        "defaults",
+        "non_default_round_trip",
+        "omission"
       ],
       "expected": {
-        "refresh": true
+        "include_baseline": true,
+        "refresh": false
       },
       "id": "direct-LatestReportsQuery-non-default",
       "rust_type": "LatestReportsQuery",
       "wire": {
-        "refresh": true
+        "include_baseline": true
       }
     },
     {
@@ -3176,6 +3181,7 @@
         "omission"
       ],
       "expected": {
+        "include_baseline": false,
         "refresh": false
       },
       "id": "direct-LatestReportsQuery-defaults",

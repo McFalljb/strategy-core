@@ -300,11 +300,35 @@
         "omission"
       ],
       "expected": {
+        "include_baseline": false,
         "refresh": false
       },
       "id": "latest-reports-defaults",
       "rust_type": "LatestReportsQuery",
       "wire": {}
+    },
+    {
+      "covers": [
+        "LatestReportsQuery"
+      ],
+      "evidence": {
+        "LatestReportsQuery": [
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "non_default_round_trip"
+      ],
+      "expected": {
+        "include_baseline": true,
+        "refresh": false
+      },
+      "id": "latest-reports-baseline",
+      "rust_type": "LatestReportsQuery",
+      "wire": {
+        "include_baseline": true,
+        "refresh": false
+      }
     },
     {
       "covers": [

@@ -1575,6 +1575,12 @@ def _queries_fixture() -> dict[str, Any]:
         _valid("forecast-run", "ForecastRunQuery", ["ForecastRunQuery"], ForecastRunQuery("run-1", True)),
         _valid("latest-reports-defaults", "LatestReportsQuery", ["LatestReportsQuery"], LatestReportsQuery(), wire={}),
         _valid(
+            "latest-reports-baseline",
+            "LatestReportsQuery",
+            ["LatestReportsQuery"],
+            LatestReportsQuery(include_baseline=True),
+        ),
+        _valid(
             "reports-full",
             "ReportsQuery",
             ["ReportsQuery", "LocalDateLike"],

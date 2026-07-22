@@ -133,6 +133,10 @@ pub struct StationReportRecord {
     pub report_date: Option<NaiveDate>,
     pub issuance_time: Option<DateTime<Utc>>,
     pub fetched_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub baseline: bool,
+    pub provider_available_at: Option<DateTime<Utc>>,
+    pub baseline_cached_at: Option<DateTime<Utc>>,
     pub max_temp_f: Option<f64>,
     pub max_temp_c: Option<f64>,
     pub max_temp_time_utc: Option<DateTime<Utc>>,

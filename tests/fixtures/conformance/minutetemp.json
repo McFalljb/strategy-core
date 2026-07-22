@@ -1712,6 +1712,8 @@
         },
         "reports": [
           {
+            "baseline": false,
+            "baseline_cached_at": null,
             "fetched_at": "2026-07-13T13:45:01.987654Z",
             "issuance_time": "2026-07-13T12:34:56.123456Z",
             "max_temp_c": 32.8,
@@ -1720,6 +1722,7 @@
             "min_temp_c": 25.6,
             "min_temp_f": 78.0,
             "min_temp_time_utc": "2026-07-13T13:45:01.987654Z",
+            "provider_available_at": null,
             "report_date": "2026-07-13",
             "report_id": "report-1",
             "report_revision": 2,
@@ -1772,6 +1775,8 @@
         },
         "reports": [
           {
+            "baseline": false,
+            "baseline_cached_at": null,
             "fetched_at": "2026-07-13T13:45:01.987654Z",
             "issuance_time": "2026-07-13T12:34:56.123456Z",
             "max_temp_c": 32.8,
@@ -1780,6 +1785,7 @@
             "min_temp_c": 25.6,
             "min_temp_f": 78.0,
             "min_temp_time_utc": "2026-07-13T13:45:01.987654Z",
+            "provider_available_at": null,
             "report_date": "2026-07-13",
             "report_id": "report-1",
             "report_revision": 2,
@@ -1805,17 +1811,21 @@
           "non_default_round_trip"
         ],
         "StationReportsData": [
+          "explicit_null",
           "non_default_round_trip",
           "timestamp_formatting"
         ]
       },
       "evidence_dimensions": [
+        "explicit_null",
         "non_default_round_trip",
         "timestamp_formatting"
       ],
       "expected": {
         "reports": [
           {
+            "baseline": false,
+            "baseline_cached_at": null,
             "fetched_at": "2026-07-13T13:45:01.987654Z",
             "issuance_time": "2026-07-13T12:34:56.123456Z",
             "max_temp_c": 32.8,
@@ -1824,6 +1834,7 @@
             "min_temp_c": 25.6,
             "min_temp_f": 78.0,
             "min_temp_time_utc": "2026-07-13T13:45:01.987654Z",
+            "provider_available_at": null,
             "report_date": "2026-07-13",
             "report_id": "report-1",
             "report_revision": 2,
@@ -1839,6 +1850,8 @@
       "wire": {
         "reports": [
           {
+            "baseline": false,
+            "baseline_cached_at": null,
             "fetched_at": "2026-07-13T13:45:01.987654Z",
             "issuance_time": "2026-07-13T12:34:56.123456Z",
             "max_temp_c": 32.8,
@@ -1847,6 +1860,7 @@
             "min_temp_c": 25.6,
             "min_temp_f": 78.0,
             "min_temp_time_utc": "2026-07-13T13:45:01.987654Z",
+            "provider_available_at": null,
             "report_date": "2026-07-13",
             "report_id": "report-1",
             "report_revision": 2,
@@ -1906,6 +1920,8 @@
         },
         "reports": [
           {
+            "baseline": false,
+            "baseline_cached_at": null,
             "fetched_at": "2026-07-13T13:45:01.987654Z",
             "issuance_time": "2026-07-13T12:34:56.123456Z",
             "max_temp_c": 32.8,
@@ -1914,6 +1930,7 @@
             "min_temp_c": 25.6,
             "min_temp_f": 78.0,
             "min_temp_time_utc": "2026-07-13T13:45:01.987654Z",
+            "provider_available_at": null,
             "report_date": "2026-07-13",
             "report_id": "report-1",
             "report_revision": 2,
@@ -1958,6 +1975,8 @@
         },
         "reports": [
           {
+            "baseline": false,
+            "baseline_cached_at": null,
             "fetched_at": "2026-07-13T13:45:01.987654Z",
             "issuance_time": "2026-07-13T12:34:56.123456Z",
             "max_temp_c": 32.8,
@@ -1966,6 +1985,7 @@
             "min_temp_c": 25.6,
             "min_temp_f": 78.0,
             "min_temp_time_utc": "2026-07-13T13:45:01.987654Z",
+            "provider_available_at": null,
             "report_date": "2026-07-13",
             "report_id": "report-1",
             "report_revision": 2,
@@ -8118,6 +8138,8 @@
         "report_schedules": null,
         "reports": [
           {
+            "baseline": false,
+            "baseline_cached_at": null,
             "fetched_at": null,
             "issuance_time": null,
             "max_temp_c": null,
@@ -8126,6 +8148,7 @@
             "min_temp_c": null,
             "min_temp_f": null,
             "min_temp_time_utc": null,
+            "provider_available_at": null,
             "report_date": null,
             "report_id": "non-default",
             "report_revision": 0,
@@ -9448,6 +9471,8 @@
         "omission"
       ],
       "expected": {
+        "baseline": false,
+        "baseline_cached_at": null,
         "fetched_at": null,
         "issuance_time": null,
         "max_temp_c": null,
@@ -9456,6 +9481,7 @@
         "min_temp_c": null,
         "min_temp_f": null,
         "min_temp_time_utc": null,
+        "provider_available_at": null,
         "report_date": null,
         "report_id": "non-default",
         "report_revision": 0,
@@ -9485,6 +9511,8 @@
         "omission"
       ],
       "expected": {
+        "baseline": false,
+        "baseline_cached_at": null,
         "fetched_at": null,
         "issuance_time": null,
         "max_temp_c": null,
@@ -9493,6 +9521,7 @@
         "min_temp_c": null,
         "min_temp_f": null,
         "min_temp_time_utc": null,
+        "provider_available_at": null,
         "report_date": null,
         "report_id": "",
         "report_revision": 0,
@@ -9524,6 +9553,8 @@
         "omission"
       ],
       "expected": {
+        "baseline": false,
+        "baseline_cached_at": null,
         "fetched_at": null,
         "issuance_time": null,
         "max_temp_c": null,
@@ -9532,6 +9563,7 @@
         "min_temp_c": null,
         "min_temp_f": null,
         "min_temp_time_utc": null,
+        "provider_available_at": null,
         "report_date": null,
         "report_id": "",
         "report_revision": 0,
@@ -9565,6 +9597,8 @@
         "timestamp_formatting"
       ],
       "expected": {
+        "baseline": false,
+        "baseline_cached_at": null,
         "fetched_at": null,
         "issuance_time": null,
         "max_temp_c": null,
@@ -9573,6 +9607,7 @@
         "min_temp_c": null,
         "min_temp_f": null,
         "min_temp_time_utc": null,
+        "provider_available_at": null,
         "report_date": null,
         "report_id": "",
         "report_revision": 0,
@@ -9606,6 +9641,8 @@
         "omission"
       ],
       "expected": {
+        "baseline": false,
+        "baseline_cached_at": null,
         "fetched_at": null,
         "issuance_time": null,
         "max_temp_c": null,
@@ -9614,6 +9651,7 @@
         "min_temp_c": null,
         "min_temp_f": null,
         "min_temp_time_utc": null,
+        "provider_available_at": null,
         "report_date": null,
         "report_id": "",
         "report_revision": 9007199254740991,
@@ -9647,6 +9685,8 @@
       "expected": {
         "reports": [
           {
+            "baseline": false,
+            "baseline_cached_at": null,
             "fetched_at": null,
             "issuance_time": null,
             "max_temp_c": null,
@@ -9655,6 +9695,7 @@
             "min_temp_c": null,
             "min_temp_f": null,
             "min_temp_time_utc": null,
+            "provider_available_at": null,
             "report_date": null,
             "report_id": "non-default",
             "report_revision": 0,

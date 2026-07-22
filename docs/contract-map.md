@@ -616,7 +616,7 @@ accepts only the query object.
 | `fetch_oracle_scores(...)` | `OracleScoresQuery(days="7", mode="day_ahead", rank_by="high", refresh=False)` or the same keywords | `OracleScoreData | None` |
 | `fetch_forecast_runs(...)` | `ForecastRunsQuery(model_id=None, start=None, end=None, limit=None, cursor=None, refresh=False)` or the same keywords | `ForecastRunsPage` |
 | `fetch_forecast_run(run_id_or_query, ...)` | A run-id string or `ForecastRunQuery(run_id, refresh=False)`; string form also accepts `refresh=` | `ForecastRunData | None` |
-| `fetch_latest_reports(...)` | `LatestReportsQuery(refresh=False)` or `refresh=` | `LatestReportsData` |
+| `fetch_latest_reports(...)` | `LatestReportsQuery(include_baseline=False, refresh=False)` or `include_baseline=`, `refresh=` | `LatestReportsData` |
 | `fetch_reports(...)` | `ReportsQuery(report_type=None, date=None, refresh=False)` or `report_type=`, `date=`, `refresh=` | `StationReportsData` |
 | `fetch_report_history(...)` | `ReportHistoryQuery(report_type=None, start=None, end=None, limit=None, cursor=None, refresh=False)` or the same keywords | `StationReportHistoryPage` |
 | `fetch_latest_observation(...)` | `LatestObservationQuery(day_mode=None, refresh=False)`; the method's keyword-only surface exposes `refresh`, while `day_mode` is supplied through the query object | `LatestObservationData` |
@@ -689,7 +689,7 @@ wire fields; collections are `Vec` or `BTreeMap` values.
 | `EffectiveLimits` | `tier`, `requests_per_minute`, `daily_max`, `max_history_days`, `ip_guard`, `rate_limit_remaining`, `rate_limit_reset_seconds` |
 | `LatestObservationData` | `city`, `station`, `observation`, `daily_high_f`, `daily_low_f`, `daily_high_c`, `daily_low_c`, `asos_daily_high_f`, `asos_daily_low_f`, `asos_daily_high_c`, `asos_daily_low_c`, `wu_current_temp_f`, `wu_current_temp_c`, `wu_daily_high_f`, `wu_daily_low_f`, `wu_daily_high_c`, `wu_daily_low_c`, `wu_observation_time`, `wu_fetched_at`, `temperature_day_mode`, `temperature_day_date`, `wu_day_mode`, `wu_day_date` |
 | `StationForecastData` | `city`, `station`, `forecasts`, `count` |
-| `LatestReportsData` | `reports`, `report_schedules` |
+| `LatestReportsData` | `reports`, `report_schedules`; baseline records are opt-in and carry `baseline`, `provider_available_at`, and `baseline_cached_at` |
 | `StationReportsData` | `reports` |
 | `StationReportHistoryPage` | `city`, `station`, `reports`, `count`, `page`, `report_schedules` |
 | `ForecastRunsPage` | `city`, `station`, `runs`, `count`, `page` |

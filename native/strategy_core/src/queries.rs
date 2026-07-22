@@ -74,6 +74,8 @@ pub struct ForecastRunQuery {
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub struct LatestReportsQuery {
     #[serde(default)]
+    pub include_baseline: bool,
+    #[serde(default)]
     pub refresh: bool,
 }
 

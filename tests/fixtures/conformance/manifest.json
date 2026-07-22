@@ -1501,6 +1501,7 @@
             "non_default_round_trip",
             "defaults",
             "omission",
+            "explicit_null",
             "timestamp_formatting",
             "invalid_input"
           ]
@@ -1683,7 +1684,6 @@
             "ReportScheduleBasis",
             "ReportScheduleEntry",
             "ReportType",
-            "StationReportsData",
             "TemperatureUnit"
           ],
           "rationale": "These surfaces do not independently own this semantic dimension."
@@ -2129,7 +2129,8 @@
             "StationForecastData",
             "StationInfo",
             "StationReportHistoryPage",
-            "StationReportRecord"
+            "StationReportRecord",
+            "StationReportsData"
           ],
           "rationale": "The shared contract directly owns the explicit_null semantic dimension for these surfaces."
         },

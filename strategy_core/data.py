@@ -86,6 +86,7 @@ class StrategyDataClient(Protocol):
         query: LatestReportsQuery | None = None,
         /,
         *,
+        include_baseline: bool = False,
         refresh: bool = False,
     ) -> LatestReportsData: ...
 

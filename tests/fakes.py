@@ -424,9 +424,12 @@ class FakeDataClient:
         query: LatestReportsQuery | None = None,
         /,
         *,
+        include_baseline: bool = False,
         refresh: bool = False,
     ) -> LatestReportsData:
-        effective = query if query is not None else LatestReportsQuery(refresh=refresh)
+        effective = (
+            query if query is not None else LatestReportsQuery(include_baseline=include_baseline, refresh=refresh)
+        )
         self.latest_reports_queries.append(effective)
         return self.latest_reports_payload
 

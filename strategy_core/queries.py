@@ -50,6 +50,7 @@ class ForecastRunQuery:
 
 @dataclass(frozen=True, slots=True)
 class LatestReportsQuery:
+    include_baseline: bool = False
     refresh: bool = False
 
 
