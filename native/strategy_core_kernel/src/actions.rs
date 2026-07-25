@@ -74,6 +74,18 @@ pub struct PendingOrderView<'a> {
     pub updated_at: Option<DateTime<Utc>>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct OrderStatusView<'a> {
+    pub order_id: &'a str,
+    pub client_order_id: &'a str,
+    pub status: OrderStatus,
+    pub requested_quantity: i64,
+    pub filled_quantity: i64,
+    pub remaining_quantity: i64,
+    pub reason: &'a str,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WakeAtRequest {
     pub when: DateTime<Utc>,

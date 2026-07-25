@@ -1,5 +1,5 @@
 use crate::actions::{
-    CancelOrderRequest, ContractSide, KernelAction, OrderResult, PendingOrderView,
+    CancelOrderRequest, ContractSide, KernelAction, OrderResult, OrderStatusView, PendingOrderView,
     PlaceOrderRequest, WakeAtRequest,
 };
 use crate::errors::KernelResult;
@@ -100,6 +100,10 @@ pub trait StrategyKernelBroker {
 
     fn pending_orders(&self) -> Vec<PendingOrderView<'_>> {
         Vec::new()
+    }
+
+    fn order_status(&self, _client_order_id: &str) -> Option<OrderStatusView<'_>> {
+        None
     }
 
     fn place_order(&mut self, request: PlaceOrderRequest) -> KernelResult<OrderResult>;
