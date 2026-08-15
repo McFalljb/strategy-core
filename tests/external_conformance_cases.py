@@ -105,6 +105,7 @@ from strategy_core.stations import (
     STATION_TIMEZONES,
     TICKER_PREFIXES,
     city_codes_for_market_type,
+    hourly_series_for_station,
     primary_city_code_for_market_type,
     primary_city_code_for_series,
     station_from_event_ticker,
@@ -1240,6 +1241,8 @@ def evaluate_python_helper_case(case: Mapping[str, Any]) -> dict[str, Any]:
             result = primary_city_code_for_market_type(inputs["station"], inputs["market_type"])
         elif helper == "ticker_prefixes_for_station":
             result = ticker_prefixes_for_station(inputs["station"], inputs["market_type"])
+        elif helper == "hourly_series_for_station":
+            result = hourly_series_for_station(inputs["station"], inputs["settlement_source"])
         elif helper == "station_from_event_ticker":
             result = station_from_event_ticker(inputs["event_ticker"])
         elif helper == "station_timezone":
@@ -1284,6 +1287,10 @@ def evaluate_python_helper_case(case: Mapping[str, Any]) -> dict[str, Any]:
             return {"error": "unknown_liquidity_role"}
         if "unknown market_type" in message:
             return {"error": "unknown_market_type"}
+        if "unknown settlement_source" in message:
+            return {"error": "unknown_settlement_source"}
+        if "no verified hourly temperature profile" in message:
+            return {"error": "unsupported_hourly_profile"}
         if "timezone" in message:
             return {"error": "timezone"}
         return {"error": "value"}
@@ -1559,6 +1566,54 @@ def _helpers_fixture() -> dict[str, Any]:
             "ticker_prefixes_for_station",
             ["ticker_prefixes_for_station"],
             {"station": "KMIA", "market_type": "invalid"},
+        ),
+        _helper_case(
+            "hourly-weather-company-nyc",
+            "hourly_series_for_station",
+            ["hourly_series_for_station"],
+            {"station": "KNYC", "settlement_source": "weather_company"},
+        ),
+        _helper_case(
+            "hourly-weather-company-la",
+            "hourly_series_for_station",
+            ["hourly_series_for_station"],
+            {"station": "KLAX", "settlement_source": "weather_company"},
+        ),
+        _helper_case(
+            "hourly-synoptic-miami",
+            "hourly_series_for_station",
+            ["hourly_series_for_station"],
+            {"station": "KMIA", "settlement_source": "synoptic"},
+        ),
+        _helper_case(
+            "hourly-wrong-source",
+            "hourly_series_for_station",
+            ["hourly_series_for_station"],
+            {"station": "KMIA", "settlement_source": "weather_company"},
+        ),
+        _helper_case(
+            "hourly-unknown-source",
+            "hourly_series_for_station",
+            ["hourly_series_for_station"],
+            {"station": "KMIA", "settlement_source": "weather.com"},
+        ),
+        _helper_case(
+            "hourly-unknown-station",
+            "hourly_series_for_station",
+            ["hourly_series_for_station"],
+            {"station": "KATL", "settlement_source": "weather_company"},
+        ),
+        _helper_case(
+            "ticker-station-hourly",
+            "station_from_event_ticker",
+            ["station_from_event_ticker"],
+            {"event_ticker": "KXTEMPLAXH-26AUG1515"},
+        ),
+        _helper_case(
+            "ticker-station-hourly-no-heuristic-fallback",
+            "station_from_event_ticker",
+            ["station_from_event_ticker"],
+            {"event_ticker": "KXTEMPLAXHEXTRA-26AUG1515"},
         ),
         _helper_case(
             "ticker-station-known",

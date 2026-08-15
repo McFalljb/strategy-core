@@ -92,7 +92,8 @@ pub use queries::{
     ReportsQuery,
 };
 pub use runtime::{
-    EngineClock, MarketType, RuntimeMode, StrategyRuntime, StrategyScope, TimerHandle, WorkHandle,
+    EngineClock, MarketType, RuntimeMode, SettlementSource, StrategyRuntime, StrategyScope,
+    TimerHandle, WorkHandle,
 };
 pub use signals::{SIGNAL_DSM_REACTION, SIGNAL_METAR_6HR_LOW, SIGNAL_METAR_6HR_NEW_LOW};
 pub use state::{
@@ -102,8 +103,9 @@ pub use state::{
 };
 pub use stations::{
     CITY_TO_ICAO, ICAO_TO_CITY_CODES, MARKET_TYPE_PREFIX, STATION_TIMEZONES, StationError,
-    TICKER_PREFIXES, city_codes_for_market_type, primary_city_code_for_market_type,
-    primary_city_code_for_series, station_from_event_ticker, ticker_prefixes_for_station,
+    TICKER_PREFIXES, city_codes_for_market_type, hourly_series_for_station,
+    primary_city_code_for_market_type, primary_city_code_for_series, station_from_event_ticker,
+    ticker_prefixes_for_station,
 };
 pub use telemetry::{StrategyLogger, Telemetry};
 

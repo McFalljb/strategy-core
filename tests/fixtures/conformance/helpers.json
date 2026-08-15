@@ -1171,6 +1171,193 @@
     },
     {
       "covers": [
+        "hourly_series_for_station"
+      ],
+      "evidence": {
+        "hourly_series_for_station": [
+          "helper_or_trait_behavior"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior"
+      ],
+      "expected": {
+        "ok": [
+          "KXTEMPNYCH",
+          "KXHIGHNYD"
+        ]
+      },
+      "helper": "hourly_series_for_station",
+      "id": "hourly-weather-company-nyc",
+      "input": {
+        "settlement_source": "weather_company",
+        "station": "KNYC"
+      }
+    },
+    {
+      "covers": [
+        "hourly_series_for_station"
+      ],
+      "evidence": {
+        "hourly_series_for_station": [
+          "helper_or_trait_behavior"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior"
+      ],
+      "expected": {
+        "ok": [
+          "KXTEMPLAXH"
+        ]
+      },
+      "helper": "hourly_series_for_station",
+      "id": "hourly-weather-company-la",
+      "input": {
+        "settlement_source": "weather_company",
+        "station": "KLAX"
+      }
+    },
+    {
+      "covers": [
+        "hourly_series_for_station"
+      ],
+      "evidence": {
+        "hourly_series_for_station": [
+          "helper_or_trait_behavior"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior"
+      ],
+      "expected": {
+        "ok": [
+          "KXTEMPMIAH"
+        ]
+      },
+      "helper": "hourly_series_for_station",
+      "id": "hourly-synoptic-miami",
+      "input": {
+        "settlement_source": "synoptic",
+        "station": "KMIA"
+      }
+    },
+    {
+      "covers": [
+        "hourly_series_for_station"
+      ],
+      "evidence": {
+        "hourly_series_for_station": [
+          "helper_or_trait_behavior",
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior",
+        "invalid_input"
+      ],
+      "expected": {
+        "error": "unsupported_hourly_profile"
+      },
+      "helper": "hourly_series_for_station",
+      "id": "hourly-wrong-source",
+      "input": {
+        "settlement_source": "weather_company",
+        "station": "KMIA"
+      }
+    },
+    {
+      "covers": [
+        "hourly_series_for_station"
+      ],
+      "evidence": {
+        "hourly_series_for_station": [
+          "helper_or_trait_behavior",
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior",
+        "invalid_input"
+      ],
+      "expected": {
+        "error": "unknown_settlement_source"
+      },
+      "helper": "hourly_series_for_station",
+      "id": "hourly-unknown-source",
+      "input": {
+        "settlement_source": "weather.com",
+        "station": "KMIA"
+      }
+    },
+    {
+      "covers": [
+        "hourly_series_for_station"
+      ],
+      "evidence": {
+        "hourly_series_for_station": [
+          "helper_or_trait_behavior",
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior",
+        "invalid_input"
+      ],
+      "expected": {
+        "error": "unsupported_hourly_profile"
+      },
+      "helper": "hourly_series_for_station",
+      "id": "hourly-unknown-station",
+      "input": {
+        "settlement_source": "weather_company",
+        "station": "KATL"
+      }
+    },
+    {
+      "covers": [
+        "station_from_event_ticker"
+      ],
+      "evidence": {
+        "station_from_event_ticker": [
+          "helper_or_trait_behavior"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior"
+      ],
+      "expected": {
+        "ok": "KLAX"
+      },
+      "helper": "station_from_event_ticker",
+      "id": "ticker-station-hourly",
+      "input": {
+        "event_ticker": "KXTEMPLAXH-26AUG1515"
+      }
+    },
+    {
+      "covers": [
+        "station_from_event_ticker"
+      ],
+      "evidence": {
+        "station_from_event_ticker": [
+          "helper_or_trait_behavior"
+        ]
+      },
+      "evidence_dimensions": [
+        "helper_or_trait_behavior"
+      ],
+      "expected": {
+        "ok": null
+      },
+      "helper": "station_from_event_ticker",
+      "id": "ticker-station-hourly-no-heuristic-fallback",
+      "input": {
+        "event_ticker": "KXTEMPLAXHEXTRA-26AUG1515"
+      }
+    },
+    {
+      "covers": [
         "station_from_event_ticker"
       ],
       "evidence": {

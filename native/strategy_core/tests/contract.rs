@@ -8,7 +8,7 @@ use strategy_core::{
     OracleScoresUpdated, OrderExecutionStyle, OrderIntent, OrderTimePolicy, OrderType, PriceUpdate,
     RuntimeCapabilities, STATION_TIMEZONES, StationForecast, StationOracleScores, StationWeather,
     StrategyEvent, TICKER_PREFIXES, TickerPrices, WeatherEvent, apply_fee_rounding,
-    calculate_fill_fee, calculate_trade_fee, city_codes_for_market_type,
+    calculate_fill_fee, calculate_trade_fee, city_codes_for_market_type, hourly_series_for_station,
     primary_city_code_for_market_type, primary_city_code_for_series, station_from_event_ticker,
     ticker_prefixes_for_station,
 };
@@ -107,6 +107,51 @@ fn station_mappings_match_python_contract_examples() {
     assert!(ticker_prefixes_for_station("KMIA", "invalid").is_err());
     for icao in ICAO_TO_CITY_CODES.keys() {
         assert!(STATION_TIMEZONES.contains_key(icao));
+    }
+}
+
+#[test]
+fn hourly_profiles_are_source_specific_and_reverse_exactly() {
+    let cases = [
+        ("KDCA", "weather_company", &["KXTEMPDCH"][..]),
+        ("KNYC", "weather_company", &["KXTEMPNYCH", "KXHIGHNYD"][..]),
+        ("KAUS", "weather_company", &["KXTEMPAUSH"][..]),
+        ("KBOS", "weather_company", &["KXTEMPBOSH"][..]),
+        ("KMDW", "weather_company", &["KXTEMPCHIH"][..]),
+        ("KLAX", "weather_company", &["KXTEMPLAXH"][..]),
+        ("KMIA", "synoptic", &["KXTEMPMIAH"][..]),
+    ];
+
+    for (station, source, expected) in cases {
+        let actual = hourly_series_for_station(station, source).unwrap();
+        assert_eq!(
+            actual.iter().map(String::as_str).collect::<Vec<_>>(),
+            expected
+        );
+    }
+    assert_eq!(
+        strategy_core::stations::HOURLY_SERIES_BY_PROFILE.len(),
+        cases.len()
+    );
+
+    assert!(hourly_series_for_station("KMIA", "weather_company").is_err());
+    assert!(hourly_series_for_station("KNYC", "synoptic").is_err());
+    assert!(hourly_series_for_station("KATL", "weather_company").is_err());
+    assert!(hourly_series_for_station("KNYC", "weather.com").is_err());
+    assert!(ticker_prefixes_for_station("KNYC", "hourly").is_err());
+
+    for ((station, _), series_tickers) in strategy_core::stations::HOURLY_SERIES_BY_PROFILE.iter() {
+        for series in *series_tickers {
+            assert_eq!(station_from_event_ticker(series), Some(*station));
+            assert_eq!(
+                station_from_event_ticker(&format!("{series}-26AUG1511")),
+                Some(*station)
+            );
+            assert_eq!(
+                station_from_event_ticker(&format!("{series}EXTRA-26AUG1511")),
+                None
+            );
+        }
     }
 }
 

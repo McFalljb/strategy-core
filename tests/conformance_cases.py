@@ -71,7 +71,7 @@ from strategy_core.queries import (
     ReportHistoryQuery,
     ReportsQuery,
 )
-from strategy_core.runtime import MarketType, RuntimeMode, StrategyScope
+from strategy_core.runtime import MarketType, RuntimeMode, SettlementSource, StrategyScope
 from strategy_core.state import (
     FeeType,
     ForecastHourly,
@@ -146,6 +146,7 @@ CORE_DIRECT_ENUM_NAMES = (
     "FreshnessStatus",
     "MarketType",
     "NativeKernelStatus",
+    "SettlementSource",
     "OracleScoreMode",
     "OrderExecutionStyle",
     "OrderStatus",
@@ -166,6 +167,7 @@ CORE_DIRECT_ENUMS = {
     "FreshnessStatus": FreshnessStatus,
     "MarketType": MarketType,
     "NativeKernelStatus": NativeKernelStatus,
+    "SettlementSource": SettlementSource,
     "OracleScoreMode": OracleScoreMode,
     "OrderExecutionStyle": OrderExecutionStyle,
     "OrderStatus": OrderStatus,
@@ -1518,7 +1520,18 @@ def _runtime_fixture() -> dict[str, Any]:
         ),
     ]
     valid.extend(_raw(f"runtime-mode-{mode.value}", "RuntimeMode", ["RuntimeMode"], mode.value) for mode in RuntimeMode)
-    valid.extend(_raw(f"market-type-{value}", "MarketType", ["MarketType"], value) for value in ("high", "low"))
+    valid.extend(
+        _raw(f"market-type-{value}", "MarketType", ["MarketType"], value) for value in ("high", "low", "hourly")
+    )
+    valid.extend(
+        _raw(
+            f"settlement-source-{source.value}",
+            "SettlementSource",
+            ["SettlementSource"],
+            source.value,
+        )
+        for source in SettlementSource
+    )
     valid.extend(
         _raw(f"event-delivery-{value}", "EventDelivery", ["EventDelivery"], value) for value in ("wake", "decision")
     )

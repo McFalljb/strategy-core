@@ -65,11 +65,34 @@ pub static CITY_TO_ICAO: LazyLock<HashMap<&'static str, &'static str>> = LazyLoc
 pub static MARKET_TYPE_PREFIX: LazyLock<HashMap<&'static str, &'static str>> =
     LazyLock::new(|| HashMap::from([("high", "KXHIGH"), ("low", "KXLOWT")]));
 
+pub static HOURLY_SERIES_BY_PROFILE: LazyLock<
+    HashMap<(&'static str, &'static str), &'static [&'static str]>,
+> = LazyLock::new(|| {
+    HashMap::from([
+        (("KDCA", "weather_company"), &["KXTEMPDCH"][..]),
+        (
+            ("KNYC", "weather_company"),
+            &["KXTEMPNYCH", "KXHIGHNYD"][..],
+        ),
+        (("KAUS", "weather_company"), &["KXTEMPAUSH"][..]),
+        (("KBOS", "weather_company"), &["KXTEMPBOSH"][..]),
+        (("KMDW", "weather_company"), &["KXTEMPCHIH"][..]),
+        (("KLAX", "weather_company"), &["KXTEMPLAXH"][..]),
+        (("KMIA", "synoptic"), &["KXTEMPMIAH"][..]),
+    ])
+});
+
 pub const TICKER_PREFIXES: [&str; 2] = ["KXHIGH", "KXLOWT"];
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum StationError {
     UnknownMarketType(String),
+    UnknownSettlementSource(String),
+    MissingHourlySettlementSource,
+    UnsupportedHourlyProfile {
+        station: String,
+        settlement_source: String,
+    },
 }
 
 impl fmt::Display for StationError {
@@ -78,9 +101,24 @@ impl fmt::Display for StationError {
             Self::UnknownMarketType(value) => {
                 write!(
                     formatter,
-                    "unknown market_type: {value:?} (expected 'high' or 'low')"
+                    "unknown market_type: {value:?} (expected 'high', 'low', or 'hourly')"
                 )
             }
+            Self::UnknownSettlementSource(value) => write!(
+                formatter,
+                "unknown settlement_source: {value:?} (expected 'weather_company' or 'synoptic')"
+            ),
+            Self::MissingHourlySettlementSource => write!(
+                formatter,
+                "hourly market type requires a settlement source; use hourly_series_for_station"
+            ),
+            Self::UnsupportedHourlyProfile {
+                station,
+                settlement_source,
+            } => write!(
+                formatter,
+                "no verified hourly temperature profile for station {station} and settlement_source {settlement_source:?}"
+            ),
         }
     }
 }
@@ -129,6 +167,9 @@ pub fn ticker_prefixes_for_station(
     station: &str,
     market_type: &str,
 ) -> Result<Vec<String>, StationError> {
+    if market_type == "hourly" {
+        return Err(StationError::MissingHourlySettlementSource);
+    }
     let Some(prefix) = MARKET_TYPE_PREFIX.get(market_type) else {
         return Err(StationError::UnknownMarketType(market_type.to_string()));
     };
@@ -139,11 +180,39 @@ pub fn ticker_prefixes_for_station(
         .collect())
 }
 
+pub fn hourly_series_for_station(
+    station: &str,
+    settlement_source: &str,
+) -> Result<Vec<String>, StationError> {
+    if !matches!(settlement_source, "weather_company" | "synoptic") {
+        return Err(StationError::UnknownSettlementSource(
+            settlement_source.to_owned(),
+        ));
+    }
+
+    let station_upper = station.to_ascii_uppercase();
+    HOURLY_SERIES_BY_PROFILE
+        .get(&(station_upper.as_str(), settlement_source))
+        .map(|series| series.iter().map(|ticker| (*ticker).to_owned()).collect())
+        .ok_or(StationError::UnsupportedHourlyProfile {
+            station: station_upper,
+            settlement_source: settlement_source.to_owned(),
+        })
+}
+
 pub fn station_from_event_ticker(event_ticker: &str) -> Option<&'static str> {
     let upper = event_ticker.to_uppercase();
+    let series = upper
+        .split_once('-')
+        .map_or(upper.as_str(), |(series, _)| series);
+    if let Some(((station, _), _)) = HOURLY_SERIES_BY_PROFILE
+        .iter()
+        .find(|(_, hourly_series)| hourly_series.contains(&series))
+    {
+        return Some(*station);
+    }
     for prefix in TICKER_PREFIXES {
-        if upper.starts_with(prefix) {
-            let rest = &upper[prefix.len()..];
+        if let Some(rest) = upper.strip_prefix(prefix) {
             let city = rest.split_once('-').map_or(rest, |(city, _)| city);
             return CITY_TO_ICAO.get(city).copied();
         }

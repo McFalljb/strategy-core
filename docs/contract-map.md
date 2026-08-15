@@ -56,8 +56,8 @@ The conformance inventory in
 
 | Contract group | Python | Broad Rust | Difference |
 |---|---:|---:|---|
-| Serializable models, enums, queries, and values | 141 | 141 | None |
-| Portable helpers and constants | 23 | 23 | None |
+| Serializable models, enums, queries, and values | 142 | 142 | None |
+| Portable helpers and constants | 24 | 24 | None |
 | Strategy-facing traits/protocols | 16 | 16 | None |
 | Shared type aliases | 7 | 7 | None |
 | Native-unavailability error names | 2 | 2 | None |
@@ -379,7 +379,7 @@ and the selected engine's bot configuration.
 | `strategy_name` | `str` |
 | `station_id` | `str | None` |
 | `tickers` | `tuple[str, ...]` |
-| `market_type` | `"high" | "low" | None` |
+| `market_type` | `"high" | "low" | "hourly" | None` |
 | `event_ticker` | `str | None` |
 | `event_date` | `date | None` |
 
@@ -1093,8 +1093,32 @@ selection, maker/taker classification, posting, balances, settlement, and P/L.
 | `primary_city_code_for_series(station)` | Primary Kalshi city suffix for a station. |
 | `city_codes_for_market_type(station, market_type)` | All high/low city-code suffixes; `market_type` is `"high"` or `"low"`. |
 | `primary_city_code_for_market_type(station, market_type)` | First market-type-specific suffix. |
-| `ticker_prefixes_for_station(station, market_type)` | Possible `KXHIGH...` or `KXLOWT...` prefixes. Raises `ValueError` for another market type. |
-| `station_from_event_ticker(event_ticker)` | ICAO station or `None` for an unknown ticker. |
+| `ticker_prefixes_for_station(station, market_type)` | Possible daily `KXHIGH...` or `KXLOWT...` prefixes. Hourly callers must use the source-aware helper. |
+| `hourly_series_for_station(station, settlement_source)` | Exact verified hourly series tickers for a canonical station/source profile. Unknown sources and unsupported pairs raise `ValueError`; no ticker is synthesized. |
+| `station_from_event_ticker(event_ticker)` | ICAO station for an exact supported hourly series or known daily ticker; otherwise `None`. |
+
+Canonical hourly settlement sources are `SettlementSource.WEATHER_COMPANY`
+(`"weather_company"`) and `SettlementSource.SYNOPTIC` (`"synoptic"`). Settlement
+source filters discovery eligibility and is intentionally not part of
+`StrategyScope`, sleeve identity, routing keys, or the bot trading interface.
+
+Verified hourly profiles are:
+
+| ICAO | Canonical source | Exact series ticker(s) |
+|---|---|---|
+| `KDCA` | `weather_company` | `KXTEMPDCH` |
+| `KNYC` | `weather_company` | `KXTEMPNYCH`, `KXHIGHNYD` |
+| `KAUS` | `weather_company` | `KXTEMPAUSH` |
+| `KBOS` | `weather_company` | `KXTEMPBOSH` |
+| `KMDW` | `weather_company` | `KXTEMPCHIH` |
+| `KLAX` | `weather_company` | `KXTEMPLAXH` |
+| `KMIA` | `synoptic` | `KXTEMPMIAH` |
+
+The exact identities and source families were verified on 2026-08-15 against
+Kalshi's [hourly temperature series catalog](https://external-api.kalshi.com/trade-api/v2/series?category=Climate%20and%20Weather&tags=Hourly%20temperature).
+The linked [KLAX event metadata](https://external-api.kalshi.com/trade-api/v2/events/KXTEMPLAXH-26AUG1515?with_nested_markets=true)
+independently confirms the event series and Weather Company source. Profile
+changes require new primary-source evidence and a contract update.
 
 Exported mapping constants are `ICAO_TO_CITY_CODES`, `CITY_TO_ICAO`,
 `STATION_TIMEZONES`, `MARKET_TYPE_PREFIX`, and `TICKER_PREFIXES`.

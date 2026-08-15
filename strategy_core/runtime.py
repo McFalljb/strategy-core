@@ -10,7 +10,14 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping
     from datetime import date, datetime
 
-MarketType = Literal["high", "low"]
+MarketType = Literal["high", "low", "hourly"]
+
+
+class SettlementSource(StrEnum):
+    """Canonical settlement-source identifiers for source-aware discovery."""
+
+    WEATHER_COMPANY = "weather_company"
+    SYNOPTIC = "synoptic"
 
 
 class RuntimeMode(StrEnum):

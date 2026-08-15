@@ -10,6 +10,14 @@ use crate::models::JsonValue;
 pub enum MarketType {
     High,
     Low,
+    Hourly,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SettlementSource {
+    WeatherCompany,
+    Synoptic,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -66,4 +74,25 @@ pub trait StrategyRuntime {
     fn start_work<F>(&mut self, work: F, name: Option<&str>) -> Self::Work
     where
         F: Future<Output = ()> + Send + 'static;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hourly_market_type_and_settlement_sources_use_canonical_identifiers() {
+        assert!(matches!(
+            serde_json::to_string(&MarketType::Hourly).as_deref(),
+            Ok("\"hourly\"")
+        ));
+        assert!(matches!(
+            serde_json::to_string(&SettlementSource::WeatherCompany).as_deref(),
+            Ok("\"weather_company\"")
+        ));
+        assert!(matches!(
+            serde_json::to_string(&SettlementSource::Synoptic).as_deref(),
+            Ok("\"synoptic\"")
+        ));
+    }
 }

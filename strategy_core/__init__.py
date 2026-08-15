@@ -162,7 +162,15 @@ from strategy_core.queries import (
     ReportHistoryQuery,
     ReportsQuery,
 )
-from strategy_core.runtime import EngineClock, RuntimeMode, StrategyRuntime, StrategyScope, TimerHandle, WorkHandle
+from strategy_core.runtime import (
+    EngineClock,
+    RuntimeMode,
+    SettlementSource,
+    StrategyRuntime,
+    StrategyScope,
+    TimerHandle,
+    WorkHandle,
+)
 from strategy_core.signals import SIGNAL_DSM_REACTION, SIGNAL_METAR_6HR_LOW, SIGNAL_METAR_6HR_NEW_LOW
 from strategy_core.state import (
     FeeType,
@@ -187,6 +195,7 @@ from strategy_core.stations import (
     STATION_TIMEZONES,
     TICKER_PREFIXES,
     city_codes_for_market_type,
+    hourly_series_for_station,
     primary_city_code_for_market_type,
     primary_city_code_for_series,
     station_from_event_ticker,
@@ -335,6 +344,7 @@ __all__ = [
     "ReportType",
     "RuntimeCapabilities",
     "RuntimeMode",
+    "SettlementSource",
     "SIGNAL_DSM_REACTION",
     "SIGNAL_METAR_6HR_LOW",
     "SIGNAL_METAR_6HR_NEW_LOW",
@@ -378,6 +388,7 @@ __all__ = [
     "climate_day_end",
     "climate_day_has_ended",
     "get_native_kernel_runner",
+    "hourly_series_for_station",
     "parse_climate_date",
     "primary_city_code_for_market_type",
     "primary_city_code_for_series",

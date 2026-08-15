@@ -140,6 +140,7 @@ fn dispatch(rust_type: &str, wire: &Value) -> Result<Value, String> {
         "ReportsQuery" => round_trip::<ReportsQuery>(wire),
         "RuntimeCapabilities" => round_trip::<RuntimeCapabilities>(wire),
         "RuntimeMode" => round_trip::<RuntimeMode>(wire),
+        "SettlementSource" => round_trip::<SettlementSource>(wire),
         "ShutdownEvent" => round_trip::<ShutdownEvent>(wire),
         "StationForecast" => round_trip::<StationForecast>(wire),
         "StationForecastData" => round_trip::<StationForecastData>(wire),
@@ -356,6 +357,19 @@ fn evaluate_helper(helper: &str, input: &Value) -> Value {
         ) {
             Ok(value) => helper_ok(value),
             Err(_) => helper_error("unknown_market_type"),
+        },
+        "hourly_series_for_station" => match hourly_series_for_station(
+            input["station"].as_str().unwrap(),
+            input["settlement_source"].as_str().unwrap(),
+        ) {
+            Ok(value) => helper_ok(value),
+            Err(StationError::UnknownSettlementSource(_)) => {
+                helper_error("unknown_settlement_source")
+            }
+            Err(StationError::UnsupportedHourlyProfile { .. }) => {
+                helper_error("unsupported_hourly_profile")
+            }
+            Err(_) => helper_error("value"),
         },
         "station_from_event_ticker" => helper_ok(station_from_event_ticker(
             input["event_ticker"].as_str().unwrap(),

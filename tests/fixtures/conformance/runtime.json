@@ -1100,6 +1100,23 @@
     {
       "category": "enum",
       "covers": [
+        "SettlementSource"
+      ],
+      "evidence": {
+        "SettlementSource": [
+          "invalid_input"
+        ]
+      },
+      "evidence_dimensions": [
+        "invalid_input"
+      ],
+      "id": "direct-SettlementSource-unknown",
+      "rust_type": "SettlementSource",
+      "wire": "unknown"
+    },
+    {
+      "category": "enum",
+      "covers": [
         "OracleScoreMode"
       ],
       "evidence": {
@@ -1675,6 +1692,63 @@
       "id": "market-type-low",
       "rust_type": "MarketType",
       "wire": "low"
+    },
+    {
+      "covers": [
+        "MarketType"
+      ],
+      "evidence": {
+        "MarketType": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "hourly",
+      "id": "market-type-hourly",
+      "rust_type": "MarketType",
+      "wire": "hourly"
+    },
+    {
+      "covers": [
+        "SettlementSource"
+      ],
+      "evidence": {
+        "SettlementSource": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "weather_company",
+      "id": "settlement-source-weather_company",
+      "rust_type": "SettlementSource",
+      "wire": "weather_company"
+    },
+    {
+      "covers": [
+        "SettlementSource"
+      ],
+      "evidence": {
+        "SettlementSource": [
+          "enum_values",
+          "non_default_round_trip"
+        ]
+      },
+      "evidence_dimensions": [
+        "enum_values",
+        "non_default_round_trip"
+      ],
+      "expected": "synoptic",
+      "id": "settlement-source-synoptic",
+      "rust_type": "SettlementSource",
+      "wire": "synoptic"
     },
     {
       "covers": [

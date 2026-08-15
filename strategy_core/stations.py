@@ -59,6 +59,16 @@ MARKET_TYPE_PREFIX: dict[str, str] = {
     "low": "KXLOWT",
 }
 
+HOURLY_SERIES_BY_PROFILE: dict[tuple[str, str], tuple[str, ...]] = {
+    ("KDCA", "weather_company"): ("KXTEMPDCH",),
+    ("KNYC", "weather_company"): ("KXTEMPNYCH", "KXHIGHNYD"),
+    ("KAUS", "weather_company"): ("KXTEMPAUSH",),
+    ("KBOS", "weather_company"): ("KXTEMPBOSH",),
+    ("KMDW", "weather_company"): ("KXTEMPCHIH",),
+    ("KLAX", "weather_company"): ("KXTEMPLAXH",),
+    ("KMIA", "synoptic"): ("KXTEMPMIAH",),
+}
+
 TICKER_PREFIXES: tuple[str, ...] = tuple(MARKET_TYPE_PREFIX.values())
 
 
@@ -95,18 +105,42 @@ def primary_city_code_for_market_type(station: str, market_type: str) -> str:
 
 
 def ticker_prefixes_for_station(station: str, market_type: str) -> list[str]:
-    """Generate Kalshi event-ticker prefixes for a station and market type."""
+    """Generate daily Kalshi event-ticker prefixes for a station and market type."""
+    if market_type == "hourly":
+        msg = "hourly market type requires a settlement source; use hourly_series_for_station"
+        raise ValueError(msg)
     prefix = MARKET_TYPE_PREFIX.get(market_type)
     if prefix is None:
-        msg = f"unknown market_type: {market_type!r} (expected 'high' or 'low')"
+        msg = f"unknown market_type: {market_type!r} (expected 'high', 'low', or 'hourly')"
         raise ValueError(msg)
 
     return [f"{prefix}{city}" for city in city_codes_for_market_type(station, market_type)]
 
 
+def hourly_series_for_station(station: str, settlement_source: str) -> list[str]:
+    """Return exact verified hourly series for one station/source profile."""
+    if settlement_source not in {"weather_company", "synoptic"}:
+        msg = f"unknown settlement_source: {settlement_source!r} (expected 'weather_company' or 'synoptic')"
+        raise ValueError(msg)
+
+    station_upper = station.upper()
+    series = HOURLY_SERIES_BY_PROFILE.get((station_upper, settlement_source))
+    if series is None:
+        msg = (
+            "no verified hourly temperature profile for station "
+            f"{station_upper} and settlement_source {settlement_source!r}"
+        )
+        raise ValueError(msg)
+    return list(series)
+
+
 def station_from_event_ticker(event_ticker: str) -> str | None:
-    """Derive an ICAO station from a Kalshi weather event ticker."""
+    """Derive an ICAO station from an exact known Kalshi weather event series."""
     upper = event_ticker.upper()
+    series = upper.split("-", maxsplit=1)[0]
+    for (station, _), series_tickers in HOURLY_SERIES_BY_PROFILE.items():
+        if series in series_tickers:
+            return station
     for prefix in TICKER_PREFIXES:
         if upper.startswith(prefix):
             rest = upper[len(prefix) :]
