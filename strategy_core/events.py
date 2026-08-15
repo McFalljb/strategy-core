@@ -24,6 +24,7 @@ class MarketBracket(BaseModel):
     no_price: float = 0.0
     event_ticker: str = ""
     event_date: str = ""
+    close_time: datetime | None = None
     strike_type: str = ""
     floor_strike: float | None = None
     cap_strike: float | None = None

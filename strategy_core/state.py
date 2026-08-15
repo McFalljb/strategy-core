@@ -210,6 +210,7 @@ class TickerPrices:
     event_ticker: str = ""
     event_date: str = ""
     series_ticker: str = ""
+    close_time: datetime | None = None
     fee_type: FeeType | str = ""
     fee_multiplier: float | None = None
     strike_type: str = ""

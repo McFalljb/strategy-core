@@ -504,6 +504,7 @@
       ],
       "expected": {
         "cap_strike": 90.5,
+        "close_time": "2026-07-13T12:35:01.987654Z",
         "event_date": "2026-07-13",
         "event_ticker": "KXHIGHMIA-26JUL13",
         "fee_multiplier": 1.0,
@@ -551,6 +552,7 @@
       "rust_type": "TickerPrices",
       "wire": {
         "cap_strike": 90.5,
+        "close_time": "2026-07-13T12:35:01.987654Z",
         "event_date": "2026-07-13",
         "event_ticker": "KXHIGHMIA-26JUL13",
         "fee_multiplier": 1.0,
@@ -611,6 +613,7 @@
       ],
       "expected": {
         "cap_strike": null,
+        "close_time": null,
         "event_date": "",
         "event_ticker": "",
         "fee_multiplier": null,

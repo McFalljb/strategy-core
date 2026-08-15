@@ -46,6 +46,7 @@ pub struct MarketBracket {
     pub event_ticker: String,
     #[serde(default)]
     pub event_date: String,
+    pub close_time: Option<DateTime<Utc>>,
     #[serde(default)]
     pub strike_type: String,
     pub floor_strike: Option<f64>,

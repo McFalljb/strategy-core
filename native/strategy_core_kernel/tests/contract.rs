@@ -85,6 +85,7 @@ impl StrategyKernelState for FakeState {
             event_ticker: "KXHIGHMIA-26MAY30",
             event_date: "2026-05-30",
             series_ticker: "KXHIGHMIA",
+            close_time: Some(Utc.with_ymd_and_hms(2026, 5, 30, 19, 0, 0).unwrap()),
             fee_type: "kalshi",
             fee_multiplier: Some(1.0),
             strike_type: "above",
@@ -310,6 +311,10 @@ fn event_views_preserve_price_update_fields() {
         Some(Utc.with_ymd_and_hms(2026, 5, 30, 12, 0, 0).unwrap())
     );
     assert_eq!(market.ticker, "KXHIGHMIA-26MAY30-B90");
+    assert_eq!(
+        market.close_time,
+        Some(Utc.with_ymd_and_hms(2026, 5, 30, 19, 0, 0).unwrap())
+    );
     assert_eq!(market.yes_bid, Some(0.41));
     assert_eq!(market.yes_ask, Some(0.42));
     assert_eq!(
@@ -346,6 +351,7 @@ fn price_update_event<'a>() -> StrategyEventView<'a> {
             no_price: 0.58,
             event_ticker: "KXHIGHMIA-26MAY30",
             event_date: "2026-05-30",
+            close_time: Some(Utc.with_ymd_and_hms(2026, 5, 30, 19, 0, 0).unwrap()),
             strike_type: "above",
             floor_strike: Some(90.0),
             cap_strike: None,

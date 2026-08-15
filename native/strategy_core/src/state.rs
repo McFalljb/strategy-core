@@ -244,6 +244,7 @@ pub struct TickerPrices {
     pub event_date: String,
     #[serde(default)]
     pub series_ticker: String,
+    pub close_time: Option<DateTime<Utc>>,
     #[serde(default)]
     pub fee_type: String,
     pub fee_multiplier: Option<f64>,
@@ -285,6 +286,7 @@ impl Default for TickerPrices {
             event_ticker: String::new(),
             event_date: String::new(),
             series_ticker: String::new(),
+            close_time: None,
             fee_type: String::new(),
             fee_multiplier: None,
             strike_type: String::new(),
