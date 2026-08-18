@@ -147,5 +147,6 @@ def test_write_scoped_release_workflow_is_pinned_and_fails_closed() -> None:
     assert 'test "$(git cat-file -t "$RELEASE_TAG_REF")" = tag' in workflow
     assert 'test "$(git rev-parse "$RELEASE_TAG_REF^{commit}")" = "$GITHUB_SHA"' in workflow
     assert 'test "$(git rev-parse HEAD)" = "$GITHUB_SHA"' in workflow
+    assert "uv run --frozen python scripts/build_v3_release.py --check --check-toolchains" in workflow
     assert "release/v3/README.md" in workflow
     assert "release/v3/rust-consumer.Cargo.lock" in workflow

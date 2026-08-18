@@ -47,7 +47,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
 
       - name: Verify reproducible artifacts and clean pinned consumers
-        run: python scripts/build_v3_release.py --check --check-toolchains
+        run: uv run --frozen python scripts/build_v3_release.py --check --check-toolchains
 
       - name: Verify release contract tests
         run: uv run --frozen pytest tests/v3/test_release_manifest.py -q
