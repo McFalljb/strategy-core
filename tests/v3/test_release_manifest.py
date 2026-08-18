@@ -71,6 +71,22 @@ def test_release_manifest_pins_artifacts_corpus_semantics_and_exact_toolchains()
     canonical_corpus = ROOT / "conformance" / "v3" / "vectors.json"
     released_corpus = RELEASE / "conformance" / "vectors.json"
     assert released_corpus.read_bytes() == canonical_corpus.read_bytes()
+    assert (RELEASE / "conformance" / "conformance-manifest.json").is_file()
+
+
+def test_release_payload_names_are_unique_in_githubs_flat_asset_namespace() -> None:
+    upload_assets = [
+        RELEASE / "README.md",
+        *sorted((RELEASE / "artifacts").iterdir()),
+        *sorted((RELEASE / "conformance").iterdir()),
+        RELEASE / "manifest.json",
+        RELEASE / "toolchains.json",
+        RELEASE / "consumer-lock.json",
+        RELEASE / "rust-consumer.Cargo.lock",
+        RELEASE / "SHA256SUMS",
+    ]
+
+    assert len({asset.name for asset in upload_assets}) == len(upload_assets)
 
 
 def test_sha256sums_covers_every_release_input_and_verifies() -> None:

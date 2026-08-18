@@ -204,8 +204,11 @@ def _build_once(output: Path, work: Path) -> None:
 
     corpus_output = output / "conformance"
     corpus_output.mkdir()
-    for name in ("manifest.json", "vectors.json"):
-        shutil.copyfile(ROOT / "conformance" / "v3" / name, corpus_output / name)
+    shutil.copyfile(
+        ROOT / "conformance" / "v3" / "manifest.json",
+        corpus_output / "conformance-manifest.json",
+    )
+    shutil.copyfile(ROOT / "conformance" / "v3" / "vectors.json", corpus_output / "vectors.json")
     _write_json(output / "toolchains.json", _toolchains())
 
     manifest = {
@@ -234,7 +237,7 @@ def _build_once(output: Path, work: Path) -> None:
             ),
         ],
         "corpus": [
-            _release_record(corpus_output / "manifest.json", output, role="conformance-manifest"),
+            _release_record(corpus_output / "conformance-manifest.json", output, role="conformance-manifest"),
             _release_record(corpus_output / "vectors.json", output, role="conformance-vectors"),
         ],
         "semantic_sources": [_record(ROOT / relative) for relative in SEMANTIC_SOURCES],

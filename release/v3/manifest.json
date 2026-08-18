@@ -40,7 +40,7 @@
   "canonical_profile": "strategy-core-canonical-v1",
   "corpus": [
     {
-      "path": "release/v3/conformance/manifest.json",
+      "path": "release/v3/conformance/conformance-manifest.json",
       "role": "conformance-manifest",
       "sha256": "b9e837324a0bc99cfb35cdd14bcbbebebe750010b50789f7d5644a49e0d3e75b",
       "size": 511
