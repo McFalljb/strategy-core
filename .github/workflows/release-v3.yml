@@ -40,9 +40,11 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           test "$RELEASE_TAG" = "strategy-core-v3-v0.1.0"
-          test "$(git cat-file -t "$RELEASE_TAG")" = tag
-          test "$(git rev-parse "$RELEASE_TAG^{tag}")" = "$GITHUB_SHA"
-          test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$(git rev-parse HEAD)"
+          RELEASE_TAG_REF="refs/release-tags/$RELEASE_TAG"
+          git fetch --no-tags origin "refs/tags/$RELEASE_TAG:$RELEASE_TAG_REF"
+          test "$(git cat-file -t "$RELEASE_TAG_REF")" = tag
+          test "$(git rev-parse "$RELEASE_TAG_REF^{commit}")" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
 
       - name: Verify reproducible artifacts and clean pinned consumers
         run: python scripts/build_v3_release.py --check --check-toolchains
