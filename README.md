@@ -102,6 +102,8 @@ AGENTS.md        # Contributor commands and conventions
 ## Documentation
 
 - [docs/contract-map.md](docs/contract-map.md) — complete bot API, options, examples, native paths, and ownership rules
+- [docs/v3-contract.md](docs/v3-contract.md) — pure V3 semantic and canonical profile contract
+- [docs/releases/strategy-core-v3.md](docs/releases/strategy-core-v3.md) — immutable V3 release qualification and publish procedure
 
 ## License
 

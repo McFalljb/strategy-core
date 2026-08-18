@@ -1,0 +1,61 @@
+{
+  "python": {
+    "configuration": {
+      "path": ".python-version",
+      "sha256": "f01d748a75eb195e6fd73201279bfb23f09036ddd360eb3e9ff40ef042acbc8a",
+      "size": 8
+    },
+    "implementation": "CPython",
+    "version": "3.12.12"
+  },
+  "python_build_backend": {
+    "name": "hatchling",
+    "version": "1.32.0"
+  },
+  "qualification_runner": {
+    "architecture": "X64",
+    "github_hosted_image": "ubuntu-24.04",
+    "image_os": "ubuntu24",
+    "os": "Linux"
+  },
+  "reproducibility": {
+    "claim_scope": "byte identity is qualified on the recorded runner family and exact toolchains; no cross-OS or cross-compressor byte-identity claim is made",
+    "python_command": "uv build --wheel",
+    "rust_archive_normalization": "CPython stdlib gzip.GzipFile level 9 over tarfile USTAR_FORMAT; sorted paths; uid/gid 0; fixed mtime; no generated VCS metadata",
+    "rust_command": "cargo fetch --locked; cargo test --locked --offline in a clean CARGO_HOME",
+    "source_date_epoch": 1786924800
+  },
+  "rust": {
+    "cargo": "cargo 1.85.0 (d73d2caf9 2024-12-31)",
+    "channel": "1.85.0",
+    "clean_consumer_lock": {
+      "path": "scripts/v3_rust_consumer.Cargo.lock",
+      "sha256": "4f52f8312aa46b77d0476248591f1b6752d69a5411d4222d1b950f0942d7719f",
+      "size": 5671
+    },
+    "components": [
+      "rustfmt"
+    ],
+    "configuration": {
+      "path": "rust-toolchain.toml",
+      "sha256": "443fc3c718f52b4e8fb43811c55f3620c0444de73225007c80cdd96f36df5969",
+      "size": 76
+    },
+    "profile": "minimal",
+    "rustc": "rustc 1.85.0 (4d91de4e4 2025-02-17)",
+    "workspace_lock": {
+      "path": "native/Cargo.lock",
+      "sha256": "8111e6cbfb2ad8b212287150d68a792be5f046a48772066d26ef0f163cc15a06",
+      "size": 19816
+    }
+  },
+  "schema_version": 1,
+  "uv": {
+    "lock": {
+      "path": "uv.lock",
+      "sha256": "3d59f4797a38fcc8baa4f41333c32ef4a924d9add728dcc8e3d0576682bdd1c9",
+      "size": 63983
+    },
+    "version": "0.9.28"
+  }
+}

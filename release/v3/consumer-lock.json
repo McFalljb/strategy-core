@@ -1,0 +1,23 @@
+{
+  "artifacts": [
+    {
+      "ecosystem": "python",
+      "name": "strategy_core_v3-0.1.0-py3-none-any.whl",
+      "sha256": "0b6aa303b700a5c0bb40824ce6861c4e0141b9f9c2c5e7b0161b17e9cb70c2fc",
+      "url": "https://github.com/McFalljb/strategy-core/releases/download/strategy-core-v3-v0.1.0/strategy_core_v3-0.1.0-py3-none-any.whl"
+    },
+    {
+      "ecosystem": "rust",
+      "name": "strategy-core-v3-0.1.0.crate",
+      "sha256": "e132d4651630b2668cd18a526732d40a4f48738cd71e405e2fdb957ad6644609",
+      "url": "https://github.com/McFalljb/strategy-core/releases/download/strategy-core-v3-v0.1.0/strategy-core-v3-0.1.0.crate"
+    }
+  ],
+  "release_tag": "strategy-core-v3-v0.1.0",
+  "rust_consumer_lock": {
+    "path": "release/v3/rust-consumer.Cargo.lock",
+    "sha256": "4f52f8312aa46b77d0476248591f1b6752d69a5411d4222d1b950f0942d7719f",
+    "size": 5671
+  },
+  "schema_version": 1
+}
