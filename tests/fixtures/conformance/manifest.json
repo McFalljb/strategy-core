@@ -3084,7 +3084,7 @@
       "id": "borrowed-native-kernel-contract",
       "ownership": "kernel-only",
       "evidence_profile": "kernel-borrowed-contract",
-      "rationale": "The allocation-sensitive borrowed kernel remains a separate contract whose actions, views, errors, and traits are proven by kernel contract tests rather than broad JSON fixtures.",
+      "rationale": "The allocation-sensitive borrowed kernel remains a separate contract whose actions, views, errors, and traits are proven by kernel contract tests rather than broad JSON fixtures. OrderStatusView predated SC-1 but was omitted by inventory drift; SC-1 classifies that unchanged borrowed view here and adds field-preservation contract evidence.",
       "surfaces": {
         "rust_kernel": [
           "CancelAllOrdersRequest",
@@ -3109,6 +3109,7 @@
           "OrderAction",
           "OrderResult",
           "OrderStatus",
+          "OrderStatusView",
           "OrderType",
           "PendingOrderView",
           "PlaceOrderRequest",

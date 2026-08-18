@@ -1,0 +1,14 @@
+[package]
+name = "strategy-core-v3"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Pure, bounded, runtime-neutral Strategy Core V3 semantics"
+license = "MIT"
+
+[dependencies]
+sha2 = "0.10"
+unicode-normalization = "0.1"
+
+[dev-dependencies]
+serde_json = "1"

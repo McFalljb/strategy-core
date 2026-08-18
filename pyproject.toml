@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["strategy_core"]
+packages = ["strategy_core", "strategy_core_v3"]
 
 [dependency-groups]
 dev = [
