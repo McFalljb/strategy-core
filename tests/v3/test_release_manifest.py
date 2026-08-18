@@ -142,5 +142,7 @@ def test_write_scoped_release_workflow_is_pinned_and_fails_closed() -> None:
     assert "STRATEGY_CORE_V3_PROTECTED_TAG_ATTESTATION" in workflow
     assert 'test "$IMMUTABLE_RELEASES_ATTESTATION" = "immutable-releases-enabled"' in workflow
     assert 'test "$PROTECTED_TAG_ATTESTATION" = "strategy-core-v3-tags-update-delete-blocked-no-bypass"' in workflow
+    assert 'test "$(git rev-parse "$RELEASE_TAG^{tag}")" = "$GITHUB_SHA"' in workflow
+    assert 'test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$(git rev-parse HEAD)"' in workflow
     assert "release/v3/README.md" in workflow
     assert "release/v3/rust-consumer.Cargo.lock" in workflow

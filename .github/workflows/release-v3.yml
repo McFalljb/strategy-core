@@ -41,7 +41,8 @@ jobs:
         run: |
           test "$RELEASE_TAG" = "strategy-core-v3-v0.1.0"
           test "$(git cat-file -t "$RELEASE_TAG")" = tag
-          test "$(git rev-list -n 1 "$RELEASE_TAG")" = "$GITHUB_SHA"
+          test "$(git rev-parse "$RELEASE_TAG^{tag}")" = "$GITHUB_SHA"
+          test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$(git rev-parse HEAD)"
 
       - name: Verify reproducible artifacts and clean pinned consumers
         run: python scripts/build_v3_release.py --check --check-toolchains
