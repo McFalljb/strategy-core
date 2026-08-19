@@ -1,0 +1,104 @@
+{
+  "artifacts": [
+    {
+      "ecosystem": "python",
+      "media_type": "application/zip",
+      "path": "release/v3/artifacts/strategy_core_v3-0.1.0-py3-none-any.whl",
+      "semantic_surfaces": [
+        "strategy-context",
+        "decision-result",
+        "profile-calculator",
+        "reason-code",
+        "order-intent",
+        "timer-request-meaning",
+        "evidence",
+        "diagnostic",
+        "canonical-bytes"
+      ],
+      "sha256": "0b6aa303b700a5c0bb40824ce6861c4e0141b9f9c2c5e7b0161b17e9cb70c2fc",
+      "size": 10347
+    },
+    {
+      "ecosystem": "rust",
+      "media_type": "application/gzip",
+      "path": "release/v3/artifacts/strategy-core-v3-0.1.0.crate",
+      "semantic_surfaces": [
+        "strategy-context",
+        "decision-result",
+        "profile-calculator",
+        "reason-code",
+        "order-intent",
+        "timer-request-meaning",
+        "evidence",
+        "diagnostic",
+        "canonical-bytes"
+      ],
+      "sha256": "e132d4651630b2668cd18a526732d40a4f48738cd71e405e2fdb957ad6644609",
+      "size": 6338
+    }
+  ],
+  "canonical_profile": "strategy-core-canonical-v1",
+  "corpus": [
+    {
+      "path": "release/v3/conformance/conformance-manifest.json",
+      "role": "conformance-manifest",
+      "sha256": "b9e837324a0bc99cfb35cdd14bcbbebebe750010b50789f7d5644a49e0d3e75b",
+      "size": 511
+    },
+    {
+      "path": "release/v3/conformance/vectors.json",
+      "role": "conformance-vectors",
+      "sha256": "faea82175ba8c0519f0f7de0d76aff6b68b900afe093023d71c1a05ba284dc36",
+      "size": 9257
+    }
+  ],
+  "release": {
+    "name": "strategy-core-v3",
+    "tag": "strategy-core-v3-v0.1.0",
+    "tag_type": "annotated",
+    "version": "0.1.0"
+  },
+  "rust_consumer_lock": {
+    "path": "release/v3/rust-consumer.Cargo.lock",
+    "sha256": "4f52f8312aa46b77d0476248591f1b6752d69a5411d4222d1b950f0942d7719f",
+    "size": 5671
+  },
+  "schema_version": 1,
+  "semantic_sources": [
+    {
+      "path": "strategy_core_v3/__init__.py",
+      "sha256": "9185789317ba779f779153e74f1f7161de372f7ec42e49a931988b7a9515bb7b",
+      "size": 1951
+    },
+    {
+      "path": "strategy_core_v3/canonical.py",
+      "sha256": "d46ef3887e9892a98ffb4217ffe35de67ad511728195fd9ce862e9a10484113e",
+      "size": 5871
+    },
+    {
+      "path": "strategy_core_v3/context.py",
+      "sha256": "441b2347c15c066707b719bf0ee27daf972935358d52aa86a76254d0f3d2417a",
+      "size": 2776
+    },
+    {
+      "path": "strategy_core_v3/profile.py",
+      "sha256": "179c96946e8a2e5d36ebf208da0b3ff3b9ae8711ba545aa6819c3a8381cf8283",
+      "size": 3461
+    },
+    {
+      "path": "strategy_core_v3/result.py",
+      "sha256": "211dd16fcd9bfda9ef28b9da558b4d666db2f65a8c72e4ea1f17cc81a1d978f1",
+      "size": 4888
+    },
+    {
+      "path": "native/strategy_core_v3/src/lib.rs",
+      "sha256": "6d82229b91eab44800f1b692b2edb645f3de8ed788016b8dbdb4f1c965b112eb",
+      "size": 28062
+    }
+  ],
+  "toolchain_record": {
+    "path": "release/v3/toolchains.json",
+    "sha256": "d2211724dd2789a11aeacc228512b701f9834f7d38e56178f102cd91defebb90",
+    "size": 1959
+  }
+}

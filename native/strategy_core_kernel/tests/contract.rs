@@ -1,10 +1,10 @@
 use chrono::{TimeZone, Utc};
 use strategy_core_kernel::{
     CancelAllOrdersRequest, CancelOrderRequest, ContractSide, KernelAction, KernelResult,
-    MarketBracketView, NativeKernel, OrderAction, OrderResult, OrderStatus, OrderType,
-    PlaceOrderRequest, PriceLevelView, PriceUpdateView, StrategyEventView, StrategyKernelBroker,
-    StrategyKernelContext, StrategyKernelData, StrategyKernelRuntime, StrategyKernelState,
-    StrategyKernelTelemetry, TickerPriceView, TimerWakeView, WakeAtRequest,
+    MarketBracketView, NativeKernel, OrderAction, OrderResult, OrderStatus, OrderStatusView,
+    OrderType, PlaceOrderRequest, PriceLevelView, PriceUpdateView, StrategyEventView,
+    StrategyKernelBroker, StrategyKernelContext, StrategyKernelData, StrategyKernelRuntime,
+    StrategyKernelState, StrategyKernelTelemetry, TickerPriceView, TimerWakeView, WakeAtRequest,
 };
 
 const YES_BID_LEVELS: [PriceLevelView; 1] = [PriceLevelView {
@@ -266,6 +266,30 @@ fn kernel_can_emit_deterministic_cancel_actions() {
         serde_json::to_string(&cancel_all).unwrap(),
         r#"{"type":"cancel_all_orders"}"#,
     );
+}
+
+#[test]
+fn order_status_view_preserves_borrowed_contract_fields() {
+    let updated_at = Utc.with_ymd_and_hms(2026, 5, 30, 12, 0, 0).unwrap();
+    let status = OrderStatusView {
+        order_id: "order-1",
+        client_order_id: "kernel-1",
+        status: OrderStatus::Partial,
+        requested_quantity: 3,
+        filled_quantity: 1,
+        remaining_quantity: 2,
+        reason: "resting",
+        updated_at: Some(updated_at),
+    };
+
+    assert_eq!(status.order_id, "order-1");
+    assert_eq!(status.client_order_id, "kernel-1");
+    assert_eq!(status.status, OrderStatus::Partial);
+    assert_eq!(status.requested_quantity, 3);
+    assert_eq!(status.filled_quantity, 1);
+    assert_eq!(status.remaining_quantity, 2);
+    assert_eq!(status.reason, "resting");
+    assert_eq!(status.updated_at, Some(updated_at));
 }
 
 #[test]

@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "canonical_profile": "strategy-core-canonical-v1",
+  "vectors": "vectors.json",
+  "vectors_sha256": "faea82175ba8c0519f0f7de0d76aff6b68b900afe093023d71c1a05ba284dc36",
+  "implementations": {
+    "python": "strategy_core_v3",
+    "rust": "native/strategy_core_v3"
+  },
+  "scope": [
+    "strategy-context",
+    "decision-result",
+    "profile-calculator",
+    "reason-code",
+    "order-intent",
+    "timer-request-meaning",
+    "evidence",
+    "diagnostic",
+    "canonical-bytes"
+  ]
+}

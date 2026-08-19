@@ -1,0 +1,268 @@
+{
+  "schema_version": 1,
+  "canonical_profile": "strategy-core-canonical-v1",
+  "valid": [
+    {
+      "id": "unicode-map-order-a",
+      "domain": "strategy.identifier",
+      "value": {
+        "map": [
+          [
+            "zeta",
+            {
+              "integer": 2
+            }
+          ],
+          [
+            "café",
+            {
+              "string": "São Paulo"
+            }
+          ]
+        ]
+      },
+      "expected_hex": "5343563301440000001373747261746567792e6964656e7469666965726d0000002c000000027300000005636166c3a9730000000a53c3a36f205061756c6f73000000047a657461690000000132",
+      "expected_sha256": "847187d73f5176202309abc553fc4205c0c9d026604b03e0b5202ca486b69df8"
+    },
+    {
+      "id": "unicode-map-order-b",
+      "domain": "strategy.identifier",
+      "value": {
+        "map": [
+          [
+            "café",
+            {
+              "string": "São Paulo"
+            }
+          ],
+          [
+            "zeta",
+            {
+              "integer": 2
+            }
+          ]
+        ]
+      },
+      "expected_hex": "5343563301440000001373747261746567792e6964656e7469666965726d0000002c000000027300000005636166c3a9730000000a53c3a36f205061756c6f73000000047a657461690000000132",
+      "expected_sha256": "847187d73f5176202309abc553fc4205c0c9d026604b03e0b5202ca486b69df8"
+    },
+    {
+      "id": "negative-epoch-nanoseconds",
+      "domain": "strategy.instant",
+      "value": {
+        "epoch_ns": -1
+      },
+      "expected_hex": "5343563301440000001073747261746567792e696e7374616e747400000008ffffffffffffffff",
+      "expected_sha256": "800b5b5b8a0186a26f57d4c04f27843704405131ffb8220d923fbaa6c646f41c"
+    },
+    {
+      "id": "positive-epoch-nanoseconds",
+      "domain": "strategy.instant",
+      "value": {
+        "epoch_ns": 1800000000000000000
+      },
+      "expected_hex": "5343563301440000001073747261746567792e696e7374616e74740000000818fae27693b40000",
+      "expected_sha256": "ddd9103272bc402066e9b849823f72de69f82acc58a541ead21df37b9be87cce"
+    },
+    {
+      "id": "fixed-scale-decimal",
+      "domain": "strategy.price",
+      "value": {
+        "decimal": {
+          "value": "12.3400",
+          "scale": 4
+        }
+      },
+      "expected_hex": "5343563301440000000e73747261746567792e707269636564000000080431322e33343030",
+      "expected_sha256": "3ba0598b60f3af317b8140f7381f739639c7a14676af221a64c9c864aea52bd6"
+    },
+    {
+      "id": "timer-schedule-meaning",
+      "domain": "strategy.timer_request",
+      "value": {
+        "map": [
+          [
+            "operation",
+            {
+              "string": "schedule"
+            }
+          ],
+          [
+            "key",
+            {
+              "string": "weather.recheck"
+            }
+          ],
+          [
+            "scheduled_at",
+            {
+              "epoch_ns": 1800000000000000000
+            }
+          ],
+          [
+            "semantics_version",
+            {
+              "integer": 1
+            }
+          ],
+          [
+            "semantics",
+            {
+              "bytes": "72652d6576616c7561746520666f726563617374"
+            }
+          ]
+        ]
+      },
+      "expected_hex": "5343563301440000001673747261746567792e74696d65725f726571756573746d0000009c0000000573000000036b6579730000000f776561746865722e7265636865636b73000000096f7065726174696f6e73000000087363686564756c65730000000c7363686564756c65645f6174740000000818fae27693b40000730000000973656d616e74696373780000001472652d6576616c7561746520666f726563617374730000001173656d616e746963735f76657273696f6e690000000131",
+      "expected_sha256": "6c6a5fcd6cd0c9b62d1681980caa28d70334644d6c3357833eae773e04678e57"
+    },
+    {
+      "id": "timer-cancel-meaning",
+      "domain": "strategy.timer_request",
+      "value": {
+        "map": [
+          [
+            "operation",
+            {
+              "string": "cancel"
+            }
+          ],
+          [
+            "key",
+            {
+              "string": "weather.recheck"
+            }
+          ]
+        ]
+      },
+      "expected_hex": "5343563301440000001673747261746567792e74696d65725f726571756573746d000000390000000273000000036b6579730000000f776561746865722e7265636865636b73000000096f7065726174696f6e730000000663616e63656c",
+      "expected_sha256": "8572bb33d9f17613a9f1b2f30cb57e08cf49cd41bf3a6ace1d7d26a48be88e14"
+    },
+    {
+      "id": "boundary-diagnostic",
+      "domain": "strategy.diagnostic",
+      "value": {
+        "map": [
+          [
+            "severity",
+            {
+              "string": "info"
+            }
+          ],
+          [
+            "code",
+            {
+              "string": "profile_selected"
+            }
+          ],
+          [
+            "message",
+            {
+              "string": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+            }
+          ]
+        ]
+      },
+      "expected_hex": "5343563301440000001373747261746567792e646961676e6f737469636d00000249000000037300000004636f6465730000001070726f66696c655f73656c656374656473000000076d65737361676573000002007878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878730000000873657665726974797300000004696e666f",
+      "expected_sha256": "84d2bc286b880bb1957f02b166d7c4517d0364fb17168f22551a6f1cb7024430"
+    },
+    {
+      "id": "signed-i128-minimum",
+      "domain": "strategy.integer",
+      "value": {
+        "integer": "-170141183460469231731687303715884105728"
+      },
+      "expected_hex": "5343563301440000001073747261746567792e696e746567657269000000282d313730313431313833343630343639323331373331363837333033373135383834313035373238",
+      "expected_sha256": "3ad27ebcd466ef6c1b295f67947767e7c67ab5348cb39d64a54d707bc772c5a4"
+    },
+    {
+      "id": "signed-i128-maximum",
+      "domain": "strategy.integer",
+      "value": {
+        "integer": "170141183460469231731687303715884105727"
+      },
+      "expected_hex": "5343563301440000001073747261746567792e696e74656765726900000027313730313431313833343630343639323331373331363837333033373135383834313035373237",
+      "expected_sha256": "0ab17757c047fad9c7c6aa783ddc6b501658ffe75918cc74e6ad39875118498e"
+    }
+  ],
+  "invalid": [
+    {
+      "id": "decimal-scale-mismatch",
+      "domain": "strategy.price",
+      "value": {
+        "decimal": {
+          "value": "1.234",
+          "scale": 2
+        }
+      },
+      "category": "invalid_decimal"
+    },
+    {
+      "id": "decimal-dot-at-zero-scale",
+      "domain": "strategy.price",
+      "value": {
+        "decimal": {
+          "value": "1.",
+          "scale": 0
+        }
+      },
+      "category": "invalid_decimal"
+    },
+    {
+      "id": "negative-zero-normalization",
+      "domain": "strategy.price",
+      "value": {
+        "decimal": {
+          "value": "-0.00",
+          "scale": 2
+        }
+      },
+      "category": "invalid_normalization"
+    },
+    {
+      "id": "epoch-overflow",
+      "domain": "strategy.instant",
+      "value": {
+        "epoch_ns": 9223372036854775808
+      },
+      "category": "invalid_time"
+    },
+    {
+      "id": "unicode-key-normalization-collision",
+      "domain": "strategy.map",
+      "value": {
+        "map": [
+          [
+            "é",
+            {
+              "integer": 1
+            }
+          ],
+          [
+            "é",
+            {
+              "integer": 2
+            }
+          ]
+        ]
+      },
+      "category": "invalid_normalization"
+    },
+    {
+      "id": "signed-i128-negative-overflow",
+      "domain": "strategy.integer",
+      "value": {
+        "integer": "-170141183460469231731687303715884105729"
+      },
+      "category": "integer_overflow"
+    },
+    {
+      "id": "signed-i128-positive-overflow",
+      "domain": "strategy.integer",
+      "value": {
+        "integer": "170141183460469231731687303715884105728"
+      },
+      "category": "integer_overflow"
+    }
+  ]
+}
