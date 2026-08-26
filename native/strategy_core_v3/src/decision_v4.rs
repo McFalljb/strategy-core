@@ -617,6 +617,18 @@ pub fn encode_decision_context_v4(context: &DecisionContextV4) -> Result<Vec<u8>
     Ok(encoded)
 }
 
+pub fn decision_fence_v4_sha256(fence: &FenceV4) -> Result<String, DecisionV4Error> {
+    use sha2::{Digest, Sha256};
+    let config = bincode::config::standard()
+        .with_big_endian()
+        .with_fixed_int_encoding();
+    let bytes = bincode::encode_to_vec(fence, config).map_err(|_| DecisionV4Error::Encode)?;
+    Ok(Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect())
+}
+
 pub fn decode_decision_context_v4(bytes: &[u8]) -> Result<DecisionContextV4, DecisionV4Error> {
     if bytes.len() > MAX_DECISION_CONTEXT_V4_BYTES || !bytes.starts_with(DECISION_CONTEXT_V4_MAGIC)
     {
