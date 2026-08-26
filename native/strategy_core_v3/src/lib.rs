@@ -1,5 +1,7 @@
 //! Pure, bounded, runtime-neutral Strategy Core V3 semantics.
 
+pub mod decision_v4;
+
 use std::fmt;
 
 use sha2::{Digest, Sha256};

@@ -9,6 +9,7 @@ repository = "https://github.com/McFalljb/strategy-core"
 documentation = "https://docs.rs/strategy-core-v3"
 
 [dependencies]
+bincode = { version = "=2.0.1", features = ["derive"] }
 sha2 = "=0.10.9"
 unicode-normalization = "=0.1.25"
 
