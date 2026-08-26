@@ -216,6 +216,13 @@ fn market(index: usize) -> MarketV4 {
             ..Default::default()
         },
         field_provenance: (0..32).map(|i| (format!("f{i}"), provenance())).collect(),
+        minutetemp_comparison: Some(MarketComparisonV4 {
+            source: text(128),
+            event_id: text(128),
+            event_date: "2026-08-26".into(),
+            evidence_sha256: [7; 32],
+            ..Default::default()
+        }),
         evidence: vec![evidence(); MAX_EVIDENCE_REFERENCES],
         uncertain_fields: (0..32).map(|i| format!("f{i}")).collect(),
         ..Default::default()
@@ -238,6 +245,7 @@ fn main() {
             config_revision: 1,
             profile_and_calculator_digest: text(128),
             route_epoch: 1,
+            route_plan_sha256: [8; 32],
             source_revision: 1,
             source_generation: 1,
             catalog_revision: 1,

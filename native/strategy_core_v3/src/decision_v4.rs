@@ -440,6 +440,7 @@ pub struct FinalFactV4 {
 pub struct MarketComparisonV4 {
     pub source: String,
     pub event_id: String,
+    pub event_date: String,
     pub sequence: u64,
     pub provider_at_unix_ms: i64,
     pub yes_bid_micros: Option<u64>,
@@ -521,6 +522,7 @@ pub struct FenceV4 {
     pub config_revision: u64,
     pub profile_and_calculator_digest: String,
     pub route_epoch: u64,
+    pub route_plan_sha256: [u8; 32],
     pub source_revision: u64,
     pub source_generation: u64,
     pub catalog_revision: u64,
@@ -561,6 +563,7 @@ impl DecisionContextV4 {
             || self.stations.len() > MAX_STATIONS
             || self.markets.is_empty()
             || self.markets.len() > MAX_MARKETS
+            || self.fence.route_plan_sha256 == [0; 32]
             || self.hard_expires_at_monotonic_ns < self.delivered_at_monotonic_ns
         {
             return Err(DecisionV4Error::InvalidContract);
@@ -587,10 +590,15 @@ impl DecisionContextV4 {
             }
         }
         if self.markets.iter().any(|market| {
-            market.book.as_ref().is_some_and(|book| {
-                book.yes_bids.len() > MAX_BOOK_LEVELS_PER_SIDE
-                    || book.no_bids.len() > MAX_BOOK_LEVELS_PER_SIDE
-            }) || market.evidence.len() > MAX_EVIDENCE_REFERENCES
+            market
+                .minutetemp_comparison
+                .as_ref()
+                .is_none_or(|comparison| comparison.event_date.is_empty())
+                || market.book.as_ref().is_some_and(|book| {
+                    book.yes_bids.len() > MAX_BOOK_LEVELS_PER_SIDE
+                        || book.no_bids.len() > MAX_BOOK_LEVELS_PER_SIDE
+                })
+                || market.evidence.len() > MAX_EVIDENCE_REFERENCES
         }) {
             return Err(DecisionV4Error::BoundExceeded);
         }
