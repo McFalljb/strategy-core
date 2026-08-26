@@ -82,7 +82,7 @@ pub enum GateStatusV4 {
     ClosedRecoveryRequired,
 }
 
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct ProvenanceV4 {
     pub provider: String,
     pub source: String,
@@ -96,14 +96,14 @@ pub struct ProvenanceV4 {
     pub provider_at_unix_ms: Option<i64>,
     pub received_at_unix_ms: i64,
 }
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct EvidenceV4 {
     pub kind: String,
     pub sha256: [u8; 32],
     pub reference: String,
     pub byte_count: u64,
 }
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct ComponentMetaV4 {
     pub authority: AuthorityV4,
     pub revision: u64,
@@ -114,7 +114,7 @@ pub struct ComponentMetaV4 {
     pub refresh_error: Option<String>,
 }
 
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct StationIdentityV4 {
     pub station_id: String,
     pub city_id: Option<String>,
@@ -125,7 +125,7 @@ pub struct StationIdentityV4 {
     pub longitude_micros: Option<i64>,
     pub timezone: String,
 }
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct ObservationV4 {
     pub station_id: String,
     pub observed_at_unix_ms: i64,
@@ -160,7 +160,7 @@ pub struct ObservationV4 {
     pub text_description: Option<String>,
     pub provenance: ProvenanceV4,
 }
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct WeatherV4 {
     pub station_id: String,
     pub current_temperature_milli_c: Option<i32>,
@@ -188,7 +188,7 @@ pub struct WeatherV4 {
     pub text_description: Option<String>,
     pub preliminary: bool,
 }
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct ExtremeV4 {
     pub value_milli_c: i32,
     pub previous_value_milli_c: Option<i32>,
@@ -200,12 +200,12 @@ pub struct ExtremeV4 {
     pub source_report_id: Option<String>,
     pub provenance: ProvenanceV4,
 }
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct ExtremaV4 {
     pub high: Option<ExtremeV4>,
     pub low: Option<ExtremeV4>,
 }
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct ReportV4 {
     pub report_id: String,
     pub report_type: String,
@@ -225,7 +225,7 @@ pub struct ReportV4 {
     pub min_temperature_at_unix_ms: Option<i64>,
     pub provenance: ProvenanceV4,
 }
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct WeatherEventSourceV4 {
     pub metar_type: Option<String>,
     pub flight_category: Option<String>,
@@ -238,7 +238,7 @@ pub struct WeatherEventSourceV4 {
     pub visibility_miles_micros: Option<i64>,
     pub cb_location: Option<String>,
 }
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct WeatherEventV4 {
     pub event_id: String,
     pub event_type: String,
@@ -257,7 +257,7 @@ pub struct WeatherEventV4 {
     pub source: Option<WeatherEventSourceV4>,
     pub provenance: ProvenanceV4,
 }
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct ForecastPointV4 {
     pub at_unix_ms: i64,
     pub temperature_milli_c: Option<i32>,
@@ -272,7 +272,7 @@ pub struct ForecastPointV4 {
     pub precipitation_probability_millionths: Option<i64>,
     pub weather_code: Option<i32>,
 }
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct ForecastModelV4 {
     pub model_id: String,
     pub version: String,
@@ -283,19 +283,19 @@ pub struct ForecastModelV4 {
     pub utc_offset_seconds: Option<i32>,
     pub hourly: Vec<ForecastPointV4>,
 }
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct ForecastV4 {
     pub advertised_versions: Vec<(String, String)>,
     pub models: Vec<ForecastModelV4>,
 }
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct OracleQueryV4 {
     pub station_id: String,
     pub mode: String,
     pub rank_by: RankByV4,
     pub days: u8,
 }
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct OracleRowV4 {
     pub rank: u8,
     pub model_id: String,
@@ -308,7 +308,7 @@ pub struct OracleRowV4 {
     pub low_bias_millionths: Option<i64>,
     pub day_count: Option<u16>,
 }
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct OracleTableV4 {
     pub query: OracleQueryV4,
     pub range_start: String,
@@ -317,7 +317,7 @@ pub struct OracleTableV4 {
     pub rows: Vec<OracleRowV4>,
     pub provenance: ProvenanceV4,
 }
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct CursorV4 {
     pub connection_generation: u64,
     pub event_id: String,
@@ -327,7 +327,7 @@ pub struct CursorV4 {
     pub received_at_unix_ms: i64,
     pub snapshot_complete: bool,
 }
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct StationV4 {
     pub contract_version: String,
     pub revision: u64,
@@ -353,7 +353,7 @@ pub struct StationV4 {
     pub evidence: Vec<EvidenceV4>,
 }
 
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct MarketMetaV4 {
     pub authority: AuthorityV4,
     pub revision: u64,
@@ -363,7 +363,7 @@ pub struct MarketMetaV4 {
     pub refresh_error: Option<String>,
     pub provenance: Vec<ProvenanceV4>,
 }
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct MarketIdentityV4 {
     pub market_id: String,
     pub opportunity_id: String,
@@ -376,7 +376,7 @@ pub struct MarketIdentityV4 {
     pub close_at_unix_ms: Option<i64>,
     pub expiration_at_unix_ms: Option<i64>,
 }
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct MarketLifecycleV4 {
     pub status: String,
     pub result: Option<String>,
@@ -387,7 +387,7 @@ pub struct MarketLifecycleV4 {
     pub settled_at_unix_ms: Option<i64>,
     pub updated_at_unix_ms: Option<i64>,
 }
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct TickerV4 {
     pub yes_bid_micros: Option<u64>,
     pub yes_ask_micros: Option<u64>,
@@ -404,12 +404,12 @@ pub struct TickerV4 {
     pub open_interest_hundredths: Option<u64>,
     pub provider_at_unix_ms: Option<i64>,
 }
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct BookLevelV4 {
     pub price_micros: u64,
     pub quantity_hundredths: u64,
 }
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct BookV4 {
     pub connection_epoch: Option<u64>,
     pub sid: Option<u64>,
@@ -419,7 +419,7 @@ pub struct BookV4 {
     pub yes_bids: Vec<BookLevelV4>,
     pub no_bids: Vec<BookLevelV4>,
 }
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct LastTradeV4 {
     pub trade_id: String,
     pub yes_price_micros: u64,
@@ -428,7 +428,7 @@ pub struct LastTradeV4 {
     pub taker_side: Option<String>,
     pub traded_at_unix_ms: i64,
 }
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct FinalFactV4 {
     pub status: String,
     pub result: String,
@@ -436,7 +436,7 @@ pub struct FinalFactV4 {
     pub settled_price_micros: Option<u64>,
     pub provider_at_unix_ms: Option<i64>,
 }
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct MarketComparisonV4 {
     pub source: String,
     pub event_id: String,
@@ -449,7 +449,7 @@ pub struct MarketComparisonV4 {
     pub volume_hundredths: Option<u64>,
     pub evidence_sha256: [u8; 32],
 }
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct MarketV4 {
     pub contract_version: String,
     pub revision: u64,
@@ -470,7 +470,7 @@ pub struct MarketV4 {
     pub uncertain_fields: Vec<String>,
 }
 
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct OpportunityV4 {
     pub opportunity_id: String,
     pub venue_id: String,
@@ -482,7 +482,7 @@ pub struct OpportunityV4 {
     pub contributor_stations: Vec<String>,
     pub authority: MarketAuthorityV4,
 }
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct BrokerV4 {
     pub revision: u64,
     pub venue_account_id: String,
@@ -497,25 +497,25 @@ pub struct BrokerV4 {
     pub cancellation: GateStatusV4,
     pub reconciliation_allocation: GateStatusV4,
 }
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct ConfigV4 {
     pub revision: u64,
     pub profile_and_calculator_digest: String,
 }
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct SupervisorV4 {
     pub sleeve_id: String,
     pub incarnation: u64,
     pub process_attempt: u64,
     pub route_epoch: u64,
 }
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct ResourceRevisionV4 {
     pub identity: String,
     pub revision: u64,
     pub generation: u64,
 }
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct FenceV4 {
     pub sleeve_incarnation: u64,
     pub config_revision: u64,
@@ -530,7 +530,7 @@ pub struct FenceV4 {
     pub station_resources: Vec<ResourceRevisionV4>,
     pub market_revisions: Vec<ResourceRevisionV4>,
 }
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct TimerRecoveryV4 {
     pub key: String,
     pub scheduled_at: u64,
@@ -538,7 +538,7 @@ pub struct TimerRecoveryV4 {
     pub admission_state: u8,
 }
 
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct DecisionContextV4 {
     pub delivery_id: String,
     pub sleeve: SupervisorV4,
@@ -633,4 +633,35 @@ pub fn decode_decision_context_v4(bytes: &[u8]) -> Result<DecisionContextV4, Dec
     }
     context.validate()?;
     Ok(context)
+}
+
+impl Default for TriggerV4 {
+    fn default() -> Self {
+        Self::Bootstrap
+    }
+}
+impl Default for AuthorityV4 {
+    fn default() -> Self {
+        Self::Warming
+    }
+}
+impl Default for RankByV4 {
+    fn default() -> Self {
+        Self::High
+    }
+}
+impl Default for LifecycleV4 {
+    fn default() -> Self {
+        Self::Discovered
+    }
+}
+impl Default for MarketAuthorityV4 {
+    fn default() -> Self {
+        Self::Uncertain
+    }
+}
+impl Default for GateStatusV4 {
+    fn default() -> Self {
+        Self::ClosedFinanceUnavailable
+    }
 }
