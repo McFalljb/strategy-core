@@ -1,3 +1,4 @@
+use sha2::{Digest, Sha256};
 use strategy_core_v3::decision_v4::*;
 
 fn text(length: usize) -> String {
@@ -293,5 +294,5 @@ fn main() {
     };
     let encoded = encode_decision_context_v4(&context).expect("schema maximum fits V4 bound");
     assert_eq!(decode_decision_context_v4(&encoded).unwrap(), context);
-    println!("{}", encoded.len());
+    println!("{} {:x}", encoded.len(), Sha256::digest(&encoded));
 }
