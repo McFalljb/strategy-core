@@ -280,7 +280,7 @@ pub struct ForecastPointV4 {
     pub dew_point_milli_c: Option<i32>,
     pub pressure_msl_micros: Option<i64>,
     pub wind_speed_micros: Option<i64>,
-    pub wind_direction_degrees: Option<i32>,
+    pub wind_direction_micros: Option<i64>,
     pub wind_gust_micros: Option<i64>,
     pub cloud_cover_millionths: Option<i64>,
     pub precipitation_probability_millionths: Option<i64>,

@@ -39,7 +39,7 @@ fn station(index: usize) -> StationV4 {
         dew_point_milli_c: Some(i32::MAX),
         pressure_msl_micros: Some(i64::MAX),
         wind_speed_micros: Some(i64::MAX),
-        wind_direction_degrees: Some(i32::MAX),
+        wind_direction_micros: Some(i64::MAX),
         wind_gust_micros: Some(i64::MAX),
         cloud_cover_millionths: Some(i64::MAX),
         precipitation_probability_millionths: Some(i64::MAX),
