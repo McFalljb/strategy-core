@@ -1224,8 +1224,8 @@ fn validate_broker_outcome(
         }
         _ => return Err(DecisionV5Error::InvalidContract),
     }
-    if let Some(order) = matching_order
-        && (outcome
+    if let Some(order) = matching_order {
+        if outcome
             .intent_id
             .as_ref()
             .is_some_and(|id| id != &order.intent_id)
@@ -1238,9 +1238,10 @@ fn validate_broker_outcome(
                 .as_ref()
                 .zip(order.provider_order_id.as_ref())
                 .is_some_and(|(outcome_id, order_id)| outcome_id != order_id)
-            || !order_status_matches_outcome(order.status, outcome.status))
-    {
-        return Err(DecisionV5Error::InvalidContract);
+            || !order_status_matches_outcome(order.status, outcome.status)
+        {
+            return Err(DecisionV5Error::InvalidContract);
+        }
     }
     Ok(())
 }
