@@ -251,7 +251,11 @@ fn crate_dependencies_match_exact_pure_allowlists() {
     let manifest = include_str!("../Cargo.toml");
     assert_eq!(
         dependencies(manifest, "dependencies"),
-        BTreeSet::from(["sha2".to_owned(), "unicode-normalization".to_owned()])
+        BTreeSet::from([
+            "bincode".to_owned(),
+            "sha2".to_owned(),
+            "unicode-normalization".to_owned(),
+        ])
     );
     assert_eq!(
         dependencies(manifest, "dev-dependencies"),
@@ -263,7 +267,11 @@ fn crate_dependencies_match_exact_pure_allowlists() {
 fn dependency_policy_rejects_realistic_network_and_runtime_mutations() {
     let fixture =
         "[dependencies]\nsha2='0.10'\nunicode-normalization='0.1'\nreqwest='0.12'\ntokio='1'\n";
-    let allowed = BTreeSet::from(["sha2".to_owned(), "unicode-normalization".to_owned()]);
+    let allowed = BTreeSet::from([
+        "bincode".to_owned(),
+        "sha2".to_owned(),
+        "unicode-normalization".to_owned(),
+    ]);
     let actual = dependencies(fixture, "dependencies");
     assert_eq!(
         actual

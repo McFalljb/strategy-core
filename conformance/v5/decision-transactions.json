@@ -1,0 +1,49 @@
+{
+  "schema": "strategy-core-decision-v5-corpus/1",
+  "valid": [
+    {
+      "id": "daily-high-side-aware-broker-context",
+      "kind": "decision_context_v5",
+      "byte_count": 994,
+      "sha256": "37f50e626d1e49af1f0212ecba84a738a617bc5af63c45054dc4cb031e85c680"
+    },
+    {
+      "id": "daily-high-fenced-place-continuation",
+      "kind": "decision_result_v5",
+      "byte_count": 264,
+      "sha256": "55ea9c26d6d5e51bcc3234eef5f9086352035b8227bf6a6d581fa38c12a0c90a"
+    },
+    {
+      "id": "unchanged-v4-owner-projection",
+      "kind": "decision_context_v4",
+      "byte_count": 1581,
+      "sha256": "013ae0a908c74e7f303e811ef3a7f5abdb55319da22edd24104c303b791279ca"
+    }
+  ],
+  "invalid": [
+    {
+      "id": "duplicate-command-identity",
+      "category": "duplicate_identity"
+    },
+    {
+      "id": "unawaited-economic-command",
+      "category": "invalid_contract"
+    },
+    {
+      "id": "noncanonical-broker-ordering",
+      "category": "noncanonical_order"
+    },
+    {
+      "id": "unbound-strategy-scope",
+      "category": "invalid_contract"
+    },
+    {
+      "id": "nonconserving-broker-outcome",
+      "category": "invalid_contract"
+    },
+    {
+      "id": "noncanonical-parameters",
+      "category": "invalid_contract"
+    }
+  ]
+}
