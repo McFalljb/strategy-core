@@ -17,7 +17,9 @@ A result containing a Broker command must use `AwaitingBrokerOutcome`. It may co
 
 The host must call `validate_decision_result_v5(context, result)` rather than validating a result in isolation. Context-aware validation binds delivery, Sleeve, V5 state fence, Broker revision, Market scope, and cancellation target. The host then creates and durably stores `continuation_commitment_v5(context, result)` before admitting the command.
 
-A Broker outcome is deliverable only when its commitment is still present and unconsumed in the host ledger for the exact Sleeve identity, incarnation, route epoch, continuation identity/generation, command identity/digest, and expected Broker revision. The commitment records the originating process attempt. A later process attempt may recover it, but an earlier/stale attempt cannot claim a commitment from the future. Delivery consumes the commitment once.
+A Broker outcome is deliverable only when its commitment is still present and unconsumed in the host ledger for the exact Sleeve identity, incarnation, route epoch, continuation identity/generation, command identity/digest, expected Broker revision, and canonical originating-context digest. The commitment records the originating process attempt. A later process attempt may recover it, but an earlier/stale attempt cannot claim a commitment from the future. Delivery consumes the commitment once.
+
+Trader persists the canonical encoded originating `DecisionContextV5` and its SHA-256 with the commitment. Outcome delivery preserves that exact owner, Strategy, Broker, checkpoint, and decision-clock state, supplies the original typed trigger beside `BrokerOutcomeV5`, and may update only the runtime process attempt after restart. Validation reconstructs and hashes the originating context before the frozen kernel may replay it. Current/advanced owner state must never substitute for the stored originating context.
 
 ## Durable kernel checkpoints
 

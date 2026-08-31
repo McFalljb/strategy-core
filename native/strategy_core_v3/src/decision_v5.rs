@@ -213,6 +213,8 @@ pub struct ContinuationCommitmentV5 {
     pub command_id: String,
     pub command_sha256: [u8; 32],
     pub expected_broker_revision: u64,
+    /// Digest of the exact canonical Decision Context V5 persisted by Trader for replay.
+    pub originating_context_sha256: [u8; 32],
     /// Exact pre-event state restored before replaying the awaited Broker return.
     pub pre_event_checkpoint: KernelCheckpointV5,
 }
@@ -349,10 +351,21 @@ pub enum OwnerTriggerV5 {
 }
 
 #[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
-pub enum TriggerV5 {
+pub enum OriginatingTriggerV5 {
     Owner(OwnerTriggerV5),
     BrokerState { broker_revision: u64 },
-    BrokerOutcome(Box<BrokerOutcomeV5>),
+}
+
+#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+pub enum TriggerV5 {
+    Owner(OwnerTriggerV5),
+    BrokerState {
+        broker_revision: u64,
+    },
+    BrokerOutcome {
+        outcome: Box<BrokerOutcomeV5>,
+        originating_trigger: Box<OriginatingTriggerV5>,
+    },
 }
 
 #[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
@@ -639,6 +652,7 @@ pub fn continuation_commitment_v5(
         command_id: awaited_command_id.clone(),
         command_sha256: strategy_command_v5_sha256(command)?,
         expected_broker_revision: result.expected_broker_revision,
+        originating_context_sha256: decision_context_v5_sha256(context)?,
         pre_event_checkpoint: result
             .kernel_checkpoint
             .clone()
@@ -910,7 +924,8 @@ fn valid_order_reservation(order: &BrokerOrderV5) -> bool {
 }
 
 fn validate_trigger(context: &DecisionContextV5) -> Result<(), DecisionV5Error> {
-    if matches!(context.trigger, TriggerV5::BrokerOutcome(_)) != context.continuation.is_some() {
+    if matches!(context.trigger, TriggerV5::BrokerOutcome { .. }) != context.continuation.is_some()
+    {
         return Err(DecisionV5Error::InvalidContract);
     }
     match &context.trigger {
@@ -921,13 +936,40 @@ fn validate_trigger(context: &DecisionContextV5) -> Result<(), DecisionV5Error> 
         {
             Ok(())
         }
-        TriggerV5::BrokerOutcome(outcome)
-            if matches!(context.owner_state.trigger, TriggerV4::Recovery) =>
-        {
+        TriggerV5::BrokerOutcome {
+            outcome,
+            originating_trigger,
+        } => {
+            validate_originating_context(context, originating_trigger)?;
             validate_broker_outcome(context, outcome)
         }
         _ => Err(DecisionV5Error::InvalidContract),
     }
+}
+
+fn validate_originating_context(
+    context: &DecisionContextV5,
+    originating_trigger: &OriginatingTriggerV5,
+) -> Result<(), DecisionV5Error> {
+    let commitment = context
+        .continuation
+        .as_ref()
+        .ok_or(DecisionV5Error::InvalidContract)?;
+    let mut originating = context.clone();
+    originating.trigger = match originating_trigger {
+        OriginatingTriggerV5::Owner(trigger) => TriggerV5::Owner(trigger.clone()),
+        OriginatingTriggerV5::BrokerState { broker_revision } => TriggerV5::BrokerState {
+            broker_revision: *broker_revision,
+        },
+    };
+    originating.continuation = None;
+    // Delivery may occur after a process restart. The ledger preserves every originating
+    // economic input while the current process attempt is used only for runtime routing.
+    originating.owner_state.sleeve.process_attempt = commitment.process_attempt;
+    if decision_context_v5_sha256(&originating)? != commitment.originating_context_sha256 {
+        return Err(DecisionV5Error::InvalidContract);
+    }
+    Ok(())
 }
 
 fn validate_owner_trigger(
@@ -1468,6 +1510,7 @@ fn validate_continuation_commitment(
         || commitment.continuation_generation == 0
         || !valid_identifier(&commitment.command_id)
         || commitment.command_sha256 == [0; 32]
+        || commitment.originating_context_sha256 == [0; 32]
         || context.kernel_checkpoint.as_ref() != Some(&commitment.pre_event_checkpoint)
     {
         return Err(DecisionV5Error::InvalidContract);
@@ -2049,6 +2092,14 @@ mod tests {
     }
 
     fn install_outcome(context: &mut DecisionContextV5, outcome: BrokerOutcomeV5) {
+        let originating_context_sha256 = decision_context_v5_sha256(context).unwrap();
+        let originating_trigger = match &context.trigger {
+            TriggerV5::Owner(trigger) => OriginatingTriggerV5::Owner(trigger.clone()),
+            TriggerV5::BrokerState { broker_revision } => OriginatingTriggerV5::BrokerState {
+                broker_revision: *broker_revision,
+            },
+            TriggerV5::BrokerOutcome { .. } => panic!("test context already has an outcome"),
+        };
         context.continuation = Some(ContinuationCommitmentV5 {
             originating_delivery_id: "delivery.daily.0".to_owned(),
             sleeve_identity: context.owner_state.sleeve.sleeve_id.clone(),
@@ -2060,9 +2111,13 @@ mod tests {
             command_id: outcome.command_id.clone(),
             command_sha256: [1; 32],
             expected_broker_revision: 8,
+            originating_context_sha256,
             pre_event_checkpoint: context.kernel_checkpoint.clone().unwrap(),
         });
-        context.trigger = TriggerV5::BrokerOutcome(Box::new(outcome));
+        context.trigger = TriggerV5::BrokerOutcome {
+            outcome: Box::new(outcome),
+            originating_trigger: Box::new(originating_trigger),
+        };
     }
 
     #[test]
