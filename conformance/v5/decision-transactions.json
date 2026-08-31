@@ -10,14 +10,20 @@
     {
       "id": "daily-high-fenced-place-continuation",
       "kind": "decision_result_v5",
-      "byte_count": 402,
-      "sha256": "de97d7e45e5747b6da78cdee84bd1112fc8daf98cce6f50c33786728e59c6c96"
+      "byte_count": 403,
+      "sha256": "f00565a73fc8eef658dc5964cd6db6ea464e266ff4d80e6d46615da11ab4a7eb"
+    },
+    {
+      "id": "daily-high-capped-market-place-continuation",
+      "kind": "decision_result_v5",
+      "byte_count": 400,
+      "sha256": "fa325328620979ae58bed40fcca1aff1c3f2a405ff49f26a7b1ed574be0e2159"
     },
     {
       "id": "daily-high-exact-origin-broker-outcome-replay",
       "kind": "decision_context_v5",
       "byte_count": 1622,
-      "sha256": "a1425cf2367f94decd9652c70f7b4c787ebbde06719f291423ea01bea0505ae2"
+      "sha256": "1e311b98baddd9990da83d6a5d3ad00873289785a84cc82779cc0614ff2b9c1e"
     },
     {
       "id": "unchanged-v4-owner-projection",
@@ -69,6 +75,22 @@
     },
     {
       "id": "changed-originating-trigger",
+      "category": "invalid_contract"
+    },
+    {
+      "id": "zero-market-price-cap",
+      "category": "invalid_contract"
+    },
+    {
+      "id": "market-price-cap-above-payout",
+      "category": "invalid_contract"
+    },
+    {
+      "id": "limit-order-with-market-price-cap",
+      "category": "invalid_contract"
+    },
+    {
+      "id": "market-sell-with-market-price-cap",
       "category": "invalid_contract"
     }
   ]

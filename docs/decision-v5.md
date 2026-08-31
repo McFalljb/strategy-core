@@ -60,6 +60,8 @@ Typed owner triggers are checked against the exact V4 component revision and sou
 - Market IDs, positions, orders, and cancel-all affected IDs use strict canonical ordering.
 - Position cost basis excludes fees; average entry price is exactly `cost_basis / quantity`.
 - YES and NO positions have distinct `(Market, side)` identities.
+- A Market buy may carry `market_price_cap_micros` as its authoritative maximum per-contract execution price. A present cap is positive and at most `1_000_000`; Market orders never carry a limit price. Limit orders carry a limit price and never a Market price cap. Market sells never carry a buy-side price cap.
+- The Market buy cap participates in canonical command encoding and the durable command commitment. A host must not execute any fill above a present cap; absence of the optional cap preserves the pre-extension Market-order contract.
 - Sell and terminal orders reserve no cash. Active limit-buy principal is exactly remaining quantity times limit price; fee reserve is separate and bounded by remaining notional.
 - Sleeve order reservations sum exactly to the V5 reserved-cash total, do not exceed the V4 account reservation, and combine with position cost and paid fees to equal the V4 Sleeve commitment.
 - Quantities fit the frozen kernel's signed 64-bit interface.

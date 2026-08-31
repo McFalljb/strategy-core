@@ -385,6 +385,8 @@ pub struct PlaceOrderV5 {
     pub order_type: OrderTypeV5,
     pub quantity: u64,
     pub limit_price_micros: Option<u64>,
+    /// Authoritative maximum per-contract execution price for a Market buy.
+    pub market_price_cap_micros: Option<u64>,
     pub expires_after_ms: Option<i64>,
     pub reduce_only: bool,
     pub provider_client_id: String,
@@ -1517,13 +1519,7 @@ fn validate_command(command: &StrategyCommandV5) -> Result<(), DecisionV5Error> 
                 || !valid_optional_text(&order.signal_type, MAX_SHORT_TEXT_BYTES)
                 || !valid_optional_text(&order.signal_metadata, MAX_COMMAND_METADATA_BYTES)
                 || order.expires_after_ms.is_some_and(|ttl| ttl <= 0)
-                || matches!(order.order_type, OrderTypeV5::Limit)
-                    && order.limit_price_micros.is_none()
-                || matches!(order.order_type, OrderTypeV5::Market)
-                    && order.limit_price_micros.is_some()
-                || order
-                    .limit_price_micros
-                    .is_some_and(|price| price > MAX_PRICE_MICROS)
+                || !valid_place_order_prices(order)
             {
                 return Err(DecisionV5Error::InvalidContract);
             }
@@ -1563,6 +1559,26 @@ fn validate_command(command: &StrategyCommandV5) -> Result<(), DecisionV5Error> 
         StrategyCommandV5::Stop { .. } => {}
     }
     Ok(())
+}
+
+fn valid_place_order_prices(order: &PlaceOrderV5) -> bool {
+    match (order.action, order.order_type) {
+        (OrderActionV5::Buy, OrderTypeV5::Market) => {
+            order.limit_price_micros.is_none()
+                && order
+                    .market_price_cap_micros
+                    .is_none_or(|price| (1..=MAX_PRICE_MICROS).contains(&price))
+        }
+        (OrderActionV5::Sell, OrderTypeV5::Market) => {
+            order.limit_price_micros.is_none() && order.market_price_cap_micros.is_none()
+        }
+        (_, OrderTypeV5::Limit) => {
+            order
+                .limit_price_micros
+                .is_some_and(|price| price <= MAX_PRICE_MICROS)
+                && order.market_price_cap_micros.is_none()
+        }
+    }
 }
 
 fn validate_fence(fence: &CommandFenceV5) -> Result<(), DecisionV5Error> {
@@ -1888,6 +1904,7 @@ mod tests {
                 order_type: OrderTypeV5::Limit,
                 quantity: 3,
                 limit_price_micros: Some(400_000),
+                market_price_cap_micros: None,
                 expires_after_ms: Some(30_000),
                 reduce_only: false,
                 provider_client_id: "dsm-v10-ksea-20260830-2".to_owned(),
@@ -1913,6 +1930,18 @@ mod tests {
         result.sleeve_identity = context.owner_state.sleeve.sleeve_id.clone();
         result.expected_broker_revision = context.broker.revision;
         result.state_fence = hex_digest(&decision_fence_v5_sha256(context).unwrap());
+        result
+    }
+
+    fn capped_market_result() -> DecisionResultV5 {
+        let mut result = awaiting_result();
+        let StrategyCommandV5::PlaceOrder(order) = &mut result.commands[0] else {
+            panic!("fixture command must be place order");
+        };
+        order.order_type = OrderTypeV5::Market;
+        order.limit_price_micros = None;
+        order.market_price_cap_micros = Some(990_000);
+        order.expires_after_ms = None;
         result
     }
 
@@ -2026,6 +2055,62 @@ mod tests {
             validate_decision_result_v5(&context, &result),
             Err(DecisionV5Error::InvalidContract)
         );
+    }
+
+    #[test]
+    fn v5_capped_market_buy_round_trip_and_hash_bind_the_authoritative_cap() {
+        let result = capped_market_result();
+        let bytes = encode_decision_result_v5(&result).unwrap();
+        assert_eq!(decode_decision_result_v5(&bytes).unwrap(), result);
+
+        let capped_command = &result.commands[0];
+        let capped_hash = strategy_command_v5_sha256(capped_command).unwrap();
+        let mut changed = capped_command.clone();
+        let StrategyCommandV5::PlaceOrder(order) = &mut changed else {
+            panic!("fixture command must be place order");
+        };
+        order.market_price_cap_micros = Some(980_000);
+        assert_ne!(strategy_command_v5_sha256(&changed).unwrap(), capped_hash);
+    }
+
+    #[test]
+    fn v5_rejects_malformed_market_price_caps() {
+        let invalid_shapes = [
+            (OrderActionV5::Buy, OrderTypeV5::Market, None, Some(0)),
+            (
+                OrderActionV5::Buy,
+                OrderTypeV5::Market,
+                None,
+                Some(MAX_PRICE_MICROS + 1),
+            ),
+            (
+                OrderActionV5::Buy,
+                OrderTypeV5::Limit,
+                Some(400_000),
+                Some(400_000),
+            ),
+            (
+                OrderActionV5::Sell,
+                OrderTypeV5::Market,
+                None,
+                Some(400_000),
+            ),
+        ];
+
+        for (action, order_type, limit_price_micros, market_price_cap_micros) in invalid_shapes {
+            let mut result = awaiting_result();
+            let StrategyCommandV5::PlaceOrder(order) = &mut result.commands[0] else {
+                panic!("fixture command must be place order");
+            };
+            order.action = action;
+            order.order_type = order_type;
+            order.limit_price_micros = limit_price_micros;
+            order.market_price_cap_micros = market_price_cap_micros;
+            assert_eq!(
+                encode_decision_result_v5(&result),
+                Err(DecisionV5Error::InvalidContract)
+            );
+        }
     }
 
     #[test]
@@ -2424,6 +2509,12 @@ mod tests {
         assert_measurement(
             expected("daily-high-fenced-place-continuation"),
             &result_bytes,
+        );
+
+        let capped_market_bytes = encode_decision_result_v5(&capped_market_result()).unwrap();
+        assert_measurement(
+            expected("daily-high-capped-market-place-continuation"),
+            &capped_market_bytes,
         );
 
         let replay_bytes = encode_decision_context_v5(&exact_replay_context()).unwrap();
