@@ -17,7 +17,24 @@ A result containing a Broker command must use `AwaitingBrokerOutcome`. It may co
 
 The host must call `validate_decision_result_v5(context, result)` rather than validating a result in isolation. Context-aware validation binds delivery, Sleeve, V5 state fence, Broker revision, Market scope, and cancellation target. The host then creates and durably stores `continuation_commitment_v5(context, result)` before admitting the command.
 
-A Broker outcome is deliverable only when its commitment is still present and unconsumed in the host ledger for the exact Sleeve identity, incarnation, process attempt, route epoch, continuation identity/generation, command identity/digest, and expected Broker revision. Delivery consumes the commitment once. A process restart invalidates the old process-attempt commitment and follows the frozen kernel's startup reconciliation path.
+A Broker outcome is deliverable only when its commitment is still present and unconsumed in the host ledger for the exact Sleeve identity, incarnation, route epoch, continuation identity/generation, command identity/digest, and expected Broker revision. The commitment records the originating process attempt. A later process attempt may recover it, but an earlier/stale attempt cannot claim a commitment from the future. Delivery consumes the commitment once.
+
+## Durable kernel checkpoints
+
+`KernelCheckpointV5` is the bounded, versioned private-state boundary for frozen kernels. It binds:
+
+- the checkpoint codec profile and nonzero codec version;
+- exact Strategy ID and Strategy profile;
+- the attested profile/calculator digest;
+- a strictly advancing checkpoint sequence;
+- at most 128 KiB of nonempty opaque state;
+- a domain-separated SHA-256 over every binding field and the state bytes.
+
+The host never interprets checkpoint state. The attested Strategy artifact owns the codec and rejects unsupported versions.
+
+Every successful transaction carries a checkpoint. For `Completed`, it is post-event state and advances the input sequence exactly once. For `AwaitingBrokerOutcome`, it is the exact pre-event state: an existing input checkpoint must be preserved byte-for-byte, while the first invocation creates sequence 1 before handling the event. For `Rejected`, the checkpoint is unchanged and may be absent only when no state has ever committed.
+
+A continuation commitment contains the complete pre-event checkpoint, not only its digest. Trader persists that commitment and command atomically. On Broker outcome delivery—even after a process restart—the context checkpoint must exactly equal the committed pre-event checkpoint. The Strategy restores it before deterministic replay, then returns the next completed checkpoint. The V5 decision fence includes the input checkpoint digest, preventing a result for one private-state version from being accepted against another.
 
 ## Exact frozen-kernel returns
 
@@ -44,6 +61,6 @@ Typed owner triggers are checked against the exact V4 component revision and sou
 - Sell and terminal orders reserve no cash. Active limit-buy principal is exactly remaining quantity times limit price; fee reserve is separate and bounded by remaining notional.
 - Sleeve order reservations sum exactly to the V5 reserved-cash total, do not exceed the V4 account reservation, and combine with position cost and paid fees to equal the V4 Sleeve commitment.
 - Quantities fit the frozen kernel's signed 64-bit interface.
-- All identifiers, text, metadata, diagnostics, evidence, and collections have explicit bounds.
+- All identifiers, text, metadata, diagnostics, evidence, collections, and private kernel checkpoints have explicit bounds.
 
 The stable measurements for the initial V5 corpus are in `conformance/v5/decision-transactions.json`. The corpus includes an unchanged V4 owner-projection measurement to guard backward compatibility.

@@ -24,12 +24,15 @@ pub const MAX_RESULT_DIAGNOSTICS: usize = 64;
 pub const MAX_COMMAND_METADATA_BYTES: usize = 64 * 1024;
 pub const MAX_TIMER_SEMANTICS_BYTES_V5: usize = 16 * 1024;
 pub const MAX_RESULT_DIAGNOSTIC_BYTES: usize = 4 * 1024;
+/// Maximum opaque private kernel state carried across one V5 transaction.
+pub const MAX_KERNEL_CHECKPOINT_BYTES: usize = 128 * 1024;
 pub const MAX_IDENTIFIER_BYTES: usize = 160;
 pub const MAX_SHORT_TEXT_BYTES: usize = 512;
 pub const MAX_REASON_BYTES: usize = 4 * 1024;
 pub const MAX_PRICE_MICROS: u64 = 1_000_000;
 const SLEEVE_ID_DOMAIN: &[u8] = b"trader-v3/sleeve-id/v1\0";
 const COMMAND_DIGEST_DOMAIN: &[u8] = b"strategy-core/decision-v5/command/v1\0";
+const CHECKPOINT_DIGEST_DOMAIN: &[u8] = b"strategy-core/decision-v5/checkpoint/v1\0";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DecisionV5Error {
@@ -182,6 +185,22 @@ pub struct BrokerDetailV5 {
     pub orders: Vec<BrokerOrderV5>,
 }
 
+/// Bounded, versioned private kernel state owned by one exact Strategy profile.
+///
+/// The host treats `state` as opaque bytes. The Strategy artifact owns the codec and must reject
+/// unsupported versions. `state_sha256` binds the bytes and all codec/scope fields.
+#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+pub struct KernelCheckpointV5 {
+    pub codec_profile: String,
+    pub codec_version: u32,
+    pub strategy_id: String,
+    pub strategy_profile: String,
+    pub profile_and_calculator_digest: String,
+    pub sequence: u64,
+    pub state: Vec<u8>,
+    pub state_sha256: [u8; 32],
+}
+
 #[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
 pub struct ContinuationCommitmentV5 {
     pub originating_delivery_id: String,
@@ -194,6 +213,8 @@ pub struct ContinuationCommitmentV5 {
     pub command_id: String,
     pub command_sha256: [u8; 32],
     pub expected_broker_revision: u64,
+    /// Exact pre-event state restored before replaying the awaited Broker return.
+    pub pre_event_checkpoint: KernelCheckpointV5,
 }
 
 #[derive(Clone, Copy, Debug, Encode, Decode, Eq, PartialEq)]
@@ -441,6 +462,8 @@ pub struct DecisionContextV5 {
     pub strategy: StrategyScopeV5,
     pub broker: BrokerDetailV5,
     pub trigger: TriggerV5,
+    /// Latest durable private kernel state. Absent only before the first successful invocation.
+    pub kernel_checkpoint: Option<KernelCheckpointV5>,
     /// Present only for a Broker outcome delivery and loaded from the durable host ledger.
     pub continuation: Option<ContinuationCommitmentV5>,
     /// Authoritative wall clock supplied to the frozen kernel. No process-clock fallback is allowed.
@@ -454,6 +477,9 @@ pub struct DecisionResultV5 {
     pub state_fence: String,
     pub expected_broker_revision: u64,
     pub disposition: DecisionDispositionV5,
+    /// Completed results carry post-event state. Awaiting results carry the exact pre-event state.
+    /// Rejected results preserve the input checkpoint unchanged.
+    pub kernel_checkpoint: Option<KernelCheckpointV5>,
     pub commands: Vec<StrategyCommandV5>,
     pub evidence: Vec<ResultEvidenceV5>,
     pub diagnostics: Vec<ResultDiagnosticV5>,
@@ -464,6 +490,9 @@ impl DecisionContextV5 {
         self.owner_state.validate().map_err(DecisionV5Error::V4)?;
         validate_scope(self)?;
         validate_broker(self)?;
+        if let Some(checkpoint) = &self.kernel_checkpoint {
+            validate_kernel_checkpoint(&self.strategy, checkpoint)?;
+        }
         validate_trigger(self)?;
         Ok(())
     }
@@ -479,6 +508,9 @@ impl DecisionResultV5 {
             || self.diagnostics.len() > MAX_RESULT_DIAGNOSTICS
         {
             return Err(DecisionV5Error::BoundExceeded);
+        }
+        if let Some(checkpoint) = &self.kernel_checkpoint {
+            validate_kernel_checkpoint_shape(checkpoint)?;
         }
         if self.evidence.iter().any(|evidence| {
             !valid_identifier(&evidence.code) || evidence.payload.len() > MAX_COMMAND_METADATA_BYTES
@@ -501,9 +533,12 @@ impl DecisionResultV5 {
             }
         }
         match &self.disposition {
-            DecisionDispositionV5::Completed if !broker_command_ids.is_empty() => {
+            DecisionDispositionV5::Completed
+                if !broker_command_ids.is_empty() || self.kernel_checkpoint.is_none() =>
+            {
                 Err(DecisionV5Error::InvalidContract)
             }
+            DecisionDispositionV5::Completed => Ok(()),
             DecisionDispositionV5::AwaitingBrokerOutcome {
                 continuation_id,
                 continuation_generation,
@@ -512,6 +547,7 @@ impl DecisionResultV5 {
                 if broker_command_ids != [awaited_command_id.as_str()]
                     || !valid_identifier(continuation_id)
                     || *continuation_generation == 0
+                    || self.kernel_checkpoint.is_none()
                 {
                     return Err(DecisionV5Error::InvalidContract);
                 }
@@ -529,7 +565,6 @@ impl DecisionResultV5 {
             }
             DecisionDispositionV5::Rejected if self.commands.is_empty() => Ok(()),
             DecisionDispositionV5::Rejected => Err(DecisionV5Error::InvalidContract),
-            _ => Ok(()),
         }
     }
 }
@@ -547,6 +582,7 @@ pub fn validate_decision_result_v5(
     {
         return Err(DecisionV5Error::InvalidContract);
     }
+    validate_checkpoint_transition(context, result)?;
     for command in &result.commands {
         match command {
             StrategyCommandV5::PlaceOrder(order)
@@ -603,6 +639,10 @@ pub fn continuation_commitment_v5(
         command_id: awaited_command_id.clone(),
         command_sha256: strategy_command_v5_sha256(command)?,
         expected_broker_revision: result.expected_broker_revision,
+        pre_event_checkpoint: result
+            .kernel_checkpoint
+            .clone()
+            .ok_or(DecisionV5Error::InvalidContract)?,
     }))
 }
 
@@ -618,6 +658,27 @@ pub fn strategy_command_v5_sha256(
     hasher.update(COMMAND_DIGEST_DOMAIN);
     hasher.update(bytes);
     Ok(hasher.finalize().into())
+}
+
+pub fn kernel_checkpoint_v5_sha256(checkpoint: &KernelCheckpointV5) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(CHECKPOINT_DIGEST_DOMAIN);
+    hash_checkpoint_component(&mut hasher, checkpoint.codec_profile.as_bytes());
+    hasher.update(checkpoint.codec_version.to_be_bytes());
+    hash_checkpoint_component(&mut hasher, checkpoint.strategy_id.as_bytes());
+    hash_checkpoint_component(&mut hasher, checkpoint.strategy_profile.as_bytes());
+    hash_checkpoint_component(
+        &mut hasher,
+        checkpoint.profile_and_calculator_digest.as_bytes(),
+    );
+    hasher.update(checkpoint.sequence.to_be_bytes());
+    hash_checkpoint_component(&mut hasher, &checkpoint.state);
+    hasher.finalize().into()
+}
+
+fn hash_checkpoint_component(hasher: &mut Sha256, value: &[u8]) {
+    hasher.update((value.len() as u64).to_be_bytes());
+    hasher.update(value);
 }
 
 pub fn encode_decision_context_v5(context: &DecisionContextV5) -> Result<Vec<u8>, DecisionV5Error> {
@@ -1316,6 +1377,82 @@ fn order_status_matches_outcome(
     )
 }
 
+fn validate_kernel_checkpoint_shape(
+    checkpoint: &KernelCheckpointV5,
+) -> Result<(), DecisionV5Error> {
+    if checkpoint.state.len() > MAX_KERNEL_CHECKPOINT_BYTES {
+        return Err(DecisionV5Error::BoundExceeded);
+    }
+    if !valid_identifier(&checkpoint.codec_profile)
+        || checkpoint.codec_version == 0
+        || !valid_identifier(&checkpoint.strategy_id)
+        || !valid_identifier(&checkpoint.strategy_profile)
+        || !valid_text(
+            &checkpoint.profile_and_calculator_digest,
+            MAX_SHORT_TEXT_BYTES,
+        )
+        || checkpoint.sequence == 0
+        || checkpoint.state.is_empty()
+        || checkpoint.state_sha256 == [0; 32]
+        || checkpoint.state_sha256 != kernel_checkpoint_v5_sha256(checkpoint)
+    {
+        return Err(DecisionV5Error::InvalidContract);
+    }
+    Ok(())
+}
+
+fn validate_kernel_checkpoint(
+    strategy: &StrategyScopeV5,
+    checkpoint: &KernelCheckpointV5,
+) -> Result<(), DecisionV5Error> {
+    validate_kernel_checkpoint_shape(checkpoint)?;
+    if checkpoint.strategy_id != strategy.strategy_id
+        || checkpoint.strategy_profile != strategy.profile
+        || checkpoint.profile_and_calculator_digest != strategy.profile_and_calculator_digest
+    {
+        return Err(DecisionV5Error::InvalidContract);
+    }
+    Ok(())
+}
+
+fn validate_checkpoint_transition(
+    context: &DecisionContextV5,
+    result: &DecisionResultV5,
+) -> Result<(), DecisionV5Error> {
+    let output = result.kernel_checkpoint.as_ref();
+    if let Some(checkpoint) = output {
+        validate_kernel_checkpoint(&context.strategy, checkpoint)?;
+    }
+    match &result.disposition {
+        DecisionDispositionV5::Completed => {
+            let checkpoint = output.ok_or(DecisionV5Error::InvalidContract)?;
+            let expected_sequence = context
+                .kernel_checkpoint
+                .as_ref()
+                .map_or(Some(1), |previous| previous.sequence.checked_add(1))
+                .ok_or(DecisionV5Error::InvalidContract)?;
+            if checkpoint.sequence != expected_sequence {
+                return Err(DecisionV5Error::InvalidContract);
+            }
+        }
+        DecisionDispositionV5::AwaitingBrokerOutcome { .. } => match &context.kernel_checkpoint {
+            Some(previous) if output != Some(previous) => {
+                return Err(DecisionV5Error::InvalidContract);
+            }
+            None if output.is_none_or(|checkpoint| checkpoint.sequence != 1) => {
+                return Err(DecisionV5Error::InvalidContract);
+            }
+            _ => {}
+        },
+        DecisionDispositionV5::Rejected => {
+            if output != context.kernel_checkpoint.as_ref() {
+                return Err(DecisionV5Error::InvalidContract);
+            }
+        }
+    }
+    Ok(())
+}
+
 fn validate_continuation_commitment(
     context: &DecisionContextV5,
     commitment: &ContinuationCommitmentV5,
@@ -1325,16 +1462,17 @@ fn validate_continuation_commitment(
         || !valid_identifier(&commitment.sleeve_identity)
         || commitment.sleeve_identity != sleeve.sleeve_id
         || commitment.sleeve_incarnation != sleeve.incarnation
-        || commitment.process_attempt != sleeve.process_attempt
+        || commitment.process_attempt > sleeve.process_attempt
         || commitment.route_epoch != sleeve.route_epoch
         || !valid_identifier(&commitment.continuation_id)
         || commitment.continuation_generation == 0
         || !valid_identifier(&commitment.command_id)
         || commitment.command_sha256 == [0; 32]
+        || context.kernel_checkpoint.as_ref() != Some(&commitment.pre_event_checkpoint)
     {
         return Err(DecisionV5Error::InvalidContract);
     }
-    Ok(())
+    validate_kernel_checkpoint(&context.strategy, &commitment.pre_event_checkpoint)
 }
 
 fn validate_command(command: &StrategyCommandV5) -> Result<(), DecisionV5Error> {
@@ -1533,6 +1671,13 @@ pub fn decision_fence_v5_sha256(context: &DecisionContextV5) -> Result<[u8; 32],
             .map_err(|_| DecisionV5Error::Encode)?,
     );
     hasher.update(context.broker.revision.to_be_bytes());
+    match &context.kernel_checkpoint {
+        Some(checkpoint) => {
+            hasher.update([1]);
+            hasher.update(checkpoint.state_sha256);
+        }
+        None => hasher.update([0]),
+    }
     hasher.update(context.decision_time_unix_ms.to_be_bytes());
     Ok(hasher.finalize().into())
 }
@@ -1544,6 +1689,21 @@ mod tests {
         DecisionContextV4, FenceV4, MarketComparisonV4, MarketIdentityV4, MarketV4, OpportunityV4,
         StationIdentityV4, StationV4, SupervisorV4,
     };
+
+    fn checkpoint(sequence: u64, state: &[u8]) -> KernelCheckpointV5 {
+        let mut checkpoint = KernelCheckpointV5 {
+            codec_profile: "dsm-reaction-v10-checkpoint".to_owned(),
+            codec_version: 1,
+            strategy_id: "dsm_reaction_v10".to_owned(),
+            strategy_profile: "daily-high".to_owned(),
+            profile_and_calculator_digest: "profile-calculator-digest".to_owned(),
+            sequence,
+            state: state.to_vec(),
+            state_sha256: [0; 32],
+        };
+        checkpoint.state_sha256 = kernel_checkpoint_v5_sha256(&checkpoint);
+        checkpoint
+    }
 
     fn context() -> DecisionContextV5 {
         let market_id = "KXHIGHTSEA-26AUG30-T80".to_owned();
@@ -1619,6 +1779,7 @@ mod tests {
         DecisionContextV5 {
             owner_state,
             trigger: TriggerV5::Owner(OwnerTriggerV5::Recovery),
+            kernel_checkpoint: Some(checkpoint(1, b"durable-kernel-state")),
             continuation: None,
             strategy: StrategyScopeV5 {
                 strategy_id: "dsm_reaction_v10".to_owned(),
@@ -1686,6 +1847,7 @@ mod tests {
                 continuation_generation: 1,
                 awaited_command_id: "command.daily.2".to_owned(),
             },
+            kernel_checkpoint: Some(checkpoint(1, b"durable-kernel-state")),
             commands: vec![StrategyCommandV5::PlaceOrder(PlaceOrderV5 {
                 command_id: "command.daily.2".to_owned(),
                 fence: CommandFenceV5 {
@@ -1748,6 +1910,54 @@ mod tests {
             context.owner_state.sleeve.sleeve_id
         );
         assert_ne!(commitment.command_sha256, [0; 32]);
+        assert_eq!(
+            commitment.pre_event_checkpoint,
+            context.kernel_checkpoint.clone().unwrap()
+        );
+    }
+
+    #[test]
+    fn v5_awaiting_result_must_preserve_the_exact_pre_event_checkpoint() {
+        let context = context();
+        let mut result = awaiting_result_for(&context);
+        result.kernel_checkpoint = Some(checkpoint(2, b"mutated-before-outcome"));
+        result.state_fence = hex_digest(&decision_fence_v5_sha256(&context).unwrap());
+        assert_eq!(
+            validate_decision_result_v5(&context, &result),
+            Err(DecisionV5Error::InvalidContract)
+        );
+    }
+
+    #[test]
+    fn v5_completed_result_advances_checkpoint_sequence_once() {
+        let context = context();
+        let mut result = awaiting_result_for(&context);
+        result.commands.clear();
+        result.disposition = DecisionDispositionV5::Completed;
+        result.kernel_checkpoint = Some(checkpoint(2, b"post-event-state"));
+        validate_decision_result_v5(&context, &result).unwrap();
+        result.kernel_checkpoint = Some(checkpoint(3, b"skipped-sequence"));
+        assert_eq!(
+            validate_decision_result_v5(&context, &result),
+            Err(DecisionV5Error::InvalidContract)
+        );
+    }
+
+    #[test]
+    fn v5_checkpoint_is_bounded_and_digest_protected() {
+        let mut result = awaiting_result();
+        let mut oversized = checkpoint(1, &[1]);
+        oversized.state = vec![1; MAX_KERNEL_CHECKPOINT_BYTES + 1];
+        oversized.state_sha256 = kernel_checkpoint_v5_sha256(&oversized);
+        result.kernel_checkpoint = Some(oversized);
+        assert_eq!(
+            encode_decision_result_v5(&result),
+            Err(DecisionV5Error::BoundExceeded)
+        );
+
+        let mut context = context();
+        context.kernel_checkpoint.as_mut().unwrap().state.push(0);
+        assert_eq!(context.validate(), Err(DecisionV5Error::InvalidContract));
     }
 
     #[test]
@@ -1850,6 +2060,7 @@ mod tests {
             command_id: outcome.command_id.clone(),
             command_sha256: [1; 32],
             expected_broker_revision: 8,
+            pre_event_checkpoint: context.kernel_checkpoint.clone().unwrap(),
         });
         context.trigger = TriggerV5::BrokerOutcome(Box::new(outcome));
     }
@@ -1860,6 +2071,21 @@ mod tests {
         install_outcome(&mut context, partial_fill_outcome());
         let encoded = encode_decision_context_v5(&context).unwrap();
         assert_eq!(decode_decision_context_v5(&encoded).unwrap(), context);
+    }
+
+    #[test]
+    fn v5_broker_outcome_restores_checkpoint_after_process_restart() {
+        let mut context = context();
+        install_outcome(&mut context, partial_fill_outcome());
+        context.owner_state.sleeve.process_attempt += 1;
+        context.validate().unwrap();
+        assert_eq!(
+            context.kernel_checkpoint.as_ref(),
+            context
+                .continuation
+                .as_ref()
+                .map(|commitment| &commitment.pre_event_checkpoint)
+        );
     }
 
     #[test]

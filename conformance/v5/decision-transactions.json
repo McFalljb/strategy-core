@@ -4,14 +4,14 @@
     {
       "id": "daily-high-side-aware-broker-context",
       "kind": "decision_context_v5",
-      "byte_count": 994,
-      "sha256": "37f50e626d1e49af1f0212ecba84a738a617bc5af63c45054dc4cb031e85c680"
+      "byte_count": 1132,
+      "sha256": "442db566d2758b61c89de1907fee50f32e99dc81a8355cb0aa39e017ee7586d6"
     },
     {
       "id": "daily-high-fenced-place-continuation",
       "kind": "decision_result_v5",
-      "byte_count": 264,
-      "sha256": "55ea9c26d6d5e51bcc3234eef5f9086352035b8227bf6a6d581fa38c12a0c90a"
+      "byte_count": 402,
+      "sha256": "de97d7e45e5747b6da78cdee84bd1112fc8daf98cce6f50c33786728e59c6c96"
     },
     {
       "id": "unchanged-v4-owner-projection",
@@ -43,6 +43,18 @@
     },
     {
       "id": "noncanonical-parameters",
+      "category": "invalid_contract"
+    },
+    {
+      "id": "changed-checkpoint-without-digest",
+      "category": "invalid_contract"
+    },
+    {
+      "id": "oversized-kernel-checkpoint",
+      "category": "bound_exceeded"
+    },
+    {
+      "id": "awaiting-result-mutates-pre-event-checkpoint",
       "category": "invalid_contract"
     }
   ]
