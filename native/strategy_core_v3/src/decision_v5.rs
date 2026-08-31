@@ -955,14 +955,25 @@ fn validate_originating_context(
         .continuation
         .as_ref()
         .ok_or(DecisionV5Error::InvalidContract)?;
-    let originating = originating_context_v5(context, originating_trigger);
+    let mut originating = originating_context_v5(context, originating_trigger);
     if commitment.originating_delivery_id != originating.owner_state.delivery_id
         || commitment.expected_broker_revision != originating.broker.revision
-        || decision_context_v5_sha256(&originating)? != commitment.originating_context_sha256
     {
         return Err(DecisionV5Error::InvalidContract);
     }
-    Ok(())
+    if decision_context_v5_sha256(&originating)? == commitment.originating_context_sha256 {
+        return Ok(());
+    }
+    // On the first invocation the originating context has no checkpoint, while the awaiting
+    // result creates sequence 1 as its exact pre-event checkpoint. The digest disambiguates this
+    // one bootstrap shape without weakening any later checkpoint binding.
+    if commitment.pre_event_checkpoint.sequence == 1 {
+        originating.kernel_checkpoint = None;
+        if decision_context_v5_sha256(&originating)? == commitment.originating_context_sha256 {
+            return Ok(());
+        }
+    }
+    Err(DecisionV5Error::InvalidContract)
 }
 
 fn originating_context_v5_sha256(context: &DecisionContextV5) -> Result<[u8; 32], DecisionV5Error> {
@@ -1934,6 +1945,29 @@ mod tests {
             commitment.pre_event_checkpoint,
             context.kernel_checkpoint.clone().unwrap()
         );
+    }
+
+    #[test]
+    fn v5_first_invocation_outcome_replays_origin_without_an_input_checkpoint() {
+        let mut origin = context();
+        origin.kernel_checkpoint = None;
+        let result = awaiting_result_for(&origin);
+        validate_decision_result_v5(&origin, &result).unwrap();
+        let commitment = continuation_commitment_v5(&origin, &result)
+            .unwrap()
+            .unwrap();
+        let originating_trigger = match &origin.trigger {
+            TriggerV5::Owner(trigger) => OriginatingTriggerV5::Owner(trigger.clone()),
+            _ => unreachable!(),
+        };
+        let mut replay = origin.clone();
+        replay.kernel_checkpoint = result.kernel_checkpoint.clone();
+        replay.continuation = Some(commitment);
+        replay.trigger = TriggerV5::BrokerOutcome {
+            outcome: Box::new(resting_outcome_for_awaited_command()),
+            originating_trigger: Box::new(originating_trigger),
+        };
+        replay.validate().unwrap();
     }
 
     #[test]
