@@ -652,7 +652,7 @@ pub fn continuation_commitment_v5(
         command_id: awaited_command_id.clone(),
         command_sha256: strategy_command_v5_sha256(command)?,
         expected_broker_revision: result.expected_broker_revision,
-        originating_context_sha256: decision_context_v5_sha256(context)?,
+        originating_context_sha256: originating_context_v5_sha256(context)?,
         pre_event_checkpoint: result
             .kernel_checkpoint
             .clone()
@@ -955,7 +955,31 @@ fn validate_originating_context(
         .continuation
         .as_ref()
         .ok_or(DecisionV5Error::InvalidContract)?;
-    let mut originating = context.clone();
+    let originating = originating_context_v5(context, originating_trigger);
+    if commitment.originating_delivery_id != originating.owner_state.delivery_id
+        || commitment.expected_broker_revision != originating.broker.revision
+        || decision_context_v5_sha256(&originating)? != commitment.originating_context_sha256
+    {
+        return Err(DecisionV5Error::InvalidContract);
+    }
+    Ok(())
+}
+
+fn originating_context_v5_sha256(context: &DecisionContextV5) -> Result<[u8; 32], DecisionV5Error> {
+    match &context.trigger {
+        TriggerV5::BrokerOutcome {
+            originating_trigger,
+            ..
+        } => decision_context_v5_sha256(&originating_context_v5(context, originating_trigger)),
+        TriggerV5::Owner(_) | TriggerV5::BrokerState { .. } => decision_context_v5_sha256(context),
+    }
+}
+
+fn originating_context_v5(
+    replay: &DecisionContextV5,
+    originating_trigger: &OriginatingTriggerV5,
+) -> DecisionContextV5 {
+    let mut originating = replay.clone();
     originating.trigger = match originating_trigger {
         OriginatingTriggerV5::Owner(trigger) => TriggerV5::Owner(trigger.clone()),
         OriginatingTriggerV5::BrokerState { broker_revision } => TriggerV5::BrokerState {
@@ -963,13 +987,7 @@ fn validate_originating_context(
         },
     };
     originating.continuation = None;
-    // Delivery may occur after a process restart. The ledger preserves every originating
-    // economic input while the current process attempt is used only for runtime routing.
-    originating.owner_state.sleeve.process_attempt = commitment.process_attempt;
-    if decision_context_v5_sha256(&originating)? != commitment.originating_context_sha256 {
-        return Err(DecisionV5Error::InvalidContract);
-    }
-    Ok(())
+    originating
 }
 
 fn validate_owner_trigger(
@@ -1196,7 +1214,6 @@ fn validate_broker_outcome(
             .average_fill_price_micros
             .is_some_and(|price| price > MAX_PRICE_MICROS)
         || !valid_optional_text(&outcome.reason, MAX_REASON_BYTES)
-        || outcome.broker_revision != context.broker.revision
     {
         return Err(DecisionV5Error::InvalidContract);
     }
@@ -1226,8 +1243,6 @@ fn validate_broker_outcome(
                 || (result.filled_quantity > 0
                     && outcome.average_fill_price_micros != Some(result.fill_price_micros))
                 || outcome.order_id.as_ref() != Some(&result.order_id)
-                || (!matches!(outcome.status, BrokerOutcomeStatusV5::Rejected)
-                    && matching_order.is_none())
                 || matching_order.is_some_and(|order| order.command_id != outcome.command_id)
                 || !kernel_order_status_matches_outcome(result.status, outcome.status)
             {
@@ -1297,14 +1312,11 @@ fn validate_broker_outcome(
                 || cancelled_order_ids.len() > MAX_BROKER_ORDERS
                 || !strictly_sorted(cancelled_order_ids.iter().map(String::as_str))
                 || cancelled_order_ids.iter().any(|order_id| {
-                    !context.broker.orders.iter().any(|order| {
-                        order.order_id == *order_id
-                            && matches!(
-                                order.status,
-                                BrokerOrderStatusV5::CancellationRequested
-                                    | BrokerOrderStatusV5::Cancelled
-                            )
-                    })
+                    !context
+                        .broker
+                        .orders
+                        .iter()
+                        .any(|order| order.order_id == *order_id)
                 })
             {
                 return Err(DecisionV5Error::InvalidContract);
@@ -1341,7 +1353,6 @@ fn validate_broker_outcome(
                 .as_ref()
                 .zip(order.provider_order_id.as_ref())
                 .is_some_and(|(outcome_id, order_id)| outcome_id != order_id)
-            || !order_status_matches_outcome(order.status, outcome.status)
         {
             return Err(DecisionV5Error::InvalidContract);
         }
@@ -1377,44 +1388,6 @@ fn kernel_order_status_matches_outcome(
             | (
                 KernelOrderStatusV5::Cancelled,
                 BrokerOutcomeStatusV5::Cancelled
-            )
-    )
-}
-
-fn order_status_matches_outcome(
-    order: BrokerOrderStatusV5,
-    outcome: BrokerOutcomeStatusV5,
-) -> bool {
-    matches!(
-        (order, outcome),
-        (
-            BrokerOrderStatusV5::DurablyAccepted,
-            BrokerOutcomeStatusV5::DurablyAccepted
-        ) | (
-            BrokerOrderStatusV5::Dispatched,
-            BrokerOutcomeStatusV5::Dispatched
-        ) | (BrokerOrderStatusV5::Resting, BrokerOutcomeStatusV5::Resting)
-            | (
-                BrokerOrderStatusV5::PartiallyFilled,
-                BrokerOutcomeStatusV5::PartiallyFilled
-            )
-            | (BrokerOrderStatusV5::Filled, BrokerOutcomeStatusV5::Filled)
-            | (
-                BrokerOrderStatusV5::CancellationRequested,
-                BrokerOutcomeStatusV5::CancellationRequested
-            )
-            | (
-                BrokerOrderStatusV5::Cancelled,
-                BrokerOutcomeStatusV5::Cancelled
-            )
-            | (BrokerOrderStatusV5::Expired, BrokerOutcomeStatusV5::Expired)
-            | (
-                BrokerOrderStatusV5::Rejected,
-                BrokerOutcomeStatusV5::Rejected
-            )
-            | (
-                BrokerOrderStatusV5::RecoveryRequired,
-                BrokerOutcomeStatusV5::RecoveryRequired
             )
     )
 }
@@ -1504,7 +1477,7 @@ fn validate_continuation_commitment(
         || !valid_identifier(&commitment.sleeve_identity)
         || commitment.sleeve_identity != sleeve.sleeve_id
         || commitment.sleeve_incarnation != sleeve.incarnation
-        || commitment.process_attempt > sleeve.process_attempt
+        || commitment.process_attempt != sleeve.process_attempt
         || commitment.route_epoch != sleeve.route_epoch
         || !valid_identifier(&commitment.continuation_id)
         || commitment.continuation_generation == 0
@@ -1954,6 +1927,10 @@ mod tests {
         );
         assert_ne!(commitment.command_sha256, [0; 32]);
         assert_eq!(
+            commitment.originating_context_sha256,
+            decision_context_v5_sha256(&context).unwrap()
+        );
+        assert_eq!(
             commitment.pre_event_checkpoint,
             context.kernel_checkpoint.clone().unwrap()
         );
@@ -2091,6 +2068,40 @@ mod tests {
         }
     }
 
+    fn resting_outcome_for_awaited_command() -> BrokerOutcomeV5 {
+        BrokerOutcomeV5 {
+            outcome_id: "outcome.daily.2".to_owned(),
+            continuation_id: "continuation.daily.1".to_owned(),
+            continuation_generation: 1,
+            command_id: "command.daily.2".to_owned(),
+            command_kind: BrokerCommandKindV5::PlaceOrder,
+            transition_sequence: 1,
+            target_order_id: None,
+            order_id: Some("order.daily.2".to_owned()),
+            intent_id: Some("intent.daily.2".to_owned()),
+            provider_order_id: Some("paper-order-2".to_owned()),
+            provider_client_id: Some("dsm-v10-ksea-20260830-2".to_owned()),
+            status: BrokerOutcomeStatusV5::Resting,
+            return_value: BrokerCommandReturnV5::PlaceOrder(PlaceOrderReturnV5::Ok(
+                KernelOrderResultV5 {
+                    order_id: "order.daily.2".to_owned(),
+                    status: KernelOrderStatusV5::Pending,
+                    filled_quantity: 0,
+                    fill_price_micros: 0,
+                    fee_cost_micros: 0,
+                    reason: "resting".to_owned(),
+                },
+            )),
+            requested_quantity: 3,
+            filled_quantity: 0,
+            remaining_quantity: 3,
+            average_fill_price_micros: None,
+            reason: None,
+            updated_at_unix_ms: 3,
+            broker_revision: 10,
+        }
+    }
+
     fn install_outcome(context: &mut DecisionContextV5, outcome: BrokerOutcomeV5) {
         let originating_context_sha256 = decision_context_v5_sha256(context).unwrap();
         let originating_trigger = match &context.trigger {
@@ -2101,7 +2112,7 @@ mod tests {
             TriggerV5::BrokerOutcome { .. } => panic!("test context already has an outcome"),
         };
         context.continuation = Some(ContinuationCommitmentV5 {
-            originating_delivery_id: "delivery.daily.0".to_owned(),
+            originating_delivery_id: context.owner_state.delivery_id.clone(),
             sleeve_identity: context.owner_state.sleeve.sleeve_id.clone(),
             sleeve_incarnation: context.owner_state.sleeve.incarnation,
             process_attempt: context.owner_state.sleeve.process_attempt,
@@ -2110,7 +2121,7 @@ mod tests {
             continuation_generation: outcome.continuation_generation,
             command_id: outcome.command_id.clone(),
             command_sha256: [1; 32],
-            expected_broker_revision: 8,
+            expected_broker_revision: context.broker.revision,
             originating_context_sha256,
             pre_event_checkpoint: context.kernel_checkpoint.clone().unwrap(),
         });
@@ -2118,6 +2129,101 @@ mod tests {
             outcome: Box::new(outcome),
             originating_trigger: Box::new(originating_trigger),
         };
+    }
+
+    fn exact_replay_context() -> DecisionContextV5 {
+        let original = context();
+        let result = awaiting_result_for(&original);
+        let commitment = continuation_commitment_v5(&original, &result)
+            .unwrap()
+            .unwrap();
+        let mut replay = original;
+        replay.continuation = Some(commitment);
+        replay.trigger = TriggerV5::BrokerOutcome {
+            outcome: Box::new(resting_outcome_for_awaited_command()),
+            originating_trigger: Box::new(OriginatingTriggerV5::Owner(OwnerTriggerV5::Recovery)),
+        };
+        replay
+    }
+
+    #[test]
+    fn v5_outcome_replay_binds_the_exact_canonical_originating_context() {
+        let original = context();
+        let replay = exact_replay_context();
+        let commitment = replay.continuation.clone().unwrap();
+        assert_eq!(
+            commitment.originating_context_sha256,
+            decision_context_v5_sha256(&original).unwrap()
+        );
+        replay.validate().unwrap();
+        let encoded = encode_decision_context_v5(&replay).unwrap();
+        assert_eq!(decode_decision_context_v5(&encoded).unwrap(), replay);
+        assert_eq!(replay.owner_state, original.owner_state);
+        assert_eq!(replay.strategy, original.strategy);
+        assert_eq!(replay.broker, original.broker);
+        assert_eq!(replay.decision_time_unix_ms, original.decision_time_unix_ms);
+
+        let mut chained_result = awaiting_result_for(&replay);
+        chained_result.state_fence = hex_digest(&decision_fence_v5_sha256(&replay).unwrap());
+        let chained = continuation_commitment_v5(&replay, &chained_result)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            chained.originating_context_sha256,
+            commitment.originating_context_sha256
+        );
+    }
+
+    #[test]
+    fn v5_outcome_replay_rejects_changed_originating_trigger() {
+        let original = context();
+        let result = awaiting_result_for(&original);
+        let commitment = continuation_commitment_v5(&original, &result)
+            .unwrap()
+            .unwrap();
+        let mut replay = original;
+        replay.continuation = Some(commitment);
+        replay.trigger = TriggerV5::BrokerOutcome {
+            outcome: Box::new(resting_outcome_for_awaited_command()),
+            originating_trigger: Box::new(OriginatingTriggerV5::Owner(OwnerTriggerV5::Bootstrap)),
+        };
+        assert_eq!(replay.validate(), Err(DecisionV5Error::InvalidContract));
+    }
+
+    #[test]
+    fn v5_outcome_replay_rejects_changed_originating_context_hash() {
+        let mut replay = exact_replay_context();
+        replay
+            .continuation
+            .as_mut()
+            .unwrap()
+            .originating_context_sha256 = [9; 32];
+        assert_eq!(replay.validate(), Err(DecisionV5Error::InvalidContract));
+    }
+
+    #[test]
+    fn v5_outcome_replay_rejects_changed_originating_delivery_or_broker_revision() {
+        let mut changed_delivery = exact_replay_context();
+        changed_delivery
+            .continuation
+            .as_mut()
+            .unwrap()
+            .originating_delivery_id = "delivery.unrelated".to_owned();
+        assert_eq!(
+            changed_delivery.validate(),
+            Err(DecisionV5Error::InvalidContract)
+        );
+
+        let mut changed_revision = exact_replay_context();
+        changed_revision
+            .continuation
+            .as_mut()
+            .unwrap()
+            .expected_broker_revision += 1;
+        assert_eq!(
+            changed_revision.validate(),
+            Err(DecisionV5Error::InvalidContract)
+        );
     }
 
     #[test]
@@ -2129,10 +2235,9 @@ mod tests {
     }
 
     #[test]
-    fn v5_broker_outcome_restores_checkpoint_after_process_restart() {
+    fn v5_broker_outcome_restores_checkpoint_from_exact_originating_context() {
         let mut context = context();
         install_outcome(&mut context, partial_fill_outcome());
-        context.owner_state.sleeve.process_attempt += 1;
         context.validate().unwrap();
         assert_eq!(
             context.kernel_checkpoint.as_ref(),
@@ -2141,6 +2246,9 @@ mod tests {
                 .as_ref()
                 .map(|commitment| &commitment.pre_event_checkpoint)
         );
+
+        context.owner_state.sleeve.process_attempt += 1;
+        assert_eq!(context.validate(), Err(DecisionV5Error::InvalidContract));
     }
 
     #[test]
@@ -2282,6 +2390,12 @@ mod tests {
         assert_measurement(
             expected("daily-high-fenced-place-continuation"),
             &result_bytes,
+        );
+
+        let replay_bytes = encode_decision_context_v5(&exact_replay_context()).unwrap();
+        assert_measurement(
+            expected("daily-high-exact-origin-broker-outcome-replay"),
+            &replay_bytes,
         );
 
         let v4_bytes =

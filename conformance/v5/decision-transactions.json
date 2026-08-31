@@ -14,6 +14,12 @@
       "sha256": "de97d7e45e5747b6da78cdee84bd1112fc8daf98cce6f50c33786728e59c6c96"
     },
     {
+      "id": "daily-high-exact-origin-broker-outcome-replay",
+      "kind": "decision_context_v5",
+      "byte_count": 1622,
+      "sha256": "a1425cf2367f94decd9652c70f7b4c787ebbde06719f291423ea01bea0505ae2"
+    },
+    {
       "id": "unchanged-v4-owner-projection",
       "kind": "decision_context_v4",
       "byte_count": 1581,
@@ -55,6 +61,14 @@
     },
     {
       "id": "awaiting-result-mutates-pre-event-checkpoint",
+      "category": "invalid_contract"
+    },
+    {
+      "id": "changed-originating-context-hash",
+      "category": "invalid_contract"
+    },
+    {
+      "id": "changed-originating-trigger",
       "category": "invalid_contract"
     }
   ]
