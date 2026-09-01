@@ -22,6 +22,30 @@ pub enum OrderType {
     Limit,
 }
 
+/// Exact contract quantity represented in hundredths of one contract.
+///
+/// Callers must choose the scale explicitly; no value-shape or sentinel inference is supported.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ContractQuantity(i64);
+
+impl ContractQuantity {
+    pub const fn from_hundredths(hundredths: i64) -> Self {
+        Self(hundredths)
+    }
+
+    pub const fn checked_from_whole_contracts(whole_contracts: i64) -> Option<Self> {
+        match whole_contracts.checked_mul(100) {
+            Some(hundredths) => Some(Self(hundredths)),
+            None => None,
+        }
+    }
+
+    pub const fn hundredths(self) -> i64 {
+        self.0
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum OrderStatus {
@@ -38,7 +62,7 @@ pub struct PlaceOrderRequest {
     pub action: OrderAction,
     pub contract_side: ContractSide,
     pub order_type: OrderType,
-    pub quantity: i64,
+    pub quantity: ContractQuantity,
     pub limit_price: Option<f64>,
     #[serde(default)]
     pub expires_after_ms: Option<i64>,
@@ -65,9 +89,9 @@ pub struct PendingOrderView<'a> {
     pub action: &'a str,
     pub contract_side: &'a str,
     pub limit_price: Option<f64>,
-    pub requested_quantity: i64,
-    pub filled_quantity: i64,
-    pub remaining_quantity: i64,
+    pub requested_quantity: ContractQuantity,
+    pub filled_quantity: ContractQuantity,
+    pub remaining_quantity: ContractQuantity,
     pub reserved_cost: f64,
     pub client_order_id: Option<&'a str>,
     pub created_at: Option<DateTime<Utc>>,
@@ -79,9 +103,9 @@ pub struct OrderStatusView<'a> {
     pub order_id: &'a str,
     pub client_order_id: &'a str,
     pub status: OrderStatus,
-    pub requested_quantity: i64,
-    pub filled_quantity: i64,
-    pub remaining_quantity: i64,
+    pub requested_quantity: ContractQuantity,
+    pub filled_quantity: ContractQuantity,
+    pub remaining_quantity: ContractQuantity,
     pub reason: &'a str,
     pub updated_at: Option<DateTime<Utc>>,
 }
@@ -127,7 +151,7 @@ pub struct OrderResult {
     pub order_id: String,
     pub sleeve_id: String,
     pub status: OrderStatus,
-    pub filled_quantity: i64,
+    pub filled_quantity: ContractQuantity,
     pub fill_price: f64,
     pub fee_cost: f64,
     pub reason: String,

@@ -1429,6 +1429,8 @@ it beyond that call.
 
 ### Kernel actions and broker values
 
+`ContractQuantity` is the kernel's authoritative quantity type and stores exact hundredths of one contract. Use `ContractQuantity::from_hundredths` for exact quantities such as `1` (0.01), `125` (1.25), and `250` (2.50). Whole-contract entry policies use the checked `ContractQuantity::checked_from_whole_contracts` conversion. There are no parallel whole/fractional fields or sentinel values. This is a compile-time interface change: downstream Strategies and Trader kernel adapters must construct `ContractQuantity`, return it from `position_quantity`, and read `.hundredths()` before adopting this Strategy Core revision.
+
 Kernel action variants are:
 
 | Action | Payload |
@@ -1447,7 +1449,7 @@ Kernel action variants are:
 `updated_at`.
 
 The kernel `OrderResult` fields are `order_id`, `sleeve_id`, `status`,
-`filled_quantity`, `fill_price`, `fee_cost`, and `reason`.
+`filled_quantity`, `fill_price`, `fee_cost`, and `reason`. `PlaceOrderRequest.quantity`, all pending/status quantities, `OrderResult.filled_quantity`, and `StrategyKernelBroker.position_quantity` use `ContractQuantity`; each value is authoritative hundredths.
 
 Kernel order enums are `Buy`/`Sell`, `Yes`/`No`, `Market`/`Limit`, and result
 statuses `Filled`, `Partial`, `Pending`, `Rejected`, `Cancelled`. The kernel

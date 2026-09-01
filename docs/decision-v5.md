@@ -23,11 +23,13 @@ Trader persists the canonical bytes from `encode_decision_context_v5` and `decis
 
 ### Broker quantity codec compatibility
 
-New contexts are identified by the `SDCTXV5H` magic and encode Broker position quantities plus order original, filled, and remaining quantities explicitly in hundredths of one contract. The public fields are `quantity_hundredths`, `filled_quantity_hundredths`, and `remaining_quantity_hundredths`; their values are authoritative and are never inferred from value shape.
+New contexts are identified by the `SDCTXV5H` magic and new results by `SDRESV5H`. Broker positions, Broker orders, `PlaceOrderV5`, `BrokerOutcomeV5`, and `KernelOrderResultV5` encode every authoritative quantity explicitly in hundredths of one contract. Public wire fields use `quantity_hundredths`, `requested_quantity_hundredths`, `filled_quantity_hundredths`, and `remaining_quantity_hundredths`; scale is never inferred from value shape.
 
-`decode_decision_context_v5` also accepts durable legacy `SDCTXV5\0` contexts. Only that legacy magic interprets the old Broker-state quantity fields as whole contracts, and decoding checked-multiplies each position quantity and each order original, filled, and remaining quantity by 100 into the explicit `u64` hundredths representation. A legacy whole-contract value greater than `u64::MAX / 100` is not representable and the decoder fails closed with `InvalidContract`; it is never wrapped, saturated, rounded, or reinterpreted. Encoding always writes `SDCTXV5H`. Durable Broker-outcome validation accepts the exact legacy originating-context digest when the reconstructed quantities are exact whole-contract multiples, so a representable existing continuation remains bound to its historical bytes and identity.
+`decode_decision_context_v5` and `decode_decision_result_v5` also accept durable legacy `SDCTXV5\0` and `SDRESV5\0` payloads. Only those legacy magics interpret their old quantity fields as whole contracts. Decoding checked-multiplies each value by 100 into the explicit `u64` hundredths representation. A legacy value greater than `u64::MAX / 100` fails closed with `InvalidContract`; it is never wrapped, saturated, rounded, or reinterpreted. Encoders write only the new `H` magics.
 
-Strategy `PlaceOrderV5.quantity` and the existing frozen-kernel command/request and return quantities remain whole contracts in this milestone. The quantity scale is not changed silently.
+Durable continuation identities remain replayable. Originating-context validation accepts the exact legacy context digest when all reconstructed quantities are whole-contract multiples. `strategy_command_v5_digest_matches` similarly checks the current command encoding first and then the exact legacy whole-contract encoding, allowing a persisted pre-change command digest to be verified without changing it. New command and result digests intentionally bind the explicit-hundredths encoding.
+
+The shared kernel uses the single-authority `ContractQuantity` type for order requests, Broker positions/views, and order returns. `ContractQuantity::from_hundredths` supports exact fractional exits; `checked_from_whole_contracts` preserves whole-contract entry behavior through an explicit checked conversion. Strategies and Trader adapters must update their kernel implementations and call sites to construct/read this type before repinning this Strategy Core revision.
 
 ## Durable kernel checkpoints
 
@@ -54,7 +56,7 @@ A continuation commitment contains the complete pre-event checkpoint, not only i
 - cancel order: exact Boolean or bounded Broker error;
 - cancel all: the canonical sorted set of affected order IDs or bounded Broker error. The frozen `usize` return is the set length.
 
-Lifecycle status and return value are both validated. Place returns preserve order identity, filled quantity, fill price, fee cost, reason, and the legacy order-status vocabulary. A zero-fill return has zero fill price and fee; a positive fill uses the exact canonical outcome price and fee cannot exceed filled notional.
+Lifecycle status and return value are both validated. Place returns preserve order identity, filled quantity in hundredths, fill price, fee cost, reason, and the legacy order-status vocabulary. A zero-fill return has zero fill price and fee; a positive fill uses the exact canonical outcome price and fee cannot exceed `filled_quantity_hundredths * 1_000_000 / 100`.
 
 ## Identity and authority
 
@@ -72,7 +74,7 @@ Typed owner triggers are checked against the exact V4 component revision and sou
 - The Market buy cap participates in canonical command encoding and the durable command commitment. A host must not execute any fill above a present cap; absence of the optional cap preserves the pre-extension Market-order contract.
 - Sell and terminal orders reserve no cash. Active limit-buy principal is exactly `remaining_quantity_hundredths * limit_price_micros / 100`; non-exact products are rejected rather than rounded. Fee reserve is separate and bounded by remaining notional.
 - Sleeve order reservations sum exactly to the V5 reserved-cash total, do not exceed the V4 account reservation, and combine with position cost and paid fees to equal the V4 Sleeve commitment.
-- Broker-state hundredths values fit the frozen kernel's signed 64-bit interface. Strategy command/request quantities remain whole contracts.
+- Broker-state, command, outcome, and return hundredths values fit the frozen kernel's signed 64-bit `ContractQuantity` interface. Whole-contract entry policies convert once with `checked_from_whole_contracts`; fractional reduce-only exits use `from_hundredths`.
 - All identifiers, text, metadata, diagnostics, evidence, collections, and private kernel checkpoints have explicit bounds.
 
-The stable measurements for the V5 corpus are in `conformance/v5/decision-transactions.json`. Corpus schema 2 retains the exact legacy whole-contract context measurement, adds version-distinguishable hundredths and fractional context measurements, and keeps the unchanged V4 owner-projection measurement. Decision-context digests change for new `SDCTXV5H` writes; Decision Result V5 and V4 fixture digests remain unchanged.
+The stable measurements for the V5 corpus are in `conformance/v5/decision-transactions.json`. Corpus schema 3 retains exact legacy whole-contract context and result measurements, adds new explicit-hundredths command/outcome measurements, and keeps the unchanged V4 owner-projection measurement. New context, result, and place-command digests change because their `H` encodings bind hundredths. Legacy bytes and digests are read and verified, never rewritten.

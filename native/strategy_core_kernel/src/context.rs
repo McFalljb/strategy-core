@@ -1,6 +1,6 @@
 use crate::actions::{
-    CancelOrderRequest, ContractSide, KernelAction, OrderResult, OrderStatusView, PendingOrderView,
-    PlaceOrderRequest, WakeAtRequest,
+    CancelOrderRequest, ContractQuantity, ContractSide, KernelAction, OrderResult, OrderStatusView,
+    PendingOrderView, PlaceOrderRequest, WakeAtRequest,
 };
 use crate::errors::KernelResult;
 use crate::events::{
@@ -94,7 +94,7 @@ pub trait StrategyKernelData {}
 pub trait StrategyKernelBroker {
     fn buying_power(&self) -> Option<f64>;
 
-    fn position_quantity(&self, ticker: &str, side: ContractSide) -> i64;
+    fn position_quantity(&self, ticker: &str, side: ContractSide) -> ContractQuantity;
 
     fn position_avg_price(&self, ticker: &str, side: ContractSide) -> Option<f64>;
 

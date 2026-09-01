@@ -1,5 +1,5 @@
 {
-  "schema": "strategy-core-decision-v5-corpus/2",
+  "schema": "strategy-core-decision-v5-corpus/3",
   "valid": [
     {
       "id": "daily-high-side-aware-broker-context-hundredths",
@@ -20,22 +20,28 @@
       "sha256": "abf1034a702b5f6d541fcc534bdb049f95f61ff84f8f0f939357b9d520e9838d"
     },
     {
-      "id": "daily-high-fenced-place-continuation",
-      "kind": "decision_result_v5",
+      "id": "daily-high-fenced-place-continuation-legacy-whole",
+      "kind": "decision_result_v5_legacy_whole",
       "byte_count": 403,
       "sha256": "f00565a73fc8eef658dc5964cd6db6ea464e266ff4d80e6d46615da11ab4a7eb"
     },
     {
+      "id": "daily-high-fenced-place-continuation",
+      "kind": "decision_result_v5_hundredths",
+      "byte_count": 405,
+      "sha256": "ecdb1e0e48b938425f94e026dd78243659619eae4a54a42d6eb054d4ce7dbe62"
+    },
+    {
       "id": "daily-high-capped-market-place-continuation",
-      "kind": "decision_result_v5",
-      "byte_count": 400,
-      "sha256": "fa325328620979ae58bed40fcca1aff1c3f2a405ff49f26a7b1ed574be0e2159"
+      "kind": "decision_result_v5_hundredths",
+      "byte_count": 402,
+      "sha256": "09c6c8fd890a12545ce621326632be7b438c87235c7d64e18819506e41ea4003"
     },
     {
       "id": "daily-high-exact-origin-broker-outcome-replay",
       "kind": "decision_context_v5_hundredths",
-      "byte_count": 1624,
-      "sha256": "5584ccfc61bacf99dd60a91e3f0f33c4529c8903d626666f13601dc41c3fb005"
+      "byte_count": 1628,
+      "sha256": "92c87d9ee51122c77893bf2feb7649d5616584a8e72dae4ffde9ffb766aae30b"
     },
     {
       "id": "unchanged-v4-owner-projection",
@@ -111,6 +117,10 @@
     },
     {
       "id": "legacy-whole-quantity-unrepresentable-as-u64-hundredths",
+      "category": "invalid_contract"
+    },
+    {
+      "id": "legacy-result-whole-quantity-unrepresentable-as-u64-hundredths",
       "category": "invalid_contract"
     }
   ]

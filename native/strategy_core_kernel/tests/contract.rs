@@ -1,10 +1,11 @@
 use chrono::{TimeZone, Utc};
 use strategy_core_kernel::{
-    CancelAllOrdersRequest, CancelOrderRequest, ContractSide, KernelAction, KernelResult,
-    MarketBracketView, NativeKernel, OrderAction, OrderResult, OrderStatus, OrderStatusView,
-    OrderType, PlaceOrderRequest, PriceLevelView, PriceUpdateView, StrategyEventView,
-    StrategyKernelBroker, StrategyKernelContext, StrategyKernelData, StrategyKernelRuntime,
-    StrategyKernelState, StrategyKernelTelemetry, TickerPriceView, TimerWakeView, WakeAtRequest,
+    CancelAllOrdersRequest, CancelOrderRequest, ContractQuantity, ContractSide, KernelAction,
+    KernelResult, MarketBracketView, NativeKernel, OrderAction, OrderResult, OrderStatus,
+    OrderStatusView, OrderType, PlaceOrderRequest, PriceLevelView, PriceUpdateView,
+    StrategyEventView, StrategyKernelBroker, StrategyKernelContext, StrategyKernelData,
+    StrategyKernelRuntime, StrategyKernelState, StrategyKernelTelemetry, TickerPriceView,
+    TimerWakeView, WakeAtRequest,
 };
 
 const YES_BID_LEVELS: [PriceLevelView; 1] = [PriceLevelView {
@@ -60,13 +61,13 @@ impl NativeKernel for OrderKernel {
     ) -> KernelResult<()> {
         ctx.emit(KernelAction::PlaceOrder(PlaceOrderRequest {
             ticker: "KXHIGHMIA-26MAY30-B90".to_string(),
-            action: OrderAction::Buy,
+            action: OrderAction::Sell,
             contract_side: ContractSide::Yes,
             order_type: OrderType::Limit,
-            quantity: 2,
+            quantity: ContractQuantity::from_hundredths(125),
             limit_price: Some(0.42),
             expires_after_ms: Some(30_000),
-            reduce_only: false,
+            reduce_only: true,
             signal_type: Some("test_signal".to_string()),
             signal_metadata: Some("{\"source\":\"fixture\"}".to_string()),
             client_order_id: Some("kernel-1".to_string()),
@@ -128,8 +129,8 @@ impl StrategyKernelBroker for FakeBroker {
         Some(100.0)
     }
 
-    fn position_quantity(&self, _ticker: &str, _side: ContractSide) -> i64 {
-        0
+    fn position_quantity(&self, _ticker: &str, _side: ContractSide) -> ContractQuantity {
+        ContractQuantity::from_hundredths(125)
     }
 
     fn position_avg_price(&self, _ticker: &str, _side: ContractSide) -> Option<f64> {
@@ -137,12 +138,13 @@ impl StrategyKernelBroker for FakeBroker {
     }
 
     fn place_order(&mut self, request: PlaceOrderRequest) -> KernelResult<OrderResult> {
+        let filled_quantity = request.quantity;
         self.placed.push(request);
         Ok(OrderResult {
             order_id: "order-1".to_string(),
             sleeve_id: "demo:KMIA".to_string(),
             status: OrderStatus::Filled,
-            filled_quantity: 2,
+            filled_quantity,
             fill_price: 0.42,
             fee_cost: 0.01,
             reason: String::new(),
@@ -243,8 +245,8 @@ fn kernel_can_emit_deterministic_place_order_action() {
         encoded,
         concat!(
             r#"{"type":"place_order","ticker":"KXHIGHMIA-26MAY30-B90","#,
-            r#""action":"buy","contract_side":"yes","order_type":"limit","#,
-            r#""quantity":2,"limit_price":0.42,"expires_after_ms":30000,"reduce_only":false,"#,
+            r#""action":"sell","contract_side":"yes","order_type":"limit","#,
+            r#""quantity":125,"limit_price":0.42,"expires_after_ms":30000,"reduce_only":true,"#,
             r#""signal_type":"test_signal","#,
             r#""signal_metadata":"{\"source\":\"fixture\"}","client_order_id":"kernel-1"}"#
         ),
@@ -275,9 +277,9 @@ fn order_status_view_preserves_borrowed_contract_fields() {
         order_id: "order-1",
         client_order_id: "kernel-1",
         status: OrderStatus::Partial,
-        requested_quantity: 3,
-        filled_quantity: 1,
-        remaining_quantity: 2,
+        requested_quantity: ContractQuantity::from_hundredths(250),
+        filled_quantity: ContractQuantity::from_hundredths(125),
+        remaining_quantity: ContractQuantity::from_hundredths(125),
         reason: "resting",
         updated_at: Some(updated_at),
     };
@@ -285,11 +287,56 @@ fn order_status_view_preserves_borrowed_contract_fields() {
     assert_eq!(status.order_id, "order-1");
     assert_eq!(status.client_order_id, "kernel-1");
     assert_eq!(status.status, OrderStatus::Partial);
-    assert_eq!(status.requested_quantity, 3);
-    assert_eq!(status.filled_quantity, 1);
-    assert_eq!(status.remaining_quantity, 2);
+    assert_eq!(status.requested_quantity.hundredths(), 250);
+    assert_eq!(status.filled_quantity.hundredths(), 125);
+    assert_eq!(status.remaining_quantity.hundredths(), 125);
     assert_eq!(status.reason, "resting");
     assert_eq!(status.updated_at, Some(updated_at));
+}
+
+#[test]
+fn fractional_quantity_flows_through_broker_position_and_order_result() {
+    let mut broker = FakeBroker::default();
+    assert_eq!(
+        broker
+            .position_quantity("KXHIGHMIA-26MAY30-B90", ContractSide::Yes)
+            .hundredths(),
+        125,
+    );
+
+    let request = PlaceOrderRequest {
+        ticker: "KXHIGHMIA-26MAY30-B90".to_string(),
+        action: OrderAction::Sell,
+        contract_side: ContractSide::Yes,
+        order_type: OrderType::Limit,
+        quantity: ContractQuantity::from_hundredths(125),
+        limit_price: Some(0.42),
+        expires_after_ms: None,
+        reduce_only: true,
+        signal_type: None,
+        signal_metadata: None,
+        client_order_id: Some("fractional-exit-1".to_string()),
+    };
+    let result = broker.place_order(request).unwrap();
+
+    assert_eq!(result.filled_quantity.hundredths(), 125);
+    assert_eq!(broker.placed.len(), 1);
+    assert_eq!(broker.placed[0].quantity.hundredths(), 125);
+    assert!(broker.placed[0].reduce_only);
+}
+
+#[test]
+fn contract_quantity_requires_an_explicit_scale_and_preserves_fractional_values() {
+    assert_eq!(ContractQuantity::from_hundredths(1).hundredths(), 1);
+    assert_eq!(ContractQuantity::from_hundredths(125).hundredths(), 125);
+    assert_eq!(ContractQuantity::from_hundredths(250).hundredths(), 250);
+    assert_eq!(
+        ContractQuantity::checked_from_whole_contracts(2)
+            .unwrap()
+            .hundredths(),
+        200,
+    );
+    assert!(ContractQuantity::checked_from_whole_contracts(i64::MAX).is_none());
 }
 
 #[test]

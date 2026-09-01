@@ -9,9 +9,9 @@ pub mod errors;
 pub mod events;
 
 pub use actions::{
-    CancelAllOrdersRequest, CancelOrderRequest, ContractSide, KernelAction, LogAction, OrderAction,
-    OrderResult, OrderStatus, OrderStatusView, OrderType, PendingOrderView, PlaceOrderRequest,
-    StopAction, TelemetryAction, WakeAtRequest,
+    CancelAllOrdersRequest, CancelOrderRequest, ContractQuantity, ContractSide, KernelAction,
+    LogAction, OrderAction, OrderResult, OrderStatus, OrderStatusView, OrderType, PendingOrderView,
+    PlaceOrderRequest, StopAction, TelemetryAction, WakeAtRequest,
 };
 pub use context::{
     NativeKernel, StateReadDiagnostic, StrategyKernelBroker, StrategyKernelContext,
