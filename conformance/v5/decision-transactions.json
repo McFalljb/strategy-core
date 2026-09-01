@@ -1,11 +1,23 @@
 {
-  "schema": "strategy-core-decision-v5-corpus/1",
+  "schema": "strategy-core-decision-v5-corpus/2",
   "valid": [
     {
-      "id": "daily-high-side-aware-broker-context",
-      "kind": "decision_context_v5",
+      "id": "daily-high-side-aware-broker-context-hundredths",
+      "kind": "decision_context_v5_hundredths",
+      "byte_count": 1134,
+      "sha256": "f6566782569abd33ef8a98ab2dc82c4bc55a38ccdab56c871b943b26b91961af"
+    },
+    {
+      "id": "daily-high-side-aware-broker-context-legacy-whole",
+      "kind": "decision_context_v5_legacy_whole",
       "byte_count": 1132,
       "sha256": "442db566d2758b61c89de1907fee50f32e99dc81a8355cb0aa39e017ee7586d6"
+    },
+    {
+      "id": "daily-high-fractional-broker-context-hundredths",
+      "kind": "decision_context_v5_hundredths",
+      "byte_count": 1130,
+      "sha256": "abf1034a702b5f6d541fcc534bdb049f95f61ff84f8f0f939357b9d520e9838d"
     },
     {
       "id": "daily-high-fenced-place-continuation",
@@ -21,9 +33,9 @@
     },
     {
       "id": "daily-high-exact-origin-broker-outcome-replay",
-      "kind": "decision_context_v5",
-      "byte_count": 1622,
-      "sha256": "1e311b98baddd9990da83d6a5d3ad00873289785a84cc82779cc0614ff2b9c1e"
+      "kind": "decision_context_v5_hundredths",
+      "byte_count": 1624,
+      "sha256": "5584ccfc61bacf99dd60a91e3f0f33c4529c8903d626666f13601dc41c3fb005"
     },
     {
       "id": "unchanged-v4-owner-projection",
@@ -91,6 +103,14 @@
     },
     {
       "id": "market-sell-with-market-price-cap",
+      "category": "invalid_contract"
+    },
+    {
+      "id": "non-exact-fractional-order-reservation",
+      "category": "invalid_contract"
+    },
+    {
+      "id": "legacy-whole-quantity-unrepresentable-as-u64-hundredths",
       "category": "invalid_contract"
     }
   ]

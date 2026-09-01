@@ -11,7 +11,10 @@ use sha2::{Digest, Sha256};
 
 use crate::decision_v4::{DecisionContextV4, DecisionV4Error, TriggerV4, decision_fence_v4_sha256};
 
-pub const DECISION_CONTEXT_V5_MAGIC: &[u8; 8] = b"SDCTXV5\0";
+/// Current V5 context encoding with explicit hundredths Broker-state quantities.
+pub const DECISION_CONTEXT_V5_MAGIC: &[u8; 8] = b"SDCTXV5H";
+/// Durable legacy V5 context encoding whose Broker-state quantities are whole contracts.
+pub const LEGACY_DECISION_CONTEXT_V5_MAGIC: &[u8; 8] = b"SDCTXV5\0";
 pub const DECISION_RESULT_V5_MAGIC: &[u8; 8] = b"SDRESV5\0";
 pub const MAX_DECISION_CONTEXT_V5_BYTES: usize = 20 * 1024 * 1024;
 pub const MAX_DECISION_RESULT_V5_BYTES: usize = 256 * 1024;
@@ -136,7 +139,8 @@ pub struct StrategyScopeV5 {
 pub struct BrokerPositionV5 {
     pub market_id: String,
     pub side: ContractSideV5,
-    pub quantity: u64,
+    /// Exact position quantity in hundredths of one contract.
+    pub quantity_hundredths: u64,
     /// Entry cost excluding fees. The adapter projects average price as cost / quantity.
     pub cost_basis_micros: u64,
     pub fees_micros: u64,
@@ -144,7 +148,9 @@ pub struct BrokerPositionV5 {
 
 impl BrokerPositionV5 {
     pub fn average_entry_price(&self) -> f64 {
-        self.cost_basis_micros as f64 / self.quantity as f64 / MAX_PRICE_MICROS as f64
+        self.cost_basis_micros as f64 * 100.0
+            / self.quantity_hundredths as f64
+            / MAX_PRICE_MICROS as f64
     }
 }
 
@@ -159,9 +165,12 @@ pub struct BrokerOrderV5 {
     pub action: OrderActionV5,
     pub side: ContractSideV5,
     pub order_type: OrderTypeV5,
-    pub quantity: u64,
-    pub filled_quantity: u64,
-    pub remaining_quantity: u64,
+    /// Exact original order quantity in hundredths of one contract.
+    pub quantity_hundredths: u64,
+    /// Exact filled order quantity in hundredths of one contract.
+    pub filled_quantity_hundredths: u64,
+    /// Exact remaining order quantity in hundredths of one contract.
+    pub remaining_quantity_hundredths: u64,
     pub limit_price_micros: Option<u64>,
     pub average_fill_price_micros: Option<u64>,
     pub reserved_principal_micros: u64,
@@ -183,6 +192,49 @@ pub struct BrokerDetailV5 {
     pub positions: Vec<BrokerPositionV5>,
     /// Sorted by `order_id`; includes every bounded Strategy-owned order needed for reconciliation.
     pub orders: Vec<BrokerOrderV5>,
+}
+
+#[derive(Clone, Debug, Encode, Decode)]
+struct LegacyBrokerPositionV5 {
+    market_id: String,
+    side: ContractSideV5,
+    quantity: u64,
+    cost_basis_micros: u64,
+    fees_micros: u64,
+}
+
+#[derive(Clone, Debug, Encode, Decode)]
+struct LegacyBrokerOrderV5 {
+    command_id: String,
+    intent_id: String,
+    order_id: String,
+    provider_order_id: Option<String>,
+    provider_client_id: String,
+    market_id: String,
+    action: OrderActionV5,
+    side: ContractSideV5,
+    order_type: OrderTypeV5,
+    quantity: u64,
+    filled_quantity: u64,
+    remaining_quantity: u64,
+    limit_price_micros: Option<u64>,
+    average_fill_price_micros: Option<u64>,
+    reserved_principal_micros: u64,
+    reserved_fee_micros: u64,
+    created_at_unix_ms: Option<i64>,
+    updated_at_unix_ms: Option<i64>,
+    signal_type: Option<String>,
+    signal_metadata: Option<String>,
+    status: BrokerOrderStatusV5,
+    revision: u64,
+}
+
+#[derive(Clone, Debug, Encode, Decode)]
+struct LegacyBrokerDetailV5 {
+    revision: u64,
+    reserved_cash_micros: u64,
+    positions: Vec<LegacyBrokerPositionV5>,
+    orders: Vec<LegacyBrokerOrderV5>,
 }
 
 /// Bounded, versioned private kernel state owned by one exact Strategy profile.
@@ -485,6 +537,17 @@ pub struct DecisionContextV5 {
     pub decision_time_unix_ms: i64,
 }
 
+#[derive(Clone, Debug, Encode, Decode)]
+struct LegacyDecisionContextV5 {
+    owner_state: DecisionContextV4,
+    strategy: StrategyScopeV5,
+    broker: LegacyBrokerDetailV5,
+    trigger: TriggerV5,
+    kernel_checkpoint: Option<KernelCheckpointV5>,
+    continuation: Option<ContinuationCommitmentV5>,
+    decision_time_unix_ms: i64,
+}
+
 #[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
 pub struct DecisionResultV5 {
     pub delivery_id: String,
@@ -707,13 +770,177 @@ pub fn encode_decision_context_v5(context: &DecisionContextV5) -> Result<Vec<u8>
 }
 
 pub fn decode_decision_context_v5(bytes: &[u8]) -> Result<DecisionContextV5, DecisionV5Error> {
-    let context: DecisionContextV5 = decode_bounded(
-        DECISION_CONTEXT_V5_MAGIC,
-        bytes,
-        MAX_DECISION_CONTEXT_V5_BYTES,
-    )?;
+    let context = if bytes.starts_with(DECISION_CONTEXT_V5_MAGIC) {
+        decode_bounded(
+            DECISION_CONTEXT_V5_MAGIC,
+            bytes,
+            MAX_DECISION_CONTEXT_V5_BYTES,
+        )?
+    } else if bytes.starts_with(LEGACY_DECISION_CONTEXT_V5_MAGIC) {
+        let legacy: LegacyDecisionContextV5 = decode_bounded(
+            LEGACY_DECISION_CONTEXT_V5_MAGIC,
+            bytes,
+            MAX_DECISION_CONTEXT_V5_BYTES,
+        )?;
+        convert_legacy_context(legacy)?
+    } else {
+        return Err(DecisionV5Error::Decode);
+    };
     context.validate()?;
     Ok(context)
+}
+
+fn convert_legacy_context(
+    legacy: LegacyDecisionContextV5,
+) -> Result<DecisionContextV5, DecisionV5Error> {
+    let positions = legacy
+        .broker
+        .positions
+        .into_iter()
+        .map(|position| {
+            Ok(BrokerPositionV5 {
+                market_id: position.market_id,
+                side: position.side,
+                quantity_hundredths: whole_contracts_to_hundredths(position.quantity)?,
+                cost_basis_micros: position.cost_basis_micros,
+                fees_micros: position.fees_micros,
+            })
+        })
+        .collect::<Result<Vec<_>, DecisionV5Error>>()?;
+    let orders = legacy
+        .broker
+        .orders
+        .into_iter()
+        .map(|order| {
+            Ok(BrokerOrderV5 {
+                command_id: order.command_id,
+                intent_id: order.intent_id,
+                order_id: order.order_id,
+                provider_order_id: order.provider_order_id,
+                provider_client_id: order.provider_client_id,
+                market_id: order.market_id,
+                action: order.action,
+                side: order.side,
+                order_type: order.order_type,
+                quantity_hundredths: whole_contracts_to_hundredths(order.quantity)?,
+                filled_quantity_hundredths: whole_contracts_to_hundredths(order.filled_quantity)?,
+                remaining_quantity_hundredths: whole_contracts_to_hundredths(
+                    order.remaining_quantity,
+                )?,
+                limit_price_micros: order.limit_price_micros,
+                average_fill_price_micros: order.average_fill_price_micros,
+                reserved_principal_micros: order.reserved_principal_micros,
+                reserved_fee_micros: order.reserved_fee_micros,
+                created_at_unix_ms: order.created_at_unix_ms,
+                updated_at_unix_ms: order.updated_at_unix_ms,
+                signal_type: order.signal_type,
+                signal_metadata: order.signal_metadata,
+                status: order.status,
+                revision: order.revision,
+            })
+        })
+        .collect::<Result<Vec<_>, DecisionV5Error>>()?;
+    Ok(DecisionContextV5 {
+        owner_state: legacy.owner_state,
+        strategy: legacy.strategy,
+        broker: BrokerDetailV5 {
+            revision: legacy.broker.revision,
+            reserved_cash_micros: legacy.broker.reserved_cash_micros,
+            positions,
+            orders,
+        },
+        trigger: legacy.trigger,
+        kernel_checkpoint: legacy.kernel_checkpoint,
+        continuation: legacy.continuation,
+        decision_time_unix_ms: legacy.decision_time_unix_ms,
+    })
+}
+
+fn whole_contracts_to_hundredths(quantity: u64) -> Result<u64, DecisionV5Error> {
+    quantity
+        .checked_mul(100)
+        .ok_or(DecisionV5Error::InvalidContract)
+}
+
+fn legacy_context_from_current(
+    context: &DecisionContextV5,
+) -> Result<LegacyDecisionContextV5, DecisionV5Error> {
+    let whole_contracts = |quantity_hundredths: u64| {
+        (quantity_hundredths % 100 == 0)
+            .then_some(quantity_hundredths / 100)
+            .ok_or(DecisionV5Error::InvalidContract)
+    };
+    let positions = context
+        .broker
+        .positions
+        .iter()
+        .map(|position| {
+            Ok(LegacyBrokerPositionV5 {
+                market_id: position.market_id.clone(),
+                side: position.side,
+                quantity: whole_contracts(position.quantity_hundredths)?,
+                cost_basis_micros: position.cost_basis_micros,
+                fees_micros: position.fees_micros,
+            })
+        })
+        .collect::<Result<Vec<_>, DecisionV5Error>>()?;
+    let orders = context
+        .broker
+        .orders
+        .iter()
+        .map(|order| {
+            Ok(LegacyBrokerOrderV5 {
+                command_id: order.command_id.clone(),
+                intent_id: order.intent_id.clone(),
+                order_id: order.order_id.clone(),
+                provider_order_id: order.provider_order_id.clone(),
+                provider_client_id: order.provider_client_id.clone(),
+                market_id: order.market_id.clone(),
+                action: order.action,
+                side: order.side,
+                order_type: order.order_type,
+                quantity: whole_contracts(order.quantity_hundredths)?,
+                filled_quantity: whole_contracts(order.filled_quantity_hundredths)?,
+                remaining_quantity: whole_contracts(order.remaining_quantity_hundredths)?,
+                limit_price_micros: order.limit_price_micros,
+                average_fill_price_micros: order.average_fill_price_micros,
+                reserved_principal_micros: order.reserved_principal_micros,
+                reserved_fee_micros: order.reserved_fee_micros,
+                created_at_unix_ms: order.created_at_unix_ms,
+                updated_at_unix_ms: order.updated_at_unix_ms,
+                signal_type: order.signal_type.clone(),
+                signal_metadata: order.signal_metadata.clone(),
+                status: order.status,
+                revision: order.revision,
+            })
+        })
+        .collect::<Result<Vec<_>, DecisionV5Error>>()?;
+    Ok(LegacyDecisionContextV5 {
+        owner_state: context.owner_state.clone(),
+        strategy: context.strategy.clone(),
+        broker: LegacyBrokerDetailV5 {
+            revision: context.broker.revision,
+            reserved_cash_micros: context.broker.reserved_cash_micros,
+            positions,
+            orders,
+        },
+        trigger: context.trigger.clone(),
+        kernel_checkpoint: context.kernel_checkpoint.clone(),
+        continuation: context.continuation.clone(),
+        decision_time_unix_ms: context.decision_time_unix_ms,
+    })
+}
+
+fn legacy_decision_context_v5_sha256(
+    context: &DecisionContextV5,
+) -> Result<[u8; 32], DecisionV5Error> {
+    let legacy = legacy_context_from_current(context)?;
+    let encoded = encode_bounded(
+        LEGACY_DECISION_CONTEXT_V5_MAGIC,
+        &legacy,
+        MAX_DECISION_CONTEXT_V5_BYTES,
+    )?;
+    Ok(Sha256::digest(encoded).into())
 }
 
 pub fn encode_decision_result_v5(result: &DecisionResultV5) -> Result<Vec<u8>, DecisionV5Error> {
@@ -843,10 +1070,10 @@ fn validate_broker(context: &DecisionContextV5) -> Result<(), DecisionV5Error> {
         return Err(DecisionV5Error::InvalidContract);
     }
     if broker.positions.iter().any(|position| {
-        position.quantity == 0
-            || position.quantity > i64::MAX as u64
+        position.quantity_hundredths == 0
+            || position.quantity_hundredths > i64::MAX as u64
             || u128::from(position.cost_basis_micros)
-                > u128::from(position.quantity) * u128::from(MAX_PRICE_MICROS)
+                > maximum_quantity_value(position.quantity_hundredths)
             || !owner_market_ids.contains(position.market_id.as_str())
     }) || broker.orders.iter().any(|order| {
         !valid_identifier(&order.command_id)
@@ -855,9 +1082,12 @@ fn validate_broker(context: &DecisionContextV5) -> Result<(), DecisionV5Error> {
             || !valid_optional_identifier(&order.provider_order_id)
             || !valid_identifier(&order.provider_client_id)
             || !owner_market_ids.contains(order.market_id.as_str())
-            || order.quantity == 0
-            || order.quantity > i64::MAX as u64
-            || order.filled_quantity.checked_add(order.remaining_quantity) != Some(order.quantity)
+            || order.quantity_hundredths == 0
+            || order.quantity_hundredths > i64::MAX as u64
+            || order
+                .filled_quantity_hundredths
+                .checked_add(order.remaining_quantity_hundredths)
+                != Some(order.quantity_hundredths)
             || order
                 .limit_price_micros
                 .is_some_and(|price| price > MAX_PRICE_MICROS)
@@ -914,15 +1144,22 @@ fn valid_order_reservation(order: &BrokerOrderV5) -> bool {
     {
         return order.reserved_principal_micros == 0 && order.reserved_fee_micros == 0;
     }
-    let maximum_notional = u128::from(order.remaining_quantity) * u128::from(MAX_PRICE_MICROS);
+    let maximum_notional = maximum_quantity_value(order.remaining_quantity_hundredths);
     let principal_is_exact = match order.limit_price_micros {
-        Some(price) => {
-            u128::from(order.reserved_principal_micros)
-                == u128::from(order.remaining_quantity) * u128::from(price)
-        }
+        Some(price) => exact_quantity_value(order.remaining_quantity_hundredths, price)
+            .is_some_and(|principal| principal == u128::from(order.reserved_principal_micros)),
         None => u128::from(order.reserved_principal_micros) <= maximum_notional,
     };
     principal_is_exact && u128::from(order.reserved_fee_micros) <= maximum_notional
+}
+
+fn maximum_quantity_value(quantity_hundredths: u64) -> u128 {
+    u128::from(quantity_hundredths) * u128::from(MAX_PRICE_MICROS) / 100
+}
+
+fn exact_quantity_value(quantity_hundredths: u64, price_micros: u64) -> Option<u128> {
+    let product = u128::from(quantity_hundredths) * u128::from(price_micros);
+    (product % 100 == 0).then_some(product / 100)
 }
 
 fn validate_trigger(context: &DecisionContextV5) -> Result<(), DecisionV5Error> {
@@ -963,7 +1200,7 @@ fn validate_originating_context(
     {
         return Err(DecisionV5Error::InvalidContract);
     }
-    if decision_context_v5_sha256(&originating)? == commitment.originating_context_sha256 {
+    if originating_context_digest_matches(&originating, commitment.originating_context_sha256)? {
         return Ok(());
     }
     // On the first invocation the originating context has no checkpoint, while the awaiting
@@ -971,11 +1208,26 @@ fn validate_originating_context(
     // one bootstrap shape without weakening any later checkpoint binding.
     if commitment.pre_event_checkpoint.sequence == 1 {
         originating.kernel_checkpoint = None;
-        if decision_context_v5_sha256(&originating)? == commitment.originating_context_sha256 {
+        if originating_context_digest_matches(&originating, commitment.originating_context_sha256)?
+        {
             return Ok(());
         }
     }
     Err(DecisionV5Error::InvalidContract)
+}
+
+fn originating_context_digest_matches(
+    context: &DecisionContextV5,
+    expected: [u8; 32],
+) -> Result<bool, DecisionV5Error> {
+    if decision_context_v5_sha256(context)? == expected {
+        return Ok(true);
+    }
+    match legacy_decision_context_v5_sha256(context) {
+        Ok(digest) => Ok(digest == expected),
+        Err(DecisionV5Error::InvalidContract) => Ok(false),
+        Err(error) => Err(error),
+    }
 }
 
 fn originating_context_v5_sha256(context: &DecisionContextV5) -> Result<[u8; 32], DecisionV5Error> {
@@ -1841,7 +2093,7 @@ mod tests {
                 positions: vec![BrokerPositionV5 {
                     market_id: market_id.clone(),
                     side: ContractSideV5::Yes,
-                    quantity: 2,
+                    quantity_hundredths: 200,
                     cost_basis_micros: 1_200_000,
                     fees_micros: 0,
                 }],
@@ -1855,9 +2107,9 @@ mod tests {
                     action: OrderActionV5::Buy,
                     side: ContractSideV5::Yes,
                     order_type: OrderTypeV5::Limit,
-                    quantity: 3,
-                    filled_quantity: 2,
-                    remaining_quantity: 1,
+                    quantity_hundredths: 300,
+                    filled_quantity_hundredths: 200,
+                    remaining_quantity_hundredths: 100,
                     limit_price_micros: Some(600_000),
                     average_fill_price_micros: Some(590_000),
                     reserved_principal_micros: 600_000,
@@ -1921,7 +2173,121 @@ mod tests {
     fn v5_round_trip_preserves_exact_side_aware_broker_snapshot() {
         let context = context();
         let encoded = encode_decision_context_v5(&context).unwrap();
+        assert!(encoded.starts_with(DECISION_CONTEXT_V5_MAGIC));
+        assert!(!encoded.starts_with(LEGACY_DECISION_CONTEXT_V5_MAGIC));
         assert_eq!(decode_decision_context_v5(&encoded).unwrap(), context);
+    }
+
+    fn encode_legacy_context_for_test(context: &LegacyDecisionContextV5) -> Vec<u8> {
+        encode_bounded(
+            LEGACY_DECISION_CONTEXT_V5_MAGIC,
+            context,
+            MAX_DECISION_CONTEXT_V5_BYTES,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn v5_decodes_durable_legacy_whole_contract_contexts_into_hundredths() {
+        let context = context();
+        let legacy = legacy_context_from_current(&context).unwrap();
+        let encoded = encode_legacy_context_for_test(&legacy);
+
+        let decoded = decode_decision_context_v5(&encoded).unwrap();
+        assert_eq!(decoded, context);
+        assert_eq!(decoded.broker.positions[0].quantity_hundredths, 200);
+        assert_eq!(decoded.broker.orders[0].quantity_hundredths, 300);
+        assert_eq!(decoded.broker.orders[0].filled_quantity_hundredths, 200);
+        assert_eq!(decoded.broker.orders[0].remaining_quantity_hundredths, 100);
+    }
+
+    #[test]
+    fn v5_legacy_decoder_rejects_unrepresentable_hundredths_quantities() {
+        let legacy = legacy_context_from_current(&context()).unwrap();
+        let unrepresentable_whole_quantity = u64::MAX / 100 + 1;
+
+        let mut position_overflow = legacy.clone();
+        position_overflow.broker.positions[0].quantity = unrepresentable_whole_quantity;
+        assert_eq!(
+            decode_decision_context_v5(&encode_legacy_context_for_test(&position_overflow)),
+            Err(DecisionV5Error::InvalidContract)
+        );
+
+        let mut original_overflow = legacy.clone();
+        original_overflow.broker.orders[0].quantity = unrepresentable_whole_quantity;
+        assert_eq!(
+            decode_decision_context_v5(&encode_legacy_context_for_test(&original_overflow)),
+            Err(DecisionV5Error::InvalidContract)
+        );
+
+        let mut filled_overflow = legacy.clone();
+        filled_overflow.broker.orders[0].filled_quantity = unrepresentable_whole_quantity;
+        assert_eq!(
+            decode_decision_context_v5(&encode_legacy_context_for_test(&filled_overflow)),
+            Err(DecisionV5Error::InvalidContract)
+        );
+
+        let mut remaining_overflow = legacy;
+        remaining_overflow.broker.orders[0].remaining_quantity = unrepresentable_whole_quantity;
+        assert_eq!(
+            decode_decision_context_v5(&encode_legacy_context_for_test(&remaining_overflow)),
+            Err(DecisionV5Error::InvalidContract)
+        );
+    }
+
+    fn fractional_context() -> DecisionContextV5 {
+        let mut context = context();
+        context.broker.positions[0].quantity_hundredths = 1;
+        context.broker.positions[0].cost_basis_micros = 5_000;
+        let order = &mut context.broker.orders[0];
+        order.quantity_hundredths = 250;
+        order.filled_quantity_hundredths = 125;
+        order.remaining_quantity_hundredths = 125;
+        order.limit_price_micros = Some(400_000);
+        order.reserved_principal_micros = 500_000;
+        context.broker.reserved_cash_micros = 500_000;
+        context.owner_state.broker.locally_reserved_cash = 500_000;
+        context.owner_state.broker.current_commitment = 505_000;
+        context
+    }
+
+    #[test]
+    fn v5_accepts_exact_fractional_broker_state_and_keeps_commands_whole() {
+        let mut context = fractional_context();
+        context.validate().unwrap();
+        let encoded = encode_decision_context_v5(&context).unwrap();
+        let decoded = decode_decision_context_v5(&encoded).unwrap();
+        assert_eq!(decoded.broker.positions[0].quantity_hundredths, 1);
+        assert_eq!(decoded.broker.orders[0].filled_quantity_hundredths, 125);
+        assert_eq!(decoded.broker.orders[0].quantity_hundredths, 250);
+        assert_eq!(decoded.broker.positions[0].average_entry_price(), 0.5);
+        let StrategyCommandV5::PlaceOrder(command) = &awaiting_result().commands[0] else {
+            panic!("expected place order");
+        };
+        assert_eq!(command.quantity, 3);
+
+        context.broker.orders[0].limit_price_micros = Some(400_001);
+        assert_eq!(context.validate(), Err(DecisionV5Error::InvalidContract));
+    }
+
+    #[test]
+    fn v5_outcome_replay_accepts_a_durable_legacy_originating_context_digest() {
+        let mut replay = exact_replay_context();
+        let originating_trigger = match &replay.trigger {
+            TriggerV5::BrokerOutcome {
+                originating_trigger,
+                ..
+            } => originating_trigger.clone(),
+            _ => panic!("expected broker outcome"),
+        };
+        let originating = originating_context_v5(&replay, &originating_trigger);
+        replay
+            .continuation
+            .as_mut()
+            .unwrap()
+            .originating_context_sha256 = legacy_decision_context_v5_sha256(&originating).unwrap();
+
+        replay.validate().unwrap();
     }
 
     fn awaiting_result_for(context: &DecisionContextV5) -> DecisionResultV5 {
@@ -2431,7 +2797,7 @@ mod tests {
                 context.broker.positions.push(BrokerPositionV5 {
                     market_id: market_id.clone(),
                     side,
-                    quantity: 1,
+                    quantity_hundredths: 100,
                     cost_basis_micros: 500_000,
                     fees_micros: 1_000,
                 });
@@ -2449,9 +2815,9 @@ mod tests {
                 action: OrderActionV5::Buy,
                 side: ContractSideV5::Yes,
                 order_type: OrderTypeV5::Limit,
-                quantity: 1,
-                filled_quantity: 0,
-                remaining_quantity: 1,
+                quantity_hundredths: 100,
+                filled_quantity_hundredths: 0,
+                remaining_quantity_hundredths: 100,
                 limit_price_micros: Some(500_000),
                 average_fill_price_micros: None,
                 reserved_principal_micros: 500_000,
@@ -2501,8 +2867,26 @@ mod tests {
         let context = context();
         let context_bytes = encode_decision_context_v5(&context).unwrap();
         assert_measurement(
-            expected("daily-high-side-aware-broker-context"),
+            expected("daily-high-side-aware-broker-context-hundredths"),
             &context_bytes,
+        );
+
+        let legacy_context = legacy_context_from_current(&context).unwrap();
+        let legacy_context_bytes = encode_bounded(
+            LEGACY_DECISION_CONTEXT_V5_MAGIC,
+            &legacy_context,
+            MAX_DECISION_CONTEXT_V5_BYTES,
+        )
+        .unwrap();
+        assert_measurement(
+            expected("daily-high-side-aware-broker-context-legacy-whole"),
+            &legacy_context_bytes,
+        );
+
+        let fractional_bytes = encode_decision_context_v5(&fractional_context()).unwrap();
+        assert_measurement(
+            expected("daily-high-fractional-broker-context-hundredths"),
+            &fractional_bytes,
         );
 
         let result_bytes = encode_decision_result_v5(&awaiting_result()).unwrap();

@@ -21,6 +21,14 @@ A Broker outcome is deliverable only when its commitment is still present and un
 
 Trader persists the canonical bytes from `encode_decision_context_v5` and `decision_context_v5_sha256` with the commitment before command admission. Outcome delivery decodes those stored bytes, preserves their exact owner, Strategy, Broker, checkpoint, and decision-clock state, replaces only the typed trigger with `BrokerOutcomeV5` plus the bounded original trigger, and attaches the commitment. Validation reconstructs and hashes the originating context before the frozen kernel may replay it. Current or advanced owner/Broker state must never substitute for the stored snapshot. The outcome may carry a later Broker revision because its exact return is durable evidence; it does not replace the original Broker snapshot used by the replayed event.
 
+### Broker quantity codec compatibility
+
+New contexts are identified by the `SDCTXV5H` magic and encode Broker position quantities plus order original, filled, and remaining quantities explicitly in hundredths of one contract. The public fields are `quantity_hundredths`, `filled_quantity_hundredths`, and `remaining_quantity_hundredths`; their values are authoritative and are never inferred from value shape.
+
+`decode_decision_context_v5` also accepts durable legacy `SDCTXV5\0` contexts. Only that legacy magic interprets the old Broker-state quantity fields as whole contracts, and decoding checked-multiplies each position quantity and each order original, filled, and remaining quantity by 100 into the explicit `u64` hundredths representation. A legacy whole-contract value greater than `u64::MAX / 100` is not representable and the decoder fails closed with `InvalidContract`; it is never wrapped, saturated, rounded, or reinterpreted. Encoding always writes `SDCTXV5H`. Durable Broker-outcome validation accepts the exact legacy originating-context digest when the reconstructed quantities are exact whole-contract multiples, so a representable existing continuation remains bound to its historical bytes and identity.
+
+Strategy `PlaceOrderV5.quantity` and the existing frozen-kernel command/request and return quantities remain whole contracts in this milestone. The quantity scale is not changed silently.
+
 ## Durable kernel checkpoints
 
 `KernelCheckpointV5` is the bounded, versioned private-state boundary for frozen kernels. It binds:
@@ -58,13 +66,13 @@ Typed owner triggers are checked against the exact V4 component revision and sou
 
 - Strategy parameters are canonical sorted typed values; the adapter projects them losslessly into the frozen JSON initializer.
 - Market IDs, positions, orders, and cancel-all affected IDs use strict canonical ordering.
-- Position cost basis excludes fees; average entry price is exactly `cost_basis / quantity`.
+- Position cost basis excludes fees; average entry price is exactly `cost_basis * 100 / quantity_hundredths`.
 - YES and NO positions have distinct `(Market, side)` identities.
 - A Market buy may carry `market_price_cap_micros` as its authoritative maximum per-contract execution price. A present cap is positive and at most `1_000_000`; Market orders never carry a limit price. Limit orders carry a limit price and never a Market price cap. Market sells never carry a buy-side price cap.
 - The Market buy cap participates in canonical command encoding and the durable command commitment. A host must not execute any fill above a present cap; absence of the optional cap preserves the pre-extension Market-order contract.
-- Sell and terminal orders reserve no cash. Active limit-buy principal is exactly remaining quantity times limit price; fee reserve is separate and bounded by remaining notional.
+- Sell and terminal orders reserve no cash. Active limit-buy principal is exactly `remaining_quantity_hundredths * limit_price_micros / 100`; non-exact products are rejected rather than rounded. Fee reserve is separate and bounded by remaining notional.
 - Sleeve order reservations sum exactly to the V5 reserved-cash total, do not exceed the V4 account reservation, and combine with position cost and paid fees to equal the V4 Sleeve commitment.
-- Quantities fit the frozen kernel's signed 64-bit interface.
+- Broker-state hundredths values fit the frozen kernel's signed 64-bit interface. Strategy command/request quantities remain whole contracts.
 - All identifiers, text, metadata, diagnostics, evidence, collections, and private kernel checkpoints have explicit bounds.
 
-The stable measurements for the initial V5 corpus are in `conformance/v5/decision-transactions.json`. The corpus includes an unchanged V4 owner-projection measurement to guard backward compatibility.
+The stable measurements for the V5 corpus are in `conformance/v5/decision-transactions.json`. Corpus schema 2 retains the exact legacy whole-contract context measurement, adds version-distinguishable hundredths and fractional context measurements, and keeps the unchanged V4 owner-projection measurement. Decision-context digests change for new `SDCTXV5H` writes; Decision Result V5 and V4 fixture digests remain unchanged.
