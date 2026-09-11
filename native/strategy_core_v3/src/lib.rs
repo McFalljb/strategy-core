@@ -2,6 +2,9 @@
 
 pub mod decision_v4;
 pub mod decision_v5;
+#[cfg(feature = "kernel")]
+pub mod kernel_v5;
+pub mod supplied_v5;
 
 use std::fmt;
 

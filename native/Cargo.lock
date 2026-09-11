@@ -593,8 +593,10 @@ name = "strategy-core-v3"
 version = "0.1.0"
 dependencies = [
  "bincode",
+ "chrono",
  "serde_json",
  "sha2",
+ "strategy-core-kernel",
  "unicode-normalization",
 ]
 

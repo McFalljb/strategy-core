@@ -233,29 +233,57 @@ fn diagnostics_enforce_the_shared_utf8_byte_bound() {
     );
 }
 
-fn dependencies(manifest: &str, section: &str) -> BTreeSet<String> {
+fn dependency_lines<'a>(manifest: &'a str, section: &str) -> impl Iterator<Item = &'a str> {
     let body = manifest.split(&format!("[{section}]")).nth(1).unwrap();
     body.lines()
         .skip(1)
         .take_while(|line| !line.starts_with('['))
-        .filter_map(|line| {
-            let line = line.trim();
-            (!line.is_empty() && !line.starts_with('#'))
-                .then(|| line.split('=').next().unwrap().trim().to_owned())
-        })
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+}
+
+fn dependencies(manifest: &str, section: &str) -> BTreeSet<String> {
+    dependency_lines(manifest, section)
+        .map(|line| line.split('=').next().unwrap().trim().to_owned())
+        .collect()
+}
+
+/// Dependencies that only the named feature activates.
+fn optional_dependencies(manifest: &str, section: &str) -> BTreeSet<String> {
+    dependency_lines(manifest, section)
+        .filter(|line| line.contains("optional = true"))
+        .map(|line| line.split('=').next().unwrap().trim().to_owned())
         .collect()
 }
 
 #[test]
 fn crate_dependencies_match_exact_pure_allowlists() {
     let manifest = include_str!("../Cargo.toml");
+    let all = dependencies(manifest, "dependencies");
+    let optional = optional_dependencies(manifest, "dependencies");
+    // The pure wire crate stays dependency-minimal; the kernel projection feature is the only
+    // thing that may add dependencies, and every one of them must be optional.
     assert_eq!(
-        dependencies(manifest, "dependencies"),
+        all.difference(&optional).cloned().collect::<BTreeSet<_>>(),
         BTreeSet::from([
             "bincode".to_owned(),
             "sha2".to_owned(),
             "unicode-normalization".to_owned(),
         ])
+    );
+    assert_eq!(
+        optional,
+        BTreeSet::from([
+            "chrono".to_owned(),
+            "serde_json".to_owned(),
+            "strategy-core-kernel".to_owned(),
+        ])
+    );
+    assert_eq!(
+        dependency_lines(manifest, "features")
+            .map(|line| line.split('=').next().unwrap().trim().to_owned())
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from(["kernel".to_owned()])
     );
     assert_eq!(
         dependencies(manifest, "dev-dependencies"),

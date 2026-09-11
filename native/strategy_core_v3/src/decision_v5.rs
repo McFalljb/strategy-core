@@ -10,9 +10,13 @@ use bincode::{Decode, Encode};
 use sha2::{Digest, Sha256};
 
 use crate::decision_v4::{DecisionContextV4, DecisionV4Error, TriggerV4, decision_fence_v4_sha256};
+use crate::supplied_v5::{ExtremeKindV5, SuppliedEventV5, SuppliedInputsV5};
 
-/// Current V5 context encoding with explicit hundredths Broker-state quantities.
-pub const DECISION_CONTEXT_V5_MAGIC: &[u8; 8] = b"SDCTXV5H";
+/// Current V5 context encoding: explicit hundredths Broker-state quantities plus the supplied
+/// original-precision inputs block.
+pub const DECISION_CONTEXT_V5_MAGIC: &[u8; 8] = b"SDCTXV5S";
+/// Durable V5 context encoding with explicit hundredths quantities and no supplied inputs.
+pub const HUNDREDTHS_DECISION_CONTEXT_V5_MAGIC: &[u8; 8] = b"SDCTXV5H";
 /// Durable legacy V5 context encoding whose Broker-state quantities are whole contracts.
 pub const LEGACY_DECISION_CONTEXT_V5_MAGIC: &[u8; 8] = b"SDCTXV5\0";
 /// Current V5 result encoding with explicit hundredths command and outcome quantities.
@@ -403,6 +407,38 @@ pub enum OwnerTriggerV5 {
     },
     Bootstrap,
     Recovery,
+    // Variants below are appended so durable encodings of the variants above keep their indices.
+    NewLow {
+        station_id: String,
+        event_date: Option<String>,
+        temperature_milli_c: Option<i32>,
+        observed_at_unix_ms: i64,
+        component_revision: u64,
+        source_generation: u64,
+        source_sequence: u64,
+    },
+    WeatherEvent {
+        station_id: String,
+        episode_id: String,
+        state: String,
+        component_revision: u64,
+        source_generation: u64,
+        source_sequence: u64,
+    },
+}
+
+impl OwnerTriggerV5 {
+    /// True for the weather event families whose exact supplied event accompanies a delivery.
+    pub fn carries_supplied_event(&self) -> bool {
+        matches!(
+            self,
+            Self::Observation { .. }
+                | Self::StationReport { .. }
+                | Self::NewHigh { .. }
+                | Self::NewLow { .. }
+                | Self::WeatherEvent { .. }
+        )
+    }
 }
 
 #[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
@@ -538,6 +574,20 @@ pub struct DecisionContextV5 {
     pub continuation: Option<ContinuationCommitmentV5>,
     /// Authoritative wall clock supplied to the frozen kernel. No process-clock fallback is allowed.
     pub decision_time_unix_ms: i64,
+    /// Provider inputs at their supplied precision plus the exact typed originating event.
+    pub supplied: SuppliedInputsV5,
+}
+
+/// Frozen shape of the durable `SDCTXV5H` encoding: explicit hundredths, no supplied inputs.
+#[derive(Clone, Debug, Encode, Decode)]
+struct HundredthsDecisionContextV5 {
+    owner_state: DecisionContextV4,
+    strategy: StrategyScopeV5,
+    broker: BrokerDetailV5,
+    trigger: TriggerV5,
+    kernel_checkpoint: Option<KernelCheckpointV5>,
+    continuation: Option<ContinuationCommitmentV5>,
+    decision_time_unix_ms: i64,
 }
 
 #[derive(Clone, Debug, Encode, Decode)]
@@ -697,7 +747,25 @@ impl DecisionContextV5 {
             validate_kernel_checkpoint(&self.strategy, checkpoint)?;
         }
         validate_trigger(self)?;
+        self.supplied.validate()?;
+        validate_supplied(self)?;
         Ok(())
+    }
+
+    /// The owner trigger that originated this transaction: the trigger itself, or the stored
+    /// originating trigger of a Broker outcome replay.
+    pub fn originating_owner_trigger(&self) -> Option<&OwnerTriggerV5> {
+        match &self.trigger {
+            TriggerV5::Owner(trigger) => Some(trigger),
+            TriggerV5::BrokerState { .. } => None,
+            TriggerV5::BrokerOutcome {
+                originating_trigger,
+                ..
+            } => match originating_trigger.as_ref() {
+                OriginatingTriggerV5::Owner(trigger) => Some(trigger),
+                OriginatingTriggerV5::BrokerState { .. } => None,
+            },
+        }
     }
 }
 
@@ -922,6 +990,13 @@ pub fn decode_decision_context_v5(bytes: &[u8]) -> Result<DecisionContextV5, Dec
             bytes,
             MAX_DECISION_CONTEXT_V5_BYTES,
         )?
+    } else if bytes.starts_with(HUNDREDTHS_DECISION_CONTEXT_V5_MAGIC) {
+        let hundredths: HundredthsDecisionContextV5 = decode_bounded(
+            HUNDREDTHS_DECISION_CONTEXT_V5_MAGIC,
+            bytes,
+            MAX_DECISION_CONTEXT_V5_BYTES,
+        )?;
+        convert_hundredths_context(hundredths)
     } else if bytes.starts_with(LEGACY_DECISION_CONTEXT_V5_MAGIC) {
         let legacy: LegacyDecisionContextV5 = decode_bounded(
             LEGACY_DECISION_CONTEXT_V5_MAGIC,
@@ -934,6 +1009,49 @@ pub fn decode_decision_context_v5(bytes: &[u8]) -> Result<DecisionContextV5, Dec
     };
     context.validate()?;
     Ok(context)
+}
+
+fn convert_hundredths_context(context: HundredthsDecisionContextV5) -> DecisionContextV5 {
+    DecisionContextV5 {
+        owner_state: context.owner_state,
+        strategy: context.strategy,
+        broker: context.broker,
+        trigger: context.trigger,
+        kernel_checkpoint: context.kernel_checkpoint,
+        continuation: context.continuation,
+        decision_time_unix_ms: context.decision_time_unix_ms,
+        supplied: SuppliedInputsV5::default(),
+    }
+}
+
+/// The durable hundredths shape of a context. Only a context without supplied inputs has one.
+fn hundredths_context_from_current(
+    context: &DecisionContextV5,
+) -> Result<HundredthsDecisionContextV5, DecisionV5Error> {
+    if !context.supplied.is_absent() {
+        return Err(DecisionV5Error::InvalidContract);
+    }
+    Ok(HundredthsDecisionContextV5 {
+        owner_state: context.owner_state.clone(),
+        strategy: context.strategy.clone(),
+        broker: context.broker.clone(),
+        trigger: context.trigger.clone(),
+        kernel_checkpoint: context.kernel_checkpoint.clone(),
+        continuation: context.continuation.clone(),
+        decision_time_unix_ms: context.decision_time_unix_ms,
+    })
+}
+
+fn hundredths_decision_context_v5_sha256(
+    context: &DecisionContextV5,
+) -> Result<[u8; 32], DecisionV5Error> {
+    let hundredths = hundredths_context_from_current(context)?;
+    let encoded = encode_bounded(
+        HUNDREDTHS_DECISION_CONTEXT_V5_MAGIC,
+        &hundredths,
+        MAX_DECISION_CONTEXT_V5_BYTES,
+    )?;
+    Ok(Sha256::digest(encoded).into())
 }
 
 fn convert_legacy_context(
@@ -999,6 +1117,7 @@ fn convert_legacy_context(
         kernel_checkpoint: legacy.kernel_checkpoint,
         continuation: legacy.continuation,
         decision_time_unix_ms: legacy.decision_time_unix_ms,
+        supplied: SuppliedInputsV5::default(),
     })
 }
 
@@ -1299,6 +1418,9 @@ fn legacy_command_from_current(
 fn legacy_context_from_current(
     context: &DecisionContextV5,
 ) -> Result<LegacyDecisionContextV5, DecisionV5Error> {
+    if !context.supplied.is_absent() {
+        return Err(DecisionV5Error::InvalidContract);
+    }
     let whole_contracts = hundredths_to_whole_contracts;
     let positions = context
         .broker
@@ -1705,6 +1827,11 @@ fn originating_context_digest_matches(
     if decision_context_v5_sha256(context)? == expected {
         return Ok(true);
     }
+    match hundredths_decision_context_v5_sha256(context) {
+        Ok(digest) if digest == expected => return Ok(true),
+        Ok(_) | Err(DecisionV5Error::InvalidContract) => {}
+        Err(error) => return Err(error),
+    }
     match legacy_decision_context_v5_sha256(context) {
         Ok(digest) => Ok(digest == expected),
         Err(DecisionV5Error::InvalidContract) => Ok(false),
@@ -1835,6 +1962,61 @@ fn validate_owner_trigger(
                 && high.and_then(|value| value.observed_at_unix_ms) == Some(*observed_at_unix_ms)
         }),
         (
+            OwnerTriggerV5::NewLow {
+                station_id,
+                event_date,
+                temperature_milli_c,
+                observed_at_unix_ms,
+                component_revision,
+                source_generation,
+                source_sequence,
+            },
+            TriggerV4::Weather {
+                station_id: owner_station,
+                source_generation: owner_generation,
+                source_sequence: owner_sequence,
+            },
+        ) => context.owner_state.stations.iter().any(|station| {
+            let low = station.extrema.low.as_ref();
+            station_id == owner_station
+                && source_generation == owner_generation
+                && source_sequence == owner_sequence
+                && station.identity.station_id == *station_id
+                && station.extrema_meta.revision == *component_revision
+                && event_date
+                    .as_ref()
+                    .is_none_or(|date| date == &station.climate_event_date)
+                && low.map(|value| value.value_milli_c) == *temperature_milli_c
+                && low.and_then(|value| value.observed_at_unix_ms) == Some(*observed_at_unix_ms)
+        }),
+        (
+            OwnerTriggerV5::WeatherEvent {
+                station_id,
+                episode_id,
+                state,
+                component_revision,
+                source_generation,
+                source_sequence,
+            },
+            TriggerV4::Weather {
+                station_id: owner_station,
+                source_generation: owner_generation,
+                source_sequence: owner_sequence,
+            },
+        ) => context.owner_state.stations.iter().any(|station| {
+            let present = station
+                .weather_events
+                .iter()
+                .any(|event| event.event_id == *episode_id);
+            station_id == owner_station
+                && source_generation == owner_generation
+                && source_sequence == owner_sequence
+                && station.identity.station_id == *station_id
+                && station.weather_events_meta.revision == *component_revision
+                && !episode_id.is_empty()
+                && present == (state != "ended")
+        }),
+        (
             OwnerTriggerV5::StationReport {
                 station_id,
                 report_id,
@@ -1920,6 +2102,82 @@ fn validate_owner_trigger(
         _ => false,
     };
     if valid {
+        Ok(())
+    } else {
+        Err(DecisionV5Error::InvalidContract)
+    }
+}
+
+/// Binds a present supplied block to the owner projection and the originating trigger.
+fn validate_supplied(context: &DecisionContextV5) -> Result<(), DecisionV5Error> {
+    let supplied = &context.supplied;
+    if supplied.is_absent() {
+        return Ok(());
+    }
+    let owner_stations = context
+        .owner_state
+        .stations
+        .iter()
+        .map(|station| station.identity.station_id.as_str())
+        .collect::<BTreeSet<_>>();
+    let supplied_stations = supplied
+        .stations
+        .iter()
+        .map(|station| station.station_id.as_str())
+        .collect::<BTreeSet<_>>();
+    if owner_stations != supplied_stations {
+        return Err(DecisionV5Error::InvalidContract);
+    }
+    let trigger = context.originating_owner_trigger();
+    let expects_event = trigger.is_some_and(OwnerTriggerV5::carries_supplied_event);
+    let event = supplied.originating_event.as_ref();
+    if expects_event != event.is_some() {
+        return Err(DecisionV5Error::InvalidContract);
+    }
+    let (Some(trigger), Some(event)) = (trigger, event) else {
+        return Ok(());
+    };
+    let bound = match (trigger, event) {
+        (OwnerTriggerV5::Observation { station_id, .. }, SuppliedEventV5::Observation(event)) => {
+            event.station_id == *station_id
+        }
+        (
+            OwnerTriggerV5::StationReport {
+                station_id,
+                report_id,
+                report_type,
+                report_revision,
+                ..
+            },
+            SuppliedEventV5::Report(event),
+        ) => {
+            event.station_id == *station_id
+                && event.report_id == *report_id
+                && event.report_type == *report_type
+                && event.report_revision.unwrap_or(0) == *report_revision
+        }
+        (OwnerTriggerV5::NewHigh { station_id, .. }, SuppliedEventV5::Extreme(event)) => {
+            event.station_id == *station_id && event.kind == ExtremeKindV5::High
+        }
+        (OwnerTriggerV5::NewLow { station_id, .. }, SuppliedEventV5::Extreme(event)) => {
+            event.station_id == *station_id && event.kind == ExtremeKindV5::Low
+        }
+        (
+            OwnerTriggerV5::WeatherEvent {
+                station_id,
+                episode_id,
+                state,
+                ..
+            },
+            SuppliedEventV5::WeatherEvent(event),
+        ) => {
+            event.station_id == *station_id
+                && event.episode_id == *episode_id
+                && event.state == *state
+        }
+        _ => false,
+    };
+    if bound {
         Ok(())
     } else {
         Err(DecisionV5Error::InvalidContract)
@@ -2605,6 +2863,7 @@ mod tests {
                 }],
             },
             decision_time_unix_ms: 1_788_062_400_000,
+            supplied: SuppliedInputsV5::default(),
         }
     }
 
@@ -3429,16 +3688,484 @@ mod tests {
         );
     }
 
+    fn decimal(text: &str) -> Option<crate::supplied_v5::DecimalV5> {
+        Some(crate::supplied_v5::DecimalV5::parse(text).unwrap())
+    }
+
+    fn supplied_envelope(event_id: &str, sequence: u64) -> crate::supplied_v5::EventEnvelopeV5 {
+        crate::supplied_v5::EventEnvelopeV5 {
+            event_id: event_id.to_owned(),
+            sequence,
+            city_sequence: Some(9),
+            slug: Some("sea".to_owned()),
+            emitted_at_unix_ns: 1_788_062_345_123_456_789,
+            event_key: Some("KSEA|metar|2026-08-30T20:05:00Z".to_owned()),
+            source_timestamp_unix_ns: Some(1_788_062_340_000_000_000),
+            wmo_emit_time_unix_ns: None,
+            producer_received_at_unix_ns: Some(1_788_062_344_500_000_000),
+            live_published_at_unix_ns: Some(1_788_062_344_900_000_000),
+            persistence_status: Some("committed".to_owned()),
+            producer_sequence: Some(1_001),
+            received_at_unix_ns: 1_788_062_345_200_000_000,
+        }
+    }
+
+    fn supplied_observation() -> crate::supplied_v5::SuppliedObservationV5 {
+        crate::supplied_v5::SuppliedObservationV5 {
+            envelope: Some(supplied_envelope("evt-obs-44", 44)),
+            source: "minutetemp.websocket.v1".to_owned(),
+            station_id: "KSEA".to_owned(),
+            observed_at_unix_ns: 1_788_062_340_000_000_000,
+            lag_seconds: Some(45),
+            preliminary: false,
+            temperature_c: decimal("22.77777777777778"),
+            temperature_f: decimal("73"),
+            temp_min_c: decimal("22.5"),
+            temp_max_c: decimal("23.5"),
+            temp_min_f: decimal("72.5"),
+            temp_max_f: decimal("74.3"),
+            dewpoint: decimal("12.8"),
+            relative_humidity: decimal("53.4"),
+            wind_speed: decimal("4.1"),
+            wind_direction: decimal("230"),
+            text_description: Some("Partly Cloudy".to_owned()),
+            temperature_day_mode: Some("nws_climate_day".to_owned()),
+            temperature_day_date: Some("2026-08-30".to_owned()),
+            ..Default::default()
+        }
+    }
+
+    fn supplied_report() -> crate::supplied_v5::SuppliedReportV5 {
+        crate::supplied_v5::SuppliedReportV5 {
+            envelope: Some(supplied_envelope("evt-dsm-40", 40)),
+            source: "minutetemp.websocket.v1".to_owned(),
+            station_id: "KSEA".to_owned(),
+            report_id: "report.dsm.1".to_owned(),
+            report_fingerprint: Some("fp-1".to_owned()),
+            report_revision: Some(2),
+            report_updated_at_unix_ns: Some(1_788_062_300_000_000_000),
+            report_type: "dsm".to_owned(),
+            report_date: "2026-08-30".to_owned(),
+            issuance_time_unix_ns: Some(1_788_062_280_000_000_000),
+            fetched_at_unix_ns: Some(1_788_062_290_000_000_000),
+            source_url: Some("https://weather.example/dsm".to_owned()),
+            max_temp_f: decimal("80"),
+            max_temp_c: decimal("26.7"),
+            max_temp_time_unix_ns: Some(1_788_051_000_000_000_000),
+            min_temp_f: decimal("58"),
+            min_temp_c: decimal("14.4"),
+            min_temp_time_unix_ns: Some(1_788_020_000_000_000_000),
+            temp_f: None,
+            temp_c: None,
+            provider: Some("dsm".to_owned()),
+        }
+    }
+
+    fn supplied_station() -> crate::supplied_v5::SuppliedStationV5 {
+        use crate::supplied_v5::*;
+        SuppliedStationV5 {
+            station_id: "KSEA".to_owned(),
+            observation: Some(supplied_observation()),
+            daily_extremes: Some(SuppliedDailyExtremesV5 {
+                source: "minutetemp.rest.latest".to_owned(),
+                received_at_unix_ns: 1_788_000_000_000_000_000,
+                daily_high_f: decimal("80"),
+                daily_low_f: decimal("58"),
+                daily_high_c: decimal("26.7"),
+                daily_low_c: decimal("14.4"),
+                asos_daily_high_f: decimal("79.5"),
+                asos_daily_low_f: decimal("58.1"),
+                temperature_day_mode: Some("nws_climate_day".to_owned()),
+                temperature_day_date: Some("2026-08-30".to_owned()),
+                temperature_unit: Some("F".to_owned()),
+                uses_nws_climate_day: Some(true),
+                ..Default::default()
+            }),
+            reports: vec![supplied_report()],
+            extreme_high: Some(SuppliedExtremeV5 {
+                envelope: Some(supplied_envelope("evt-high-41", 41)),
+                source: "minutetemp.websocket.v1".to_owned(),
+                kind: ExtremeKindV5::High,
+                station_id: "KSEA".to_owned(),
+                value_f: decimal("80"),
+                value_c: decimal("26.67"),
+                prev_value_f: decimal("79.5"),
+                observed_at_unix_ns: Some(1_788_051_000_000_000_000),
+                temperature_day_mode: Some("nws_climate_day".to_owned()),
+                temperature_day_date: Some("2026-08-30".to_owned()),
+                is_from_report: true,
+                report_type: Some("dsm".to_owned()),
+                source_report_id: Some("report.dsm.1".to_owned()),
+            }),
+            extreme_low: None,
+            weather_events: vec![SuppliedWeatherEventV5 {
+                envelope: Some(supplied_envelope("evt-wx-42", 42)),
+                source: "minutetemp.websocket.v1".to_owned(),
+                station_id: "KSEA".to_owned(),
+                episode_id: "01a03d6a-f462-7153-9133-dbd2a26af5b4".to_owned(),
+                event_type: "thunderstorm".to_owned(),
+                tier: "tier1".to_owned(),
+                state: "active".to_owned(),
+                name: "Thunderstorm".to_owned(),
+                badge: Some("TS".to_owned()),
+                detail: Some("TS in vicinity".to_owned()),
+                summary: Some("Thunderstorm near KSEA".to_owned()),
+                started_at_unix_ns: Some(1_788_060_000_000_000_000),
+                last_confirmed_at_unix_ns: Some(1_788_062_000_000_000_000),
+                ended_at_unix_ns: None,
+                source_snapshot: Some(SuppliedWeatherEventSourceV5 {
+                    metar_type: Some("METAR".to_owned()),
+                    wx_string: Some("VCTS".to_owned()),
+                    wind_speed_kt: decimal("12"),
+                    visibility_mi: decimal("6.21"),
+                    ..Default::default()
+                }),
+            }],
+            forecast: Some(SuppliedForecastV5 {
+                source: "minutetemp.rest.forecast".to_owned(),
+                received_at_unix_ns: 1_788_000_000_000_000_000,
+                advertised_versions: vec![(
+                    "ncep_hrrr_conus".to_owned(),
+                    "2026-08-30T18:00:00Z".to_owned(),
+                )],
+                models: vec![SuppliedForecastModelV5 {
+                    model_id: "ncep_hrrr_conus".to_owned(),
+                    run_id: Some("run-1".to_owned()),
+                    fetched_at: Some("2026-08-30T18:00:00Z".to_owned()),
+                    fetched_at_unix_ns: Some(1_788_055_200_000_000_000),
+                    timezone: Some("America/Los_Angeles".to_owned()),
+                    utc_offset_seconds: Some(-25_200),
+                    hourly: vec![
+                        SuppliedForecastPointV5 {
+                            time: "2026-08-30T19:00:00Z".to_owned(),
+                            time_unix_ns: 1_788_058_800_000_000_000,
+                            temperature_2m_f: decimal("78.6"),
+                            temperature_2m_c: decimal("25.88888888888889"),
+                            apparent_temperature_f: decimal("77.9"),
+                            ..Default::default()
+                        },
+                        SuppliedForecastPointV5 {
+                            time: "2026-08-30T20:00:00Z".to_owned(),
+                            time_unix_ns: 1_788_062_400_000_000_000,
+                            temperature_2m_f: decimal("80.1"),
+                            temperature_2m_c: decimal("26.72222222222222"),
+                            ..Default::default()
+                        },
+                    ],
+                }],
+            }),
+            oracle_tables: vec![SuppliedOracleTableV5 {
+                source: "minutetemp.rest.oracle".to_owned(),
+                received_at_unix_ns: 1_788_000_000_000_000_000,
+                station_id: "KSEA".to_owned(),
+                range_start: "2026-08-23".to_owned(),
+                range_end: "2026-08-29".to_owned(),
+                days_requested: Some(7),
+                all_time: None,
+                score_mode: Some("day_of".to_owned()),
+                rank_by: Some("high".to_owned()),
+                notification_modes: vec!["day_of".to_owned()],
+                notification_updated_at_unix_ns: Some(1_788_000_000_000_000_000),
+                scores: vec![SuppliedOracleScoreV5 {
+                    model_id: "ncep_hrrr_conus".to_owned(),
+                    model_name: "HRRR CONUS".to_owned(),
+                    is_public: Some(false),
+                    high_mae: decimal("1.4"),
+                    low_mae: decimal("2.1"),
+                    high_bias: decimal("0.8"),
+                    low_bias: decimal("-0.6"),
+                    combined_mae: decimal("1.75"),
+                    day_count: Some(7),
+                }],
+            }],
+        }
+    }
+
+    fn supplied_observation_context() -> DecisionContextV5 {
+        use crate::supplied_v5::*;
+        let mut context = context();
+        context.owner_state.trigger = TriggerV4::Weather {
+            station_id: "KSEA".to_owned(),
+            source_generation: 3,
+            source_sequence: 44,
+        };
+        let station = &mut context.owner_state.stations[0];
+        station.observation_meta.revision = 7;
+        station.observation.observed_at_unix_ms = 1_788_062_340_000;
+        station.observation.temperature_milli_c = Some(22_778);
+        station.weather_events_meta.revision = 5;
+        station
+            .weather_events
+            .push(crate::decision_v4::WeatherEventV4 {
+                event_id: "01a03d6a-f462-7153-9133-dbd2a26af5b4".to_owned(),
+                event_type: "thunderstorm".to_owned(),
+                state: "active".to_owned(),
+                ..Default::default()
+            });
+        context.trigger = TriggerV5::Owner(OwnerTriggerV5::Observation {
+            station_id: "KSEA".to_owned(),
+            observed_at_unix_ms: 1_788_062_340_000,
+            component_revision: 7,
+            source_generation: 3,
+            source_sequence: 44,
+        });
+        context.supplied = SuppliedInputsV5 {
+            contract_version: SUPPLIED_INPUTS_CONTRACT_VERSION.to_owned(),
+            stations: vec![supplied_station()],
+            originating_event: Some(SuppliedEventV5::Observation(supplied_observation())),
+        };
+        context
+    }
+
+    fn supplied_ended_episode_context() -> DecisionContextV5 {
+        use crate::supplied_v5::*;
+        let mut context = supplied_observation_context();
+        context.owner_state.trigger = TriggerV4::Weather {
+            station_id: "KSEA".to_owned(),
+            source_generation: 3,
+            source_sequence: 45,
+        };
+        let station = &mut context.owner_state.stations[0];
+        station.weather_events.clear();
+        station.weather_events_meta.revision = 6;
+        let episode = "01a03d6a-f462-7153-9133-dbd2a26af5b4".to_owned();
+        context.trigger = TriggerV5::Owner(OwnerTriggerV5::WeatherEvent {
+            station_id: "KSEA".to_owned(),
+            episode_id: episode.clone(),
+            state: "ended".to_owned(),
+            component_revision: 6,
+            source_generation: 3,
+            source_sequence: 45,
+        });
+        let mut ended = supplied_station().weather_events.remove(0);
+        ended.envelope = Some(supplied_envelope("evt-wx-45", 45));
+        ended.state = "ended".to_owned();
+        ended.ended_at_unix_ns = Some(1_788_062_400_000_000_000);
+        context.supplied.stations[0].weather_events.clear();
+        context.supplied.originating_event = Some(SuppliedEventV5::WeatherEvent(ended));
+        context
+    }
+
+    /// A replay whose commitment was persisted by the hundredths era: its originating digest
+    /// binds the `SDCTXV5H` bytes of the originating context.
+    fn hundredths_era_replay_context() -> DecisionContextV5 {
+        let mut replay = exact_replay_context();
+        let originating = match &replay.trigger {
+            TriggerV5::BrokerOutcome {
+                originating_trigger,
+                ..
+            } => originating_context_v5(&replay, originating_trigger),
+            _ => unreachable!(),
+        };
+        replay
+            .continuation
+            .as_mut()
+            .unwrap()
+            .originating_context_sha256 =
+            hundredths_decision_context_v5_sha256(&originating).unwrap();
+        replay.validate().unwrap();
+        replay
+    }
+
+    fn encode_hundredths_context_for_test(context: &DecisionContextV5) -> Vec<u8> {
+        encode_bounded(
+            HUNDREDTHS_DECISION_CONTEXT_V5_MAGIC,
+            &hundredths_context_from_current(context).unwrap(),
+            MAX_DECISION_CONTEXT_V5_BYTES,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn v5_supplied_inputs_round_trip_with_the_supplied_magic() {
+        for context in [
+            supplied_observation_context(),
+            supplied_ended_episode_context(),
+        ] {
+            context.validate().unwrap();
+            let encoded = encode_decision_context_v5(&context).unwrap();
+            assert!(encoded.starts_with(DECISION_CONTEXT_V5_MAGIC));
+            let decoded = decode_decision_context_v5(&encoded).unwrap();
+            assert_eq!(decoded, context);
+            assert_eq!(
+                decoded.supplied.stations[0]
+                    .observation
+                    .as_ref()
+                    .unwrap()
+                    .temperature_c
+                    .unwrap()
+                    .to_string(),
+                "22.77777777777778"
+            );
+            assert_eq!(
+                hundredths_context_from_current(&context).err(),
+                Some(DecisionV5Error::InvalidContract),
+                "a context with supplied inputs has no hundredths shape"
+            );
+            assert_eq!(
+                legacy_context_from_current(&context).err(),
+                Some(DecisionV5Error::InvalidContract)
+            );
+        }
+    }
+
+    #[test]
+    fn v5_decodes_durable_hundredths_contexts_and_replays_their_digests() {
+        let context = context();
+        let bytes = encode_hundredths_context_for_test(&context);
+        assert!(bytes.starts_with(HUNDREDTHS_DECISION_CONTEXT_V5_MAGIC));
+        let decoded = decode_decision_context_v5(&bytes).unwrap();
+        assert_eq!(decoded, context);
+        assert!(decoded.supplied.is_absent());
+        assert_ne!(
+            encode_decision_context_v5(&decoded).unwrap(),
+            bytes,
+            "re-encoding uses the current magic; stored bytes are never rewritten"
+        );
+
+        // A commitment persisted by the hundredths era binds the hundredths digest.
+        let mut replay = exact_replay_context();
+        let originating = match &replay.trigger {
+            TriggerV5::BrokerOutcome {
+                originating_trigger,
+                ..
+            } => originating_context_v5(&replay, originating_trigger),
+            _ => unreachable!(),
+        };
+        replay
+            .continuation
+            .as_mut()
+            .unwrap()
+            .originating_context_sha256 =
+            hundredths_decision_context_v5_sha256(&originating).unwrap();
+        replay.validate().unwrap();
+        let expected: [u8; 32] =
+            Sha256::digest(encode_hundredths_context_for_test(&originating)).into();
+        assert_eq!(
+            hundredths_decision_context_v5_sha256(&originating).unwrap(),
+            expected
+        );
+    }
+
+    #[test]
+    fn v5_new_low_and_weather_event_triggers_bind_the_owner_projection() {
+        let mut context = context();
+        context.owner_state.trigger = TriggerV4::Weather {
+            station_id: "KSEA".to_owned(),
+            source_generation: 3,
+            source_sequence: 50,
+        };
+        let station = &mut context.owner_state.stations[0];
+        station.extrema_meta.revision = 4;
+        station.extrema.low = Some(crate::decision_v4::ExtremeV4 {
+            value_milli_c: 14_444,
+            observed_at_unix_ms: Some(1_788_020_000_000),
+            ..Default::default()
+        });
+        context.trigger = TriggerV5::Owner(OwnerTriggerV5::NewLow {
+            station_id: "KSEA".to_owned(),
+            event_date: Some("2026-08-30".to_owned()),
+            temperature_milli_c: Some(14_444),
+            observed_at_unix_ms: 1_788_020_000_000,
+            component_revision: 4,
+            source_generation: 3,
+            source_sequence: 50,
+        });
+        context.validate().unwrap();
+        let mut changed = context.clone();
+        changed.trigger = TriggerV5::Owner(OwnerTriggerV5::NewLow {
+            station_id: "KSEA".to_owned(),
+            event_date: None,
+            temperature_milli_c: Some(14_400),
+            observed_at_unix_ms: 1_788_020_000_000,
+            component_revision: 4,
+            source_generation: 3,
+            source_sequence: 50,
+        });
+        assert_eq!(changed.validate(), Err(DecisionV5Error::InvalidContract));
+
+        let ended = supplied_ended_episode_context();
+        ended.validate().unwrap();
+        let mut resurrected = ended.clone();
+        resurrected.owner_state.stations[0].weather_events.push(
+            crate::decision_v4::WeatherEventV4 {
+                event_id: "01a03d6a-f462-7153-9133-dbd2a26af5b4".to_owned(),
+                state: "active".to_owned(),
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            resurrected.validate(),
+            Err(DecisionV5Error::InvalidContract),
+            "an ended episode must not remain in current state"
+        );
+    }
+
+    #[test]
+    fn v5_supplied_inputs_must_bind_owner_stations_and_the_originating_trigger() {
+        use crate::supplied_v5::*;
+        let mut unbound_station = supplied_observation_context();
+        unbound_station.supplied.stations[0].station_id = "KDEN".to_owned();
+        assert_eq!(
+            unbound_station.validate(),
+            Err(DecisionV5Error::InvalidContract)
+        );
+
+        let mut kind_mismatch = supplied_observation_context();
+        kind_mismatch.supplied.originating_event = Some(SuppliedEventV5::Report(supplied_report()));
+        assert_eq!(
+            kind_mismatch.validate(),
+            Err(DecisionV5Error::InvalidContract)
+        );
+
+        let mut missing_event = supplied_observation_context();
+        missing_event.supplied.originating_event = None;
+        assert_eq!(
+            missing_event.validate(),
+            Err(DecisionV5Error::InvalidContract)
+        );
+
+        let mut noncanonical = supplied_observation_context();
+        noncanonical.supplied.stations[0]
+            .observation
+            .as_mut()
+            .unwrap()
+            .temperature_f = Some(DecimalV5 {
+            coefficient: 730,
+            scale: 1,
+        });
+        assert_eq!(
+            noncanonical.validate(),
+            Err(DecisionV5Error::InvalidContract)
+        );
+
+        let mut ended_in_state = supplied_observation_context();
+        let event = &mut ended_in_state.supplied.stations[0].weather_events[0];
+        event.state = "ended".to_owned();
+        event.ended_at_unix_ns = Some(1);
+        assert_eq!(
+            ended_in_state.validate(),
+            Err(DecisionV5Error::InvalidContract)
+        );
+
+        // An event-carrying trigger that recovers from a hundredths context without a supplied
+        // block stays valid: absence is the documented pre-supplied form.
+        let mut absent = supplied_observation_context();
+        absent.supplied = SuppliedInputsV5::default();
+        absent.validate().unwrap();
+    }
+
     #[test]
     fn v5_corpus_measurements_and_v4_fixture_remain_stable() {
         let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../conformance/v5/decision-transactions.json");
         let corpus: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-        assert_eq!(corpus["schema"], "strategy-core-decision-v5-corpus/3");
+        assert_eq!(corpus["schema"], "strategy-core-decision-v5-corpus/4");
 
         let vectors = corpus["valid"].as_array().unwrap();
-        assert_eq!(vectors.len(), 8);
+        let measured = corpus_measurements();
+        assert_eq!(vectors.len(), measured.len());
         let valid_inventory = vectors
             .iter()
             .map(|vector| {
@@ -3450,41 +4177,14 @@ mod tests {
             .collect::<BTreeSet<_>>();
         assert_eq!(
             valid_inventory,
-            BTreeSet::from([
-                (
-                    "daily-high-side-aware-broker-context-hundredths",
-                    "decision_context_v5_hundredths",
-                ),
-                (
-                    "daily-high-side-aware-broker-context-legacy-whole",
-                    "decision_context_v5_legacy_whole",
-                ),
-                (
-                    "daily-high-fractional-broker-context-hundredths",
-                    "decision_context_v5_hundredths",
-                ),
-                (
-                    "daily-high-fenced-place-continuation-legacy-whole",
-                    "decision_result_v5_legacy_whole",
-                ),
-                (
-                    "daily-high-fenced-place-continuation",
-                    "decision_result_v5_hundredths",
-                ),
-                (
-                    "daily-high-capped-market-place-continuation",
-                    "decision_result_v5_hundredths",
-                ),
-                (
-                    "daily-high-exact-origin-broker-outcome-replay",
-                    "decision_context_v5_hundredths",
-                ),
-                ("unchanged-v4-owner-projection", "decision_context_v4"),
-            ])
+            measured
+                .iter()
+                .map(|(id, kind, _)| (*id, *kind))
+                .collect::<BTreeSet<_>>()
         );
 
         let invalid = corpus["invalid"].as_array().unwrap();
-        assert_eq!(invalid.len(), 18);
+        assert_eq!(invalid.len(), 23);
         let invalid_inventory = invalid
             .iter()
             .map(|vector| {
@@ -3524,70 +4224,114 @@ mod tests {
                     "legacy-result-whole-quantity-unrepresentable-as-u64-hundredths",
                     "invalid_contract",
                 ),
+                ("supplied-stations-not-bound-to-owner", "invalid_contract"),
+                ("supplied-event-kind-mismatch", "invalid_contract"),
+                ("supplied-noncanonical-decimal", "invalid_contract"),
+                (
+                    "supplied-ended-episode-in-current-state",
+                    "invalid_contract"
+                ),
+                ("new-low-trigger-not-bound-to-extrema", "invalid_contract"),
             ])
         );
 
-        let expected = |id: &str| vectors.iter().find(|vector| vector["id"] == id).unwrap();
+        for (id, _, bytes) in &measured {
+            let vector = vectors.iter().find(|vector| vector["id"] == *id).unwrap();
+            assert_measurement(vector, bytes);
+        }
+    }
 
+    /// Every corpus vector's exact bytes. Durable earlier encodings are measured through their
+    /// frozen shapes so recorded digests stay verifiable after the current encoding moves on.
+    fn corpus_measurements() -> Vec<(&'static str, &'static str, Vec<u8>)> {
         let context = context();
-        let context_bytes = encode_decision_context_v5(&context).unwrap();
-        assert_measurement(
-            expected("daily-high-side-aware-broker-context-hundredths"),
-            &context_bytes,
-        );
-
-        let legacy_context = legacy_context_from_current(&context).unwrap();
-        let legacy_context_bytes = encode_bounded(
-            LEGACY_DECISION_CONTEXT_V5_MAGIC,
-            &legacy_context,
-            MAX_DECISION_CONTEXT_V5_BYTES,
-        )
-        .unwrap();
-        assert_measurement(
-            expected("daily-high-side-aware-broker-context-legacy-whole"),
-            &legacy_context_bytes,
-        );
-
-        let fractional_bytes = encode_decision_context_v5(&fractional_context()).unwrap();
-        assert_measurement(
-            expected("daily-high-fractional-broker-context-hundredths"),
-            &fractional_bytes,
-        );
-
+        let mut measured = Vec::new();
+        measured.push((
+            "daily-high-side-aware-broker-context-hundredths",
+            "decision_context_v5_hundredths",
+            encode_hundredths_context_for_test(&context),
+        ));
+        measured.push((
+            "daily-high-side-aware-broker-context-legacy-whole",
+            "decision_context_v5_legacy_whole",
+            encode_legacy_context_for_test(&legacy_context_from_current(&context).unwrap()),
+        ));
+        measured.push((
+            "daily-high-fractional-broker-context-hundredths",
+            "decision_context_v5_hundredths",
+            encode_hundredths_context_for_test(&fractional_context()),
+        ));
         let result = awaiting_result();
-        let legacy_result = legacy_result_from_current(&result).unwrap();
-        let legacy_result_bytes = encode_bounded(
-            LEGACY_DECISION_RESULT_V5_MAGIC,
-            &legacy_result,
-            MAX_DECISION_RESULT_V5_BYTES,
-        )
-        .unwrap();
-        assert_measurement(
-            expected("daily-high-fenced-place-continuation-legacy-whole"),
-            &legacy_result_bytes,
-        );
+        measured.push((
+            "daily-high-fenced-place-continuation-legacy-whole",
+            "decision_result_v5_legacy_whole",
+            encode_bounded(
+                LEGACY_DECISION_RESULT_V5_MAGIC,
+                &legacy_result_from_current(&result).unwrap(),
+                MAX_DECISION_RESULT_V5_BYTES,
+            )
+            .unwrap(),
+        ));
+        measured.push((
+            "daily-high-fenced-place-continuation",
+            "decision_result_v5_hundredths",
+            encode_decision_result_v5(&result).unwrap(),
+        ));
+        measured.push((
+            "daily-high-capped-market-place-continuation",
+            "decision_result_v5_hundredths",
+            encode_decision_result_v5(&capped_market_result()).unwrap(),
+        ));
+        measured.push((
+            "daily-high-exact-origin-broker-outcome-replay",
+            "decision_context_v5_hundredths",
+            encode_hundredths_context_for_test(&hundredths_era_replay_context()),
+        ));
+        measured.push((
+            "unchanged-v4-owner-projection",
+            "decision_context_v4",
+            crate::decision_v4::encode_decision_context_v4(&context.owner_state).unwrap(),
+        ));
+        measured.push((
+            "daily-high-side-aware-broker-context-supplied-absent",
+            "decision_context_v5_supplied",
+            encode_decision_context_v5(&context).unwrap(),
+        ));
+        measured.push((
+            "daily-high-exact-origin-broker-outcome-replay-supplied-absent",
+            "decision_context_v5_supplied",
+            encode_decision_context_v5(&exact_replay_context()).unwrap(),
+        ));
+        measured.push((
+            "daily-high-observation-with-supplied-inputs",
+            "decision_context_v5_supplied",
+            encode_decision_context_v5(&supplied_observation_context()).unwrap(),
+        ));
+        measured.push((
+            "daily-high-ended-episode-with-supplied-inputs",
+            "decision_context_v5_supplied",
+            encode_decision_context_v5(&supplied_ended_episode_context()).unwrap(),
+        ));
+        measured
+    }
 
-        let result_bytes = encode_decision_result_v5(&result).unwrap();
-        assert_measurement(
-            expected("daily-high-fenced-place-continuation"),
-            &result_bytes,
-        );
-
-        let capped_market_bytes = encode_decision_result_v5(&capped_market_result()).unwrap();
-        assert_measurement(
-            expected("daily-high-capped-market-place-continuation"),
-            &capped_market_bytes,
-        );
-
-        let replay_bytes = encode_decision_context_v5(&exact_replay_context()).unwrap();
-        assert_measurement(
-            expected("daily-high-exact-origin-broker-outcome-replay"),
-            &replay_bytes,
-        );
-
-        let v4_bytes =
-            crate::decision_v4::encode_decision_context_v4(&context.owner_state).unwrap();
-        assert_measurement(expected("unchanged-v4-owner-projection"), &v4_bytes);
+    /// Prints the `valid` corpus entries for `conformance/v5/decision-transactions.json`.
+    /// Run with `cargo test -- --ignored --nocapture print_v5_corpus_measurements`.
+    #[test]
+    #[ignore]
+    fn print_v5_corpus_measurements() {
+        let entries = corpus_measurements()
+            .into_iter()
+            .map(|(id, kind, bytes)| {
+                serde_json::json!({
+                    "id": id,
+                    "kind": kind,
+                    "byte_count": bytes.len(),
+                    "sha256": hex_digest(&Sha256::digest(&bytes)),
+                })
+            })
+            .collect::<Vec<_>>();
+        println!("{}", serde_json::to_string_pretty(&entries).unwrap());
     }
 
     fn assert_measurement(vector: &serde_json::Value, bytes: &[u8]) {

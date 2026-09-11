@@ -31,6 +31,53 @@ Durable continuation identities remain replayable. Originating-context validatio
 
 The shared kernel uses the single-authority `ContractQuantity` type for order requests, Broker positions/views, and order returns. `ContractQuantity::from_hundredths` supports exact fractional exits; `checked_from_whole_contracts` preserves whole-contract entry behavior through an explicit checked conversion. Strategies and Trader adapters must update their kernel implementations and call sites to construct/read this type before repinning this Strategy Core revision.
 
+## Supplied inputs and the current context encoding
+
+Since the `SDCTXV5S` encoding a V5 context ends with `supplied: SuppliedInputsV5`
+(`native/strategy_core_v3/src/supplied_v5.rs`): the provider's fields at their supplied
+precision plus the exact typed originating event. The embedded V4 owner projection remains the
+bounded derived projection (milli/micro fixed point, millisecond times) used by V4 consumers and
+by V5 identity and fence checks; it is never the source of a kernel view field when a supplied
+value exists.
+
+- Numbers are `DecimalV5 { coefficient, scale }`: the exact decimal digits of the provider's
+  JSON number (shortest round-trip form of its double), normalized so equal values have one
+  encoding. Nothing is rounded to milli or micro units.
+- Supplied times are `*_unix_ns` nanosecond instants; derived times stay `*_unix_ms`.
+- `Option` means absent-or-null on the wire; provider serializers omit nil pointers so the two
+  are indistinguishable. Supplied strings may be present and empty.
+- `originating_event` is present exactly when the originating owner trigger is an observation,
+  station report, daily extreme (`NewHigh`/`NewLow`) or weather episode (`WeatherEvent`), and
+  its identity must match the trigger. Ended episodes travel only in the event; current state
+  never contains them.
+- Each owner station has exactly one supplied station when the block is present. An absent
+  block (empty version, no stations, no event) is the documented pre-supplied form and is what
+  `SDCTXV5H` and `SDCTXV5\0` bytes decode to.
+
+`decode_decision_context_v5` accepts `SDCTXV5S`, `SDCTXV5H` and `SDCTXV5\0`. Originating-context
+digest verification tries the current encoding, then the frozen hundredths shape (only for a
+context without supplied inputs), then the whole-contract shape. Encoders write only
+`SDCTXV5S`. `OwnerTriggerV5::NewLow` and `OwnerTriggerV5::WeatherEvent` are appended variants,
+so earlier variant indices are unchanged.
+
+## Kernel projection and transaction runner
+
+With the `kernel` feature, `strategy_core_v3::kernel_v5` is the single definition of how a
+context is presented to a `strategy_core_kernel::NativeKernel` and how its synchronous Broker
+calls are carried through the transaction. `KernelEvent` projects the originating event
+(supplied first, derived fallback) into the existing view types; `KernelSnapshot` serves the
+state views and exposes the whole context through `StrategyKernelState::canonical_context`;
+`KernelHost` defers the first economic call into `AwaitingBrokerOutcome` and replays the exact
+return; `run_transaction` assembles the fenced result and checkpoint. Strategy executables
+supply only kernel construction, restore and checkpoint codecs through
+`TransactionKernelFactory`. Event `emitted_at` is the provider's publication time, never the
+decision clock. Whole-contract view quantities are derived by truncation from exact hundredths.
+
+The stable measurements for the V5 corpus are in `conformance/v5/decision-transactions.json`.
+Corpus schema 4 keeps every schema-3 measurement byte-identical by measuring the durable
+`SDCTXV5H` and `SDCTXV5\0` shapes through their frozen encoders, and adds `SDCTXV5S`
+measurements with and without a supplied block.
+
 ## Durable kernel checkpoints
 
 `KernelCheckpointV5` is the bounded, versioned private-state boundary for frozen kernels. It binds:
@@ -77,4 +124,4 @@ Typed owner triggers are checked against the exact V4 component revision and sou
 - Broker-state, command, outcome, and return hundredths values fit the frozen kernel's signed 64-bit `ContractQuantity` interface. Whole-contract entry policies convert once with `checked_from_whole_contracts`; fractional reduce-only exits use `from_hundredths`.
 - All identifiers, text, metadata, diagnostics, evidence, collections, and private kernel checkpoints have explicit bounds.
 
-The stable measurements for the V5 corpus are in `conformance/v5/decision-transactions.json`. Corpus schema 3 retains exact legacy whole-contract context and result measurements, adds new explicit-hundredths command/outcome measurements, and keeps the unchanged V4 owner-projection measurement. New context, result, and place-command digests change because their `H` encodings bind hundredths. Legacy bytes and digests are read and verified, never rewritten.
+Corpus schema 3 retained exact legacy whole-contract context and result measurements, added explicit-hundredths command/outcome measurements, and kept the unchanged V4 owner-projection measurement. Legacy bytes and digests are read and verified, never rewritten.

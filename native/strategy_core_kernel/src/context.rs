@@ -65,6 +65,15 @@ pub trait StrategyKernelState {
     fn state_read_diagnostics(&self) -> Vec<StateReadDiagnostic> {
         Vec::new()
     }
+
+    /// The complete canonical decision context behind these views, when the host delivers one.
+    ///
+    /// Trader delivers `strategy_core_v3::decision_v5::DecisionContextV5`; a kernel that needs a
+    /// supplied field without a view slot downcasts to it. Hosts without a canonical context
+    /// return `None`, so views remain the portable contract.
+    fn canonical_context(&self) -> Option<&dyn std::any::Any> {
+        None
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
