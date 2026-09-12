@@ -1,6 +1,8 @@
 # Decision transaction V5
 
-Decision V5 is the bounded shared contract for stateful Trader V3 Strategies. It does not change Decision Context V4. A V5 context embeds the complete V4 owner projection and adds exact Strategy scope, side-aware Broker state, one typed trigger, an authoritative wall clock, and—only for a Broker outcome delivery—the durable continuation commitment created from the prior result.
+Decision V5 is the bounded shared contract for stateful Trader V3 Strategies. A V5 context embeds the V4 owner projection and adds exact Strategy scope, side-aware Broker state, one typed trigger, an authoritative wall clock, supplied originals, and—only for a Broker outcome delivery—the durable continuation commitment created from the prior result. V4 wire layouts remain frozen even though active Rust weather fields no longer expose WU.
+
+**2026-09-12 remediation checkpoint: Trader/Core R1 boundary implemented and locally reviewed; full acceptance blocked, not release-ready.** Required canonical access, all delivered contributors and WU/private-codec behavior have contract proof. Real application readiness attempts remain failing; Backtester and broader consumer migration are deferred. See `/tmp/trader-contract-fix.OEJmyi/evidence/r1-trader-core/current-status.md`. No publication or production change is implied.
 
 ## Transaction
 
@@ -23,9 +25,9 @@ Trader persists the canonical bytes from `encode_decision_context_v5` and `decis
 
 ### Broker quantity codec compatibility
 
-New contexts are identified by the `SDCTXV5H` magic and new results by `SDRESV5H`. Broker positions, Broker orders, `PlaceOrderV5`, `BrokerOutcomeV5`, and `KernelOrderResultV5` encode every authoritative quantity explicitly in hundredths of one contract. Public wire fields use `quantity_hundredths`, `requested_quantity_hundredths`, `filled_quantity_hundredths`, and `remaining_quantity_hundredths`; scale is never inferred from value shape.
+Current contexts are identified by `SDCTXV5C` and current results by `SDRESV5H`; `SDCTXV5H` is the retained pre-supplied hundredths context. Broker positions, Broker orders, `PlaceOrderV5`, `BrokerOutcomeV5`, and `KernelOrderResultV5` encode every authoritative quantity explicitly in hundredths of one contract. Public wire fields use `quantity_hundredths`, `requested_quantity_hundredths`, `filled_quantity_hundredths`, and `remaining_quantity_hundredths`; scale is never inferred from value shape.
 
-`decode_decision_context_v5` and `decode_decision_result_v5` also accept durable legacy `SDCTXV5\0` and `SDRESV5\0` payloads. Only those legacy magics interpret their old quantity fields as whole contracts. Decoding checked-multiplies each value by 100 into the explicit `u64` hundredths representation. A legacy value greater than `u64::MAX / 100` fails closed with `InvalidContract`; it is never wrapped, saturated, rounded, or reinterpreted. Encoders write only the new `H` magics.
+`decode_decision_context_v5` and `decode_decision_result_v5` also accept durable legacy `SDCTXV5\0` and `SDRESV5\0` payloads. Only those legacy magics interpret their old quantity fields as whole contracts. Decoding checked-multiplies each value by 100 into the explicit `u64` hundredths representation. A legacy value greater than `u64::MAX / 100` fails closed with `InvalidContract`; it is never wrapped, saturated, rounded, or reinterpreted. Current encoders write C contexts and H results; context and result codec versions are independent.
 
 Durable continuation identities remain replayable. Originating-context validation accepts the exact legacy context digest when all reconstructed quantities are whole-contract multiples. `strategy_command_v5_digest_matches` similarly checks the current command encoding first and then the exact legacy whole-contract encoding, allowing a persisted pre-change command digest to be verified without changing it. New command and result digests intentionally bind the explicit-hundredths encoding.
 
@@ -33,16 +35,15 @@ The shared kernel uses the single-authority `ContractQuantity` type for order re
 
 ## Supplied inputs and the current context encoding
 
-Since the `SDCTXV5S` encoding a V5 context ends with `supplied: SuppliedInputsV5`
-(`native/strategy_core_v3/src/supplied_v5.rs`): the provider's fields at their supplied
-precision plus the exact typed originating event. The embedded V4 owner projection remains the
-bounded derived projection (milli/micro fixed point, millisecond times) used by V4 consumers and
-by V5 identity and fence checks; it is never the source of a kernel view field when a supplied
-value exists.
+Since the S encoding, a V5 context carries `supplied: SuppliedInputsV5`: the provider's retained fields at supplied precision plus the exact typed originating event. The active types are owned by `strategy_core_kernel::supplied` and re-exported by V3. C carries `supplied-inputs/2`, including independent forecast version/fetch/issuance and apparent Celsius absent from frozen S.
 
-- Numbers are `DecimalV5 { coefficient, scale }`: the exact decimal digits of the provider's
-  JSON number (shortest round-trip form of its double), normalized so equal values have one
-  encoding. Nothing is rounded to milli or micro units.
+The embedded V4 owner projection remains bounded derived evidence (milli/micro fixed point, millisecond times) used by V4 consumers and V5 identity/fence checks. Supplied originals and the latest accepted host winner are distinct: an older original must not mask newer accepted state. The current numeric-equality freshness heuristic remains an R2 defect, not an approved source-precedence rule.
+
+- Numbers are `DecimalV5 { coefficient, scale }`: Trader captures the original numeric token
+  before floating-point conversion, then normalizes equal values to one encoding. The signed
+  64-bit coefficient and scale at most 18 are checked bounds, not unlimited precision. No
+  milli/micro rounding is performed. Historical producers that already converted to a double
+  cannot recover discarded lexical digits.
 - Supplied times are `*_unix_ns` nanosecond instants; derived times stay `*_unix_ms`.
 - `Option` means absent-or-null on the wire; provider serializers omit nil pointers so the two
   are indistinguishable. Supplied strings may be present and empty.
@@ -54,11 +55,15 @@ value exists.
   block (empty version, no stations, no event) is the documented pre-supplied form and is what
   `SDCTXV5H` and `SDCTXV5\0` bytes decode to.
 
-`decode_decision_context_v5` accepts `SDCTXV5S`, `SDCTXV5H` and `SDCTXV5\0`. Originating-context
-digest verification tries the current encoding, then the frozen hundredths shape (only for a
-context without supplied inputs), then the whole-contract shape. Encoders write only
-`SDCTXV5S`. `OwnerTriggerV5::NewLow` and `OwnerTriggerV5::WeatherEvent` are appended variants,
-so earlier variant indices are unchanged.
+`decode_decision_context_v5` accepts C, S, H and whole (`SDCTXV5\0`) contexts. Originating-context verification tries C, frozen S when representable, H when no supplied block exists, and the whole-contract shape. The previously missing S-origin BrokerOutcome check now has replay/chaining/tamper proof. Current encoders write C. `OwnerTriggerV5::NewLow` and `OwnerTriggerV5::WeatherEvent` remain appended variants, preserving earlier indices.
+
+### WU exclusion and private historical evidence
+
+Trader ignores WU values and WU-specific timing/day metadata before typed domain retention. Active Core supplied/state/event views omit them. Ordinary observations, normal/ASOS extrema, DSM/CLI reports, weather events, forecasts and oracle scores remain in scope; malformed WU extras cannot invalidate otherwise valid normal observations, and WU cannot substitute for absent normal readings.
+
+Private `wire_v4` and `wire_supplied` codecs preserve excluded historical slots. Opaque codec-owned evidence travels with decoded contexts through cloning, outcome construction, persistence and reopening, separately from active kernel models. Encoding combines current ordinary facts with that evidence; it does not return a cached old BLOB or hash that could mask a changed fact. Fresh contexts use empty historical evidence. Standalone V4 retains fixed-integer encoding; V4 embedded in V5 retains the enclosing variable-integer encoding.
+
+When reconstructing a persisted continuation, use `decode_continuation_v5(context_bytes, result_bytes)` to preserve the original context and command encoding identities independently. Chained commands retain the validated original event-context digest. Never rewrite old financial bytes or rebuild an old commitment from a WU-free projection alone.
 
 ## Kernel projection and transaction runner
 
@@ -66,17 +71,15 @@ With the `kernel` feature, `strategy_core_v3::kernel_v5` is the single definitio
 context is presented to a `strategy_core_kernel::NativeKernel` and how its synchronous Broker
 calls are carried through the transaction. `KernelEvent` projects the originating event
 (supplied first, derived fallback) into the existing view types; `KernelSnapshot` serves the
-state views and exposes the whole context through `StrategyKernelState::canonical_context`;
+state views from its owned `StationState`/`MarketState` projections for every delivered contributor and market; the old `canonical_context`/`Any` hook is gone. `StrategyKernelState::station/market` are required and return `Option<&StationState>` / `Option<&MarketState>`. Absence means missing or out of scope. Convenience accessors are inherent methods on `dyn StrategyKernelState`, derived from those same models rather than independently overridable host methods. Hosts must retain the models for the invocation and perform no provider read in these getters. Existing legacy/Backtester hosts still require migration; the mandatory API is not a compatibility claim for them.
 `KernelHost` defers the first economic call into `AwaitingBrokerOutcome` and replays the exact
 return; `run_transaction` assembles the fenced result and checkpoint. Strategy executables
 supply only kernel construction, restore and checkpoint codecs through
 `TransactionKernelFactory`. Event `emitted_at` is the provider's publication time, never the
-decision clock. Whole-contract view quantities are derived by truncation from exact hundredths.
+decision clock. `PriceLevelView` still carries whole-contract floors beside `exact` hundredths; actual planner use of those floors remains an R3 defect.
 
 The stable measurements for the V5 corpus are in `conformance/v5/decision-transactions.json`.
-Corpus schema 4 keeps every schema-3 measurement byte-identical by measuring the durable
-`SDCTXV5H` and `SDCTXV5\0` shapes through their frozen encoders, and adds `SDCTXV5S`
-measurements with and without a supplied block.
+Corpus schema 5 retains the historical whole/H/S measurements through their frozen encoders and adds C measurements. Targeted codec/conformance passes do not attest a published immutable revision or replace final cross-consumer qualification.
 
 ## Durable kernel checkpoints
 

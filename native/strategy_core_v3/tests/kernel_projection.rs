@@ -7,9 +7,9 @@ use std::rc::Rc;
 
 use chrono::{DateTime, TimeZone, Utc};
 use strategy_core_kernel::{
-    ContractQuantity, ContractSide, KernelAction, KernelResult, LogAction, OrderAction, OrderType,
-    PlaceOrderRequest, StrategyEventView, StrategyKernelContext, StrategyKernelState,
-    TelemetryAction,
+    ContractQuantity, ContractSide, KernelAction, KernelResult, LogAction, NativeKernel,
+    OrderAction, OrderType, PlaceOrderRequest, StrategyEventView, StrategyKernelContext,
+    StrategyKernelState, TelemetryAction, ValueOrigin,
 };
 use strategy_core_v3::decision_v4::{
     BrokerV4, ConfigV4, DecisionContextV4, ExtremeV4, FenceV4, MarketComparisonV4,
@@ -31,7 +31,8 @@ use strategy_core_v3::supplied_v5::{
     DecimalV5, EventEnvelopeV5, ExtremeKindV5, SUPPLIED_INPUTS_CONTRACT_VERSION,
     SuppliedDailyExtremesV5, SuppliedEventV5, SuppliedExtremeV5, SuppliedForecastModelV5,
     SuppliedForecastPointV5, SuppliedForecastV5, SuppliedInputsV5, SuppliedObservationV5,
-    SuppliedReportV5, SuppliedStationV5, SuppliedWeatherEventV5,
+    SuppliedOracleScoreV5, SuppliedOracleTableV5, SuppliedReportV5, SuppliedStationV5,
+    SuppliedWeatherEventV5,
 };
 
 const STATION: &str = "KSEA";
@@ -159,6 +160,7 @@ fn base_context() -> DecisionContextV5 {
         ..Default::default()
     };
     DecisionContextV5 {
+        retained_supplied_encoding: Default::default(),
         owner_state,
         strategy: StrategyScopeV5 {
             strategy_id: "fixture".to_owned(),
@@ -294,7 +296,24 @@ fn supplied_station(observation: SuppliedObservationV5) -> SuppliedStationV5 {
                 ..Default::default()
             }],
         }),
-        oracle_tables: Vec::new(),
+        oracle_tables: vec![SuppliedOracleTableV5 {
+            source: "minutetemp.rest.oracle".to_owned(),
+            received_at_unix_ns: 1_788_000_000_000_000_000,
+            station_id: STATION.to_owned(),
+            range_start: "2026-08-23".to_owned(),
+            range_end: "2026-08-29".to_owned(),
+            days_requested: Some(7),
+            score_mode: Some("day_of".to_owned()),
+            rank_by: Some("high".to_owned()),
+            scores: vec![SuppliedOracleScoreV5 {
+                model_id: "hrrr".to_owned(),
+                model_name: "HRRR".to_owned(),
+                high_mae: decimal("0.123456789012345678"),
+                day_count: Some(7),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
     }
 }
 
@@ -462,7 +481,11 @@ struct RecordingKernel {
     place: bool,
 }
 
-impl TransactionKernel for RecordingKernel {
+impl NativeKernel for RecordingKernel {
+    fn name(&self) -> &str {
+        "recording"
+    }
+
     fn on_start(&mut self, _context: &mut dyn StrategyKernelContext) -> KernelResult<()> {
         self.seen.borrow_mut().push("start".to_owned());
         Ok(())
@@ -482,14 +505,62 @@ impl TransactionKernel for RecordingKernel {
             .push(format!("forecast={forecast:?}"));
         let price = context.state().get_price(MARKET).unwrap();
         self.seen.borrow_mut().push(format!("price={price:?}"));
-        let canonical = context
+        let station = context.state().station(STATION).unwrap();
+        assert_eq!(weather, station.weather);
+        assert_eq!(forecast, station.forecast.as_ref().unwrap().snapshot());
+        assert_eq!(price, context.state().market(MARKET).unwrap().ticker_view());
+        let oracle = context
             .state()
-            .canonical_context()
-            .and_then(|any| any.downcast_ref::<DecisionContextV5>())
-            .map(|context| context.owner_state.delivery_id.clone());
-        self.seen
-            .borrow_mut()
-            .push(format!("canonical={canonical:?}"));
+            .latest_oracle_scores(STATION, Some("day_of"), Some("high"), Some("7"))
+            .unwrap();
+        assert_eq!(
+            oracle,
+            station
+                .oracle_table(Some("day_of"), Some("high"), Some("7"))
+                .unwrap()
+                .snapshot()
+        );
+        assert_eq!(
+            oracle.supplied.unwrap().scores[0].high_mae,
+            decimal("0.123456789012345678")
+        );
+        assert!(
+            context
+                .state()
+                .latest_oracle_scores(STATION, Some("day_ahead"), None, None)
+                .is_none()
+        );
+        assert!(context.state().station("UNKNOWN").is_none());
+        assert!(context.state().get_weather("UNKNOWN").is_none());
+        assert!(context.state().latest_forecast("UNKNOWN").is_none());
+        assert!(context.state().market("UNKNOWN").is_none());
+        assert!(context.state().get_price("UNKNOWN").is_none());
+        self.seen.borrow_mut().push(format!(
+            "station={} origin={:?} pressure={:?} open_interest={:?}",
+            station.station_id(),
+            station
+                .observation
+                .as_ref()
+                .map(|observation| observation.origin),
+            station
+                .observation
+                .as_ref()
+                .and_then(|observation| observation.barometric_pressure),
+            context.state().market(MARKET).and_then(|market| market
+                .ticker
+                .as_ref()
+                .and_then(|ticker| ticker.open_interest))
+        ));
+        if let Some(secondary) = context.state().station("KSFO") {
+            self.seen.borrow_mut().push(format!(
+                "secondary={} temperature_f={:?}",
+                secondary.station_id(),
+                secondary
+                    .observation
+                    .as_ref()
+                    .and_then(|observation| observation.temperature_f),
+            ));
+        }
         context
             .telemetry()
             .counter("fixture_counter", 1.0, &[("k", "v")])?;
@@ -515,7 +586,9 @@ impl TransactionKernel for RecordingKernel {
         }
         Ok(())
     }
+}
 
+impl TransactionKernel for RecordingKernel {
     fn encode_checkpoint_state(&self) -> Result<Vec<u8>, KernelTransactionError> {
         Ok(format!("events={}", self.seen.borrow().len()).into_bytes())
     }
@@ -596,7 +669,7 @@ fn supplied_temperatures_reach_views_per_unit_without_conversion() {
             Some("22.777777777777779"),
             Some("73.000000000000001"),
             Some(73.000000000000001),
-            Some(22.777777777777779),
+            Some(22.777_777_777_777_78),
         ),
     ] {
         let context = observation_context(celsius, fahrenheit);
@@ -621,7 +694,6 @@ fn supplied_temperatures_reach_views_per_unit_without_conversion() {
         assert_eq!(view.text_description, Some("Partly Cloudy"), "{name}");
         assert_eq!(view.temperature_day_mode, Some("nws_climate_day"), "{name}");
         assert_eq!(view.temperature_day_date, Some("2026-08-30"), "{name}");
-        assert_eq!(view.wu_current_temp_f, None, "{name}: WU exclusion stands");
         assert_eq!(view.event_id, Some("evt-obs-44"), "{name}");
         assert_eq!(view.sequence, Some(44), "{name}");
         assert_eq!(view.city_sequence, Some(9), "{name}");
@@ -647,7 +719,9 @@ fn supplied_temperatures_reach_views_per_unit_without_conversion() {
 
         // The station weather view reads the same originals and the REST daily extremes.
         let snapshot = KernelSnapshot::from_context(&context).unwrap();
-        let weather = snapshot.get_weather(STATION).unwrap();
+        let weather = (&snapshot as &dyn StrategyKernelState)
+            .get_weather(STATION)
+            .unwrap();
         let expected_current = expect_f.or_else(|| Some(22.778 * 9.0 / 5.0 + 32.0));
         assert_eq!(weather.current_temp, expected_current, "{name}");
         assert_eq!(weather.temp_max_f, Some(74.3), "{name}");
@@ -799,22 +873,29 @@ fn new_low_and_episode_events_are_typed_with_their_own_identities() {
 
     let active = observation_context(Some("22.8"), Some("73"));
     let snapshot = KernelSnapshot::from_context(&active).unwrap();
-    let canonical = snapshot
-        .canonical_context()
-        .and_then(|any| any.downcast_ref::<DecisionContextV5>())
-        .unwrap();
+    let station = snapshot.station(STATION).unwrap();
+    assert_eq!(station.weather_events[0].state, "active");
+    assert_eq!(station.weather_events[0].origin, ValueOrigin::Supplied);
+    let observation = station.observation.as_ref().unwrap();
     assert_eq!(
-        canonical.supplied.stations[0].weather_events[0].state,
-        "active"
+        observation.barometric_pressure,
+        Some(1013.25),
+        "every supplied field is an ordinary typed field of the canonical state"
     );
     assert_eq!(
-        canonical.supplied.stations[0]
-            .observation
-            .as_ref()
-            .unwrap()
-            .barometric_pressure,
+        observation.supplied.as_ref().unwrap().barometric_pressure,
         decimal("1013.25"),
-        "fields without a view slot stay reachable"
+        "and the exact original travels with it"
+    );
+    let event = KernelEvent::from_context(&active).unwrap();
+    let StrategyEventView::Observation(view) = event.view().unwrap() else {
+        panic!("expected observation view");
+    };
+    assert_eq!(view.origin, ValueOrigin::Supplied);
+    assert_eq!(
+        view.supplied.unwrap().temperature_c,
+        decimal("22.8"),
+        "the event view carries the supplied original beside its conveniences"
     );
 
     // An ended episode without its supplied event cannot be reconstructed from state.
@@ -832,8 +913,43 @@ fn new_low_and_episode_events_are_typed_with_their_own_identities() {
 
 #[test]
 fn transaction_runner_presents_the_event_over_supplied_state_and_bridges_the_broker() {
-    let context = observation_context(Some("22.77777777777778"), Some("73"));
+    let mut context = observation_context(Some("22.77777777777778"), Some("73"));
+    context
+        .owner_state
+        .opportunity
+        .contributor_stations
+        .push("KSFO".to_owned());
+    let primary = &context.owner_state.stations[0];
+    context.owner_state.stations.push(StationV4 {
+        identity: StationIdentityV4 {
+            station_id: "KSFO".to_owned(),
+            logical_location: "sfo".to_owned(),
+            timezone: "America/Los_Angeles".to_owned(),
+            ..Default::default()
+        },
+        climate_event_date: primary.climate_event_date.clone(),
+        climate_day_start_utc_unix_ms: primary.climate_day_start_utc_unix_ms,
+        climate_day_end_utc_unix_ms: primary.climate_day_end_utc_unix_ms,
+        ..Default::default()
+    });
+    context.supplied.stations.push(SuppliedStationV5 {
+        station_id: "KSFO".to_owned(),
+        observation: Some(SuppliedObservationV5 {
+            source: "minutetemp.rest.latest".to_owned(),
+            station_id: "KSFO".to_owned(),
+            observed_at_unix_ns: OBSERVED_NS,
+            temperature_c: decimal("17"),
+            temperature_f: decimal("62.6"),
+            ..Default::default()
+        }),
+        ..Default::default()
+    });
     let (seen, result) = run(&context, false);
+    assert!(
+        seen.iter()
+            .any(|row| row == "secondary=KSFO temperature_f=Some(62.6)"),
+        "the invocation must expose every delivered contributor, not only the primary station"
+    );
     assert_eq!(result.disposition, DecisionDispositionV5::Completed);
     assert_eq!(result.kernel_checkpoint.as_ref().unwrap().sequence, 1);
     assert!(seen[0].starts_with("Observation("), "{}", seen[0]);
@@ -850,11 +966,24 @@ fn transaction_runner_presents_the_event_over_supplied_state_and_bridges_the_bro
     );
     assert!(
         seen[3].contains("yes_ask_depth: Some(12)"),
-        "whole-contract depth is derived by truncation: {}",
+        "whole-contract depth is the explicit floor: {}",
+        seen[3]
+    );
+    assert!(
+        seen[3].contains("yes_ask_quantity: Some(ContractQuantity(1250))"),
+        "the exact hundredths are beside it: {}",
         seen[3]
     );
     assert!(seen[3].contains("volume: Some(100.5)"), "{}", seen[3]);
-    assert_eq!(seen[4], "canonical=Some(\"delivery.daily.1\")");
+    assert!(
+        seen[3].contains("open_interest: Some(ContractQuantity(5000))"),
+        "{}",
+        seen[3]
+    );
+    assert_eq!(
+        seen[4],
+        "station=KSEA origin=Some(Supplied) pressure=Some(1013.25) open_interest=Some(ContractQuantity(5000))"
+    );
     assert!(
         result
             .diagnostics

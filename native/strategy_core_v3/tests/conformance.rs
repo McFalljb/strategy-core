@@ -74,6 +74,26 @@ fn node(value: &Value) -> Result<CanonicalValue, CanonicalError> {
 }
 
 #[test]
+fn retained_v4_weather_encoding_survives_without_masking_active_facts() {
+    use strategy_core_v3::decision_v4::{decode_decision_context_v4, encode_decision_context_v4};
+
+    // Captured by the pre-removal encoder with distinguishable WU values in both owner
+    // components. Historical fields are codec evidence, not active weather inputs.
+    let bytes = include_bytes!("fixtures/v4-wu.bin");
+    let mut context = decode_decision_context_v4(bytes).unwrap();
+    assert_eq!(encode_decision_context_v4(&context).unwrap(), bytes);
+    context.stations[0].observation.temperature_milli_c = Some(21_125);
+    let changed = encode_decision_context_v4(&context).unwrap();
+    assert_ne!(changed, bytes);
+    assert_eq!(
+        decode_decision_context_v4(&changed).unwrap().stations[0]
+            .observation
+            .temperature_milli_c,
+        Some(21_125),
+    );
+}
+
+#[test]
 fn shared_valid_vectors_match_canonical_bytes_and_digests() {
     for vector in corpus()["valid"].as_array().unwrap() {
         let value = node(&vector["value"]).unwrap();
@@ -261,23 +281,21 @@ fn crate_dependencies_match_exact_pure_allowlists() {
     let manifest = include_str!("../Cargo.toml");
     let all = dependencies(manifest, "dependencies");
     let optional = optional_dependencies(manifest, "dependencies");
-    // The pure wire crate stays dependency-minimal; the kernel projection feature is the only
-    // thing that may add dependencies, and every one of them must be optional.
+    // The pure wire crate stays dependency-minimal: the canonical model it encodes is owned by
+    // the sibling contract crate, and the kernel projection feature is the only thing that may
+    // add further dependencies, every one of them optional.
     assert_eq!(
         all.difference(&optional).cloned().collect::<BTreeSet<_>>(),
         BTreeSet::from([
             "bincode".to_owned(),
             "sha2".to_owned(),
+            "strategy-core-kernel".to_owned(),
             "unicode-normalization".to_owned(),
         ])
     );
     assert_eq!(
         optional,
-        BTreeSet::from([
-            "chrono".to_owned(),
-            "serde_json".to_owned(),
-            "strategy-core-kernel".to_owned(),
-        ])
+        BTreeSet::from(["chrono".to_owned(), "serde_json".to_owned()])
     );
     assert_eq!(
         dependency_lines(manifest, "features")

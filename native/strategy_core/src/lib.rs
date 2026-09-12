@@ -45,7 +45,8 @@ pub use events::{
 };
 pub use fees::{
     FeeCalculation, FeeError, FeeResult, FeeType, LiquidityRole, apply_fee_rounding,
-    calculate_fill_fee, calculate_trade_fee,
+    calculate_direct_member_fill_fee_hundredths, calculate_fill_fee,
+    calculate_fill_fee_hundredths, calculate_trade_fee,
 };
 pub use http::{HttpClient, HttpMethod, HttpRequest, HttpResponse};
 pub use kalshi::{

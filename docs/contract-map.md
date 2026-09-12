@@ -1352,9 +1352,11 @@ impl NativeKernel for MyKernel {
 
 Optional lifecycle hooks are `on_start`, `on_event`, and `on_finish`.
 
-### Complete kernel export inventory
+### Kernel export inventory — migration in progress
 
-The kernel crate has 45 public contract names:
+**2026-09-12:** the kernel crate owns canonical `StationState`, `MarketState`, `StrategyEvent`, `Decimal` and supplied-input types in addition to the legacy borrowed surfaces below. See `native/strategy_core_kernel/src/lib.rs` for the current exports and [Decision V5](decision-v5.md) for codec/transaction details. Mandatory borrowed canonical access is implemented for the Trader/Core slice; legacy/Backtester host migration and full application qualification remain unfinished. This section does not claim final cross-consumer qualification. Broader Python/legacy models documented elsewhere may retain WU for separate compatibility/research uses; WU is excluded from Trader's active canonical kernel input path.
+
+The legacy export groups are:
 
 | Category | Exports |
 |---|---|
@@ -1371,10 +1373,14 @@ constructs an error and `message()` returns its text.
 The native context exposes these exact trait surfaces:
 
 - `StrategyKernelContext::state() -> &dyn StrategyKernelState`:
-  `get_price(ticker)`, `get_weather(station_id)`,
-  `latest_forecast(station_id)`,
-  `latest_oracle_scores(station_id, mode, rank_by, days)`, and
-  `state_read_diagnostics()`.
+  hosts must implement `station(station_id) -> Option<&StationState>` and
+  `market(ticker) -> Option<&MarketState>`. Models remain valid for the invocation;
+  absent or out-of-scope state returns `None`. Core's non-overridable trait-object
+  conveniences `get_price(ticker)`, `get_weather(station_id)`,
+  `latest_forecast(station_id)` and
+  `latest_oracle_scores(station_id, mode, rank_by, days)` derive from those models.
+  `state_read_diagnostics()` remains a host diagnostic hook. Getters do not fetch
+  provider data.
 - `StrategyKernelContext::data() -> &dyn StrategyKernelData`: reserved narrow
   data trait; it has no methods today.
 - `StrategyKernelContext::broker() -> &mut dyn StrategyKernelBroker`:
@@ -1402,10 +1408,10 @@ The native context exposes these exact trait surfaces:
 
 | View | Fields |
 |---|---|
-| `PriceLevelView` | `price`, `quantity` |
+| `PriceLevelView` | `price`, whole-floor `quantity`, authoritative hundredths `exact`; removing planner use of the floor remains R3 work. |
 | `MarketBracketView` | The same fields as `MarketBracket`; bid/ask level collections contain `PriceLevelView`. |
 | `PriceUpdateView` | The same fields as `PriceUpdate` except the serialized `type` discriminator. |
-| `ObservationView` | The same fields as `Observation` except the serialized `type` discriminator. |
+| `ObservationView` | Normal observation fields, including independent C/F, ordinary day/report metadata, pressure/precipitation/is_locf, provenance, origin and supplied original; no serialized `type` discriminator and no WU fields. |
 | `StationReportView` | The same fields as `StationReport` except the serialized `type` discriminator. |
 | `WeatherEventSourceView` | The same fields as `WeatherEventSource`. |
 | `WeatherEventView` | The same fields as `WeatherEvent` except `type`; its payload `event_type` is named `event_type_name`. |
@@ -1416,7 +1422,7 @@ The native context exposes these exact trait surfaces:
 | `ForecastVersionsView` | The same fields as `ForecastVersions` except `type`. |
 | `OracleScoresUpdatedView` | `event_id`, `sequence`, `emitted_at`, `slug`, `station_id`, `modes`, `updated_at`, `overall`, `day_ahead`, `day_of`; mode payloads are `OracleInputSnapshot`. |
 | `TickerPriceView` | The same fields as `TickerPrices`. |
-| `StationWeatherView` | `station_id`, `current_temp`, `running_high`, `running_low`, `last_metar_time`, `temp_min_f`, `temp_max_f`, `temp_min_c`, `temp_max_c`, `preliminary`, `dsm_high`, `dsm_low`, `dsm_high_time`, `dsm_low_time`, `six_hr_high`, `six_hr_low`, `last_dsm_time`, `last_six_hr_time`, `asos_daily_high_f`, `asos_daily_low_f`, `wu_daily_high_f`, `wu_daily_low_f`, `wu_current_temp_f`, `wu_current_temp_c`, `wu_daily_high_c`, `wu_daily_low_c`, `wu_observation_time`, `wu_fetched_at`, `dewpoint`, `heat_index`, `wind_chill`, `relative_humidity`, `wind_speed`, `wind_direction`, `wind_gust`, `text_description`, `lag_seconds` |
+| `StationWeatherView` | `station_id`, `current_temp`, `running_high`, `running_low`, `last_metar_time`, `temp_min_f`, `temp_max_f`, `temp_min_c`, `temp_max_c`, `preliminary`, `dsm_high`, `dsm_low`, `dsm_high_time`, `dsm_low_time`, `six_hr_high`, `six_hr_low`, `last_dsm_time`, `last_six_hr_time`, `asos_daily_high_f`, `asos_daily_low_f`, `dewpoint`, `heat_index`, `wind_chill`, `relative_humidity`, `wind_speed`, `wind_direction`, `wind_gust`, `text_description`, `lag_seconds`; no WU fields. |
 | `ForecastHourlySnapshot` | The same fields as `ForecastHourly`. |
 | `ForecastModelSnapshot` | `model_id`, `value`, `version`, `updated_at`, `run_issued_at`, `hourly` |
 | `ForecastInputSnapshot` | `station_id`, `received_at`, `source`, `models` |

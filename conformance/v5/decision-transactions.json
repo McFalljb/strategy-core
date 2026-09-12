@@ -1,5 +1,5 @@
 {
-  "schema": "strategy-core-decision-v5-corpus/4",
+  "schema": "strategy-core-decision-v5-corpus/5",
   "valid": [
     {
       "byte_count": 1134,
@@ -53,25 +53,25 @@
       "byte_count": 1137,
       "id": "daily-high-side-aware-broker-context-supplied-absent",
       "kind": "decision_context_v5_supplied",
-      "sha256": "8c58741fdc361d332276083756a6fcd5d99057035f4830a134839035f71ca19f"
+      "sha256": "427747337e9ec79d3699fdf7b08442a169063541aa186a725a562e2498e08a77"
     },
     {
       "byte_count": 1631,
       "id": "daily-high-exact-origin-broker-outcome-replay-supplied-absent",
       "kind": "decision_context_v5_supplied",
-      "sha256": "1faa524436814cf28b7a2777cd331d7d59fa594ec4ef51ce85661ef560726959"
+      "sha256": "07e68a05822cafe40e2c2947446a588ea3ee1a80a31996d9896ca49d1b697c66"
     },
     {
-      "byte_count": 3170,
+      "byte_count": 3196,
       "id": "daily-high-observation-with-supplied-inputs",
       "kind": "decision_context_v5_supplied",
-      "sha256": "5df4e0df9e7fc3c278c60404f84eeb6deb6e79b0fce090d3bf77f5d190fb7f75"
+      "sha256": "929b3f0495756702bbcdc249326265df28fb95ed4ccd227964215cdfc431987f"
     },
     {
-      "byte_count": 2856,
+      "byte_count": 2882,
       "id": "daily-high-ended-episode-with-supplied-inputs",
       "kind": "decision_context_v5_supplied",
-      "sha256": "675989175f6b41b415b3f347a848262a64755fb6b631dbd628648e1595032ffb"
+      "sha256": "37b36ef5120bea7dfaa40d25f9c68ee8b40cb3f981ea52845605e539b63de40a"
     }
   ],
   "invalid": [

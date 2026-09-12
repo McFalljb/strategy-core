@@ -11,10 +11,15 @@ use sha2::{Digest, Sha256};
 
 use crate::decision_v4::{DecisionContextV4, DecisionV4Error, TriggerV4, decision_fence_v4_sha256};
 use crate::supplied_v5::{ExtremeKindV5, SuppliedEventV5, SuppliedInputsV5};
+use crate::wire_supplied::FrozenSuppliedInputsV5;
+#[doc(hidden)]
+pub use crate::wire_supplied::RetainedSuppliedEncodingV5;
 
-/// Current V5 context encoding: explicit hundredths Broker-state quantities plus the supplied
-/// original-precision inputs block.
-pub const DECISION_CONTEXT_V5_MAGIC: &[u8; 8] = b"SDCTXV5S";
+/// Current V5 context encoding: explicit hundredths Broker-state quantities plus the canonical
+/// supplied original-precision inputs block (`supplied-inputs/2`).
+pub const DECISION_CONTEXT_V5_MAGIC: &[u8; 8] = b"SDCTXV5C";
+/// Durable V5 context encoding carrying the first supplied inputs shape (`supplied-inputs/1`).
+pub const SUPPLIED_S_DECISION_CONTEXT_V5_MAGIC: &[u8; 8] = b"SDCTXV5S";
 /// Durable V5 context encoding with explicit hundredths quantities and no supplied inputs.
 pub const HUNDREDTHS_DECISION_CONTEXT_V5_MAGIC: &[u8; 8] = b"SDCTXV5H";
 /// Durable legacy V5 context encoding whose Broker-state quantities are whole contracts.
@@ -562,7 +567,7 @@ pub struct ResultDiagnosticV5 {
     pub message: String,
 }
 
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DecisionContextV5 {
     pub owner_state: DecisionContextV4,
     pub strategy: StrategyScopeV5,
@@ -576,6 +581,83 @@ pub struct DecisionContextV5 {
     pub decision_time_unix_ms: i64,
     /// Provider inputs at their supplied precision plus the exact typed originating event.
     pub supplied: SuppliedInputsV5,
+    /// Private codec evidence preserved through durable outcome construction and cloning.
+    #[doc(hidden)]
+    pub retained_supplied_encoding: RetainedSuppliedEncodingV5,
+}
+
+/// Frozen C wire container; ordinary facts always come from the active context.
+#[derive(Clone, Debug, Encode, Decode)]
+struct FrozenCDecisionContextV5 {
+    owner_state: DecisionContextV4,
+    strategy: StrategyScopeV5,
+    broker: BrokerDetailV5,
+    trigger: TriggerV5,
+    kernel_checkpoint: Option<KernelCheckpointV5>,
+    continuation: Option<ContinuationCommitmentV5>,
+    decision_time_unix_ms: i64,
+    supplied: FrozenSuppliedInputsV5,
+}
+
+impl Encode for DecisionContextV5 {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        FrozenCDecisionContextV5 {
+            owner_state: self.owner_state.clone(),
+            strategy: self.strategy.clone(),
+            broker: self.broker.clone(),
+            trigger: self.trigger.clone(),
+            kernel_checkpoint: self.kernel_checkpoint.clone(),
+            continuation: self.continuation.clone(),
+            decision_time_unix_ms: self.decision_time_unix_ms,
+            supplied: FrozenSuppliedInputsV5::from_current(
+                &self.supplied,
+                &self.retained_supplied_encoding,
+            ),
+        }
+        .encode(encoder)
+    }
+}
+impl<Context> Decode<Context> for DecisionContextV5 {
+    fn decode<D: bincode::de::Decoder<Context = Context>>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        convert_frozen_c_context(FrozenCDecisionContextV5::decode(decoder)?)
+            .map_err(|_| bincode::error::DecodeError::Other("invalid retained supplied encoding"))
+    }
+}
+bincode::impl_borrow_decode!(DecisionContextV5);
+
+fn convert_frozen_c_context(
+    context: FrozenCDecisionContextV5,
+) -> Result<DecisionContextV5, DecisionV5Error> {
+    let (supplied, retained_supplied_encoding) = context.supplied.into_current()?;
+    Ok(DecisionContextV5 {
+        owner_state: context.owner_state,
+        strategy: context.strategy,
+        broker: context.broker,
+        trigger: context.trigger,
+        kernel_checkpoint: context.kernel_checkpoint,
+        continuation: context.continuation,
+        decision_time_unix_ms: context.decision_time_unix_ms,
+        supplied,
+        retained_supplied_encoding,
+    })
+}
+
+/// Frozen shape of the durable `SDCTXV5S` encoding: the first supplied inputs shape.
+#[derive(Clone, Debug, Encode, Decode)]
+struct SuppliedSDecisionContextV5 {
+    owner_state: DecisionContextV4,
+    strategy: StrategyScopeV5,
+    broker: BrokerDetailV5,
+    trigger: TriggerV5,
+    kernel_checkpoint: Option<KernelCheckpointV5>,
+    continuation: Option<ContinuationCommitmentV5>,
+    decision_time_unix_ms: i64,
+    supplied: crate::supplied_s::SuppliedInputsV5,
 }
 
 /// Frozen shape of the durable `SDCTXV5H` encoding: explicit hundredths, no supplied inputs.
@@ -747,7 +829,7 @@ impl DecisionContextV5 {
             validate_kernel_checkpoint(&self.strategy, checkpoint)?;
         }
         validate_trigger(self)?;
-        self.supplied.validate()?;
+        crate::supplied_v5::validate_supplied_inputs(&self.supplied)?;
         validate_supplied(self)?;
         Ok(())
     }
@@ -918,6 +1000,40 @@ pub fn continuation_commitment_v5(
     }))
 }
 
+/// Decode and validate a retained invocation without changing its continuation's
+/// original context or command encoding. The context is returned for host scope checks.
+pub fn decode_continuation_v5(
+    context_bytes: &[u8],
+    result_bytes: &[u8],
+) -> Result<(DecisionContextV5, Option<ContinuationCommitmentV5>), DecisionV5Error> {
+    let context = decode_decision_context_v5(context_bytes)?;
+    let result = decode_decision_result_v5(result_bytes)?;
+    let Some(mut commitment) = continuation_commitment_v5(&context, &result)? else {
+        return Ok((context, None));
+    };
+    if !matches!(context.trigger, TriggerV5::BrokerOutcome { .. }) {
+        commitment.originating_context_sha256 =
+            if context_bytes.starts_with(HUNDREDTHS_DECISION_CONTEXT_V5_MAGIC) {
+                hundredths_decision_context_v5_sha256(&context)?
+            } else if context_bytes.starts_with(SUPPLIED_S_DECISION_CONTEXT_V5_MAGIC) {
+                supplied_s_decision_context_v5_sha256(&context)?
+            } else if context_bytes.starts_with(LEGACY_DECISION_CONTEXT_V5_MAGIC) {
+                legacy_decision_context_v5_sha256(&context)?
+            } else {
+                decision_context_v5_sha256(&context)?
+            };
+    }
+    if result_bytes.starts_with(LEGACY_DECISION_RESULT_V5_MAGIC) {
+        let command = result
+            .commands
+            .iter()
+            .find(|command| command.command_id() == commitment.command_id)
+            .ok_or(DecisionV5Error::InvalidContract)?;
+        commitment.command_sha256 = command_digest(&legacy_command_from_current(command)?)?;
+    }
+    Ok((context, Some(commitment)))
+}
+
 pub fn strategy_command_v5_sha256(
     command: &StrategyCommandV5,
 ) -> Result<[u8; 32], DecisionV5Error> {
@@ -985,11 +1101,18 @@ pub fn encode_decision_context_v5(context: &DecisionContextV5) -> Result<Vec<u8>
 
 pub fn decode_decision_context_v5(bytes: &[u8]) -> Result<DecisionContextV5, DecisionV5Error> {
     let context = if bytes.starts_with(DECISION_CONTEXT_V5_MAGIC) {
-        decode_bounded(
+        convert_frozen_c_context(decode_bounded(
             DECISION_CONTEXT_V5_MAGIC,
             bytes,
             MAX_DECISION_CONTEXT_V5_BYTES,
-        )?
+        )?)?
+    } else if bytes.starts_with(SUPPLIED_S_DECISION_CONTEXT_V5_MAGIC) {
+        let frozen: SuppliedSDecisionContextV5 = decode_bounded(
+            SUPPLIED_S_DECISION_CONTEXT_V5_MAGIC,
+            bytes,
+            MAX_DECISION_CONTEXT_V5_BYTES,
+        )?;
+        convert_supplied_s_context(frozen)?
     } else if bytes.starts_with(HUNDREDTHS_DECISION_CONTEXT_V5_MAGIC) {
         let hundredths: HundredthsDecisionContextV5 = decode_bounded(
             HUNDREDTHS_DECISION_CONTEXT_V5_MAGIC,
@@ -1011,6 +1134,54 @@ pub fn decode_decision_context_v5(bytes: &[u8]) -> Result<DecisionContextV5, Dec
     Ok(context)
 }
 
+fn convert_supplied_s_context(
+    context: SuppliedSDecisionContextV5,
+) -> Result<DecisionContextV5, DecisionV5Error> {
+    let retained_supplied_encoding = RetainedSuppliedEncodingV5::from_s(&context.supplied)?;
+    Ok(DecisionContextV5 {
+        owner_state: context.owner_state,
+        strategy: context.strategy,
+        broker: context.broker,
+        trigger: context.trigger,
+        kernel_checkpoint: context.kernel_checkpoint,
+        continuation: context.continuation,
+        decision_time_unix_ms: context.decision_time_unix_ms,
+        supplied: crate::supplied_v5::from_frozen_s(context.supplied),
+        retained_supplied_encoding,
+    })
+}
+
+/// The durable `SDCTXV5S` shape of a context. Only a context whose supplied block fits the
+/// first supplied shape has one.
+fn supplied_s_context_from_current(
+    context: &DecisionContextV5,
+) -> Result<SuppliedSDecisionContextV5, DecisionV5Error> {
+    let mut supplied = crate::supplied_v5::to_frozen_s(&context.supplied)?;
+    context.retained_supplied_encoding.restore_s(&mut supplied);
+    Ok(SuppliedSDecisionContextV5 {
+        owner_state: context.owner_state.clone(),
+        strategy: context.strategy.clone(),
+        broker: context.broker.clone(),
+        trigger: context.trigger.clone(),
+        kernel_checkpoint: context.kernel_checkpoint.clone(),
+        continuation: context.continuation.clone(),
+        decision_time_unix_ms: context.decision_time_unix_ms,
+        supplied,
+    })
+}
+
+fn supplied_s_decision_context_v5_sha256(
+    context: &DecisionContextV5,
+) -> Result<[u8; 32], DecisionV5Error> {
+    let frozen = supplied_s_context_from_current(context)?;
+    let encoded = encode_bounded(
+        SUPPLIED_S_DECISION_CONTEXT_V5_MAGIC,
+        &frozen,
+        MAX_DECISION_CONTEXT_V5_BYTES,
+    )?;
+    Ok(Sha256::digest(encoded).into())
+}
+
 fn convert_hundredths_context(context: HundredthsDecisionContextV5) -> DecisionContextV5 {
     DecisionContextV5 {
         owner_state: context.owner_state,
@@ -1021,6 +1192,7 @@ fn convert_hundredths_context(context: HundredthsDecisionContextV5) -> DecisionC
         continuation: context.continuation,
         decision_time_unix_ms: context.decision_time_unix_ms,
         supplied: SuppliedInputsV5::default(),
+        retained_supplied_encoding: Default::default(),
     }
 }
 
@@ -1118,6 +1290,7 @@ fn convert_legacy_context(
         continuation: legacy.continuation,
         decision_time_unix_ms: legacy.decision_time_unix_ms,
         supplied: SuppliedInputsV5::default(),
+        retained_supplied_encoding: Default::default(),
     })
 }
 
@@ -1827,6 +2000,11 @@ fn originating_context_digest_matches(
     if decision_context_v5_sha256(context)? == expected {
         return Ok(true);
     }
+    match supplied_s_decision_context_v5_sha256(context) {
+        Ok(digest) if digest == expected => return Ok(true),
+        Ok(_) | Err(DecisionV5Error::InvalidContract) => {}
+        Err(error) => return Err(error),
+    }
     match hundredths_decision_context_v5_sha256(context) {
         Ok(digest) if digest == expected => return Ok(true),
         Ok(_) | Err(DecisionV5Error::InvalidContract) => {}
@@ -1841,10 +2019,11 @@ fn originating_context_digest_matches(
 
 fn originating_context_v5_sha256(context: &DecisionContextV5) -> Result<[u8; 32], DecisionV5Error> {
     match &context.trigger {
-        TriggerV5::BrokerOutcome {
-            originating_trigger,
-            ..
-        } => decision_context_v5_sha256(&originating_context_v5(context, originating_trigger)),
+        TriggerV5::BrokerOutcome { .. } => context
+            .continuation
+            .as_ref()
+            .map(|commitment| commitment.originating_context_sha256)
+            .ok_or(DecisionV5Error::InvalidContract),
         TriggerV5::Owner(_) | TriggerV5::BrokerState { .. } => decision_context_v5_sha256(context),
     }
 }
@@ -2004,17 +2183,15 @@ fn validate_owner_trigger(
                 source_sequence: owner_sequence,
             },
         ) => context.owner_state.stations.iter().any(|station| {
-            let present = station
-                .weather_events
-                .iter()
-                .any(|event| event.event_id == *episode_id);
+            // The captured transition is bound by validate_supplied, independently of
+            // current membership: an ended episode may have left state before FIFO drain.
             station_id == owner_station
                 && source_generation == owner_generation
                 && source_sequence == owner_sequence
                 && station.identity.station_id == *station_id
                 && station.weather_events_meta.revision == *component_revision
                 && !episode_id.is_empty()
-                && present == (state != "ended")
+                && !state.is_empty()
         }),
         (
             OwnerTriggerV5::StationReport {
@@ -2622,7 +2799,13 @@ fn decode_bounded<T: Decode<()>>(
 }
 
 fn hex_digest(bytes: &[u8]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        output.push(HEX[usize::from(byte >> 4)] as char);
+        output.push(HEX[usize::from(byte & 0x0f)] as char);
+    }
+    output
 }
 
 fn valid_identifier(value: &str) -> bool {
@@ -2681,11 +2864,7 @@ pub fn derive_sleeve_identity_v5(
         digest.update(length.to_be_bytes());
         digest.update(component.as_bytes());
     }
-    digest
-        .finalize()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
+    hex_digest(&digest.finalize())
 }
 
 pub fn decision_fence_v5_sha256(context: &DecisionContextV5) -> Result<[u8; 32], DecisionV5Error> {
@@ -2864,6 +3043,7 @@ mod tests {
             },
             decision_time_unix_ms: 1_788_062_400_000,
             supplied: SuppliedInputsV5::default(),
+            retained_supplied_encoding: Default::default(),
         }
     }
 
@@ -3831,8 +4011,11 @@ mod tests {
                 models: vec![SuppliedForecastModelV5 {
                     model_id: "ncep_hrrr_conus".to_owned(),
                     run_id: Some("run-1".to_owned()),
+                    version: Some("2026-08-30T18:00:00Z".to_owned()),
                     fetched_at: Some("2026-08-30T18:00:00Z".to_owned()),
                     fetched_at_unix_ns: Some(1_788_055_200_000_000_000),
+                    issued_at: None,
+                    issued_at_unix_ns: None,
                     timezone: Some("America/Los_Angeles".to_owned()),
                     utc_offset_seconds: Some(-25_200),
                     hourly: vec![
@@ -4010,6 +4193,66 @@ mod tests {
     }
 
     #[test]
+    fn v5_decodes_durable_supplied_s_contexts_and_replays_their_digests() {
+        let context = supplied_observation_context();
+        let frozen = supplied_s_context_from_current(&context).unwrap();
+        let bytes = encode_bounded(
+            SUPPLIED_S_DECISION_CONTEXT_V5_MAGIC,
+            &frozen,
+            MAX_DECISION_CONTEXT_V5_BYTES,
+        )
+        .unwrap();
+        let decoded = decode_decision_context_v5(&bytes).unwrap();
+        assert_eq!(decoded, context);
+        assert_eq!(
+            decoded.supplied.contract_version,
+            crate::supplied_v5::SUPPLIED_INPUTS_CONTRACT_VERSION
+        );
+        assert!(
+            encode_decision_context_v5(&decoded)
+                .unwrap()
+                .starts_with(DECISION_CONTEXT_V5_MAGIC)
+        );
+        let result = encode_decision_result_v5(&awaiting_result_for(&context)).unwrap();
+        let (_, commitment) = decode_continuation_v5(&bytes, &result).unwrap();
+        let commitment = commitment.unwrap();
+        assert_eq!(
+            commitment.originating_context_sha256,
+            supplied_s_decision_context_v5_sha256(&context).unwrap()
+        );
+
+        // Reopening the owner invocation is insufficient: a persisted Broker outcome must
+        // validate against that same S-origin commitment, including after C re-encoding.
+        let TriggerV5::Owner(originating_trigger) = context.trigger.clone() else {
+            unreachable!();
+        };
+        let mut replay = context;
+        replay.kernel_checkpoint = Some(commitment.pre_event_checkpoint.clone());
+        replay.continuation = Some(commitment.clone());
+        replay.trigger = TriggerV5::BrokerOutcome {
+            outcome: Box::new(resting_outcome_for_awaited_command()),
+            originating_trigger: Box::new(OriginatingTriggerV5::Owner(originating_trigger)),
+        };
+        replay.validate().unwrap();
+        let replay_bytes = encode_decision_context_v5(&replay).unwrap();
+        let reopened = decode_decision_context_v5(&replay_bytes).unwrap();
+        assert_eq!(reopened, replay);
+        let next = encode_decision_result_v5(&awaiting_result_for(&reopened)).unwrap();
+        let (_, chained) = decode_continuation_v5(&replay_bytes, &next).unwrap();
+        assert_eq!(
+            chained.unwrap().originating_context_sha256,
+            commitment.originating_context_sha256,
+        );
+        let mut changed = reopened;
+        changed.supplied.stations[0]
+            .observation
+            .as_mut()
+            .unwrap()
+            .temperature_f = Some(crate::supplied_v5::DecimalV5::parse("73.1").unwrap());
+        assert_eq!(changed.validate(), Err(DecisionV5Error::InvalidContract));
+    }
+
+    #[test]
     fn v5_decodes_durable_hundredths_contexts_and_replays_their_digests() {
         let context = context();
         let bytes = encode_hundredths_context_for_test(&context);
@@ -4094,10 +4337,16 @@ mod tests {
                 ..Default::default()
             },
         );
+        // Queued transitions compose against fresh state: an `ended` transition delivered
+        // while the owner's current state still lists the episode is bound by its supplied
+        // event, not by current membership.
+        resurrected.validate().unwrap();
+        let mut unbound = ended.clone();
+        unbound.supplied.originating_event = None;
         assert_eq!(
-            resurrected.validate(),
+            unbound.validate(),
             Err(DecisionV5Error::InvalidContract),
-            "an ended episode must not remain in current state"
+            "a weather trigger without its supplied event is unbound"
         );
     }
 
@@ -4161,7 +4410,7 @@ mod tests {
             .join("../../conformance/v5/decision-transactions.json");
         let corpus: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-        assert_eq!(corpus["schema"], "strategy-core-decision-v5-corpus/4");
+        assert_eq!(corpus["schema"], "strategy-core-decision-v5-corpus/5");
 
         let vectors = corpus["valid"].as_array().unwrap();
         let measured = corpus_measurements();

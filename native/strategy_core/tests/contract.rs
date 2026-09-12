@@ -224,6 +224,52 @@ fn fee_rounding_accumulator_applies_rebate_once_whole_cent_is_reached() {
 }
 
 #[test]
+fn direct_member_fee_precision_preserves_signed_fractional_revenue() {
+    // Kalshi's current fee-rounding rules: ceil to six decimals, then floor signed
+    // revenue minus that fee to the direct member's $0.0001 balance grid.
+    for (action, price, quantity, trade_fee, rounding_fee, net_fee, change) in [
+        (Action::Buy, 0.055, 100, 0.003639, 0.000061, 0.0037, -0.0587),
+        (Action::Sell, 0.055, 100, 0.003639, 0.000061, 0.0037, 0.0513),
+        (Action::Buy, 0.5555, 1, 0.000173, 0.000072, 0.000245, -0.0058),
+        (Action::Sell, 0.5555, 1, 0.000173, 0.000082, 0.000255, 0.0053),
+    ] {
+        let fee = strategy_core::calculate_direct_member_fill_fee_hundredths(
+            action, price, quantity, strategy_core::LiquidityRole::Taker, 0.0,
+            Some(FeeType::Quadratic), None,
+        ).unwrap();
+        assert_eq!(fee.trade_fee, trade_fee);
+        assert_eq!(fee.rounding_fee, rounding_fee);
+        assert_eq!(fee.net_fee, net_fee);
+        assert_eq!(fee.posted_balance_change, change);
+        assert_eq!(fee.fee_accumulator, rounding_fee);
+    }
+}
+
+#[test]
+fn direct_member_rebates_remain_aligned_and_cannot_make_a_fill_fee_negative() {
+    use strategy_core::LiquidityRole::{Maker, Taker};
+    let mut accumulator = 0.0;
+    for (role, price, trade, rounding, rebate, net, change, carried) in [
+        (Taker, 0.0055, 0.000004, 0.000041, 0.0, 0.000045, -0.0001, 0.000041),
+        (Maker, 0.0055, 0.0, 0.000045, 0.0, 0.000045, -0.0001, 0.000086),
+        // A $0.0001 refund here would make this fill's fee negative. Retain it instead.
+        (Maker, 0.0055, 0.0, 0.000045, 0.0, 0.000045, -0.0001, 0.000131),
+        (Taker, 0.50, 0.000175, 0.000025, 0.0001, 0.0001, -0.0051, 0.000056),
+    ] {
+        let fee = strategy_core::calculate_direct_member_fill_fee_hundredths(
+            Action::Buy, price, 1, role, accumulator, Some(FeeType::Quadratic), None,
+        ).unwrap();
+        assert_eq!(fee.trade_fee, trade);
+        assert_eq!(fee.rounding_fee, rounding);
+        assert_eq!(fee.rebate, rebate);
+        assert_eq!(fee.net_fee, net);
+        assert_eq!(fee.posted_balance_change, change);
+        assert_eq!(fee.fee_accumulator, carried);
+        accumulator = fee.fee_accumulator;
+    }
+}
+
+#[test]
 fn signed_fee_inputs_round_toward_positive_infinity() {
     assert_eq!(
         calculate_trade_fee(0.25, -1, strategy_core::LiquidityRole::Taker, None, None,).unwrap(),

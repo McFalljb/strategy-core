@@ -11,6 +11,7 @@ pub type FeeResult<T> = Result<T, FeeError>;
 pub enum FeeError {
     UnknownFeeType(String),
     InvalidDecimal(String),
+    InvalidInput(&'static str),
 }
 
 impl fmt::Display for FeeError {
@@ -18,6 +19,7 @@ impl fmt::Display for FeeError {
         match self {
             Self::UnknownFeeType(value) => write!(formatter, "unknown Kalshi fee type: {value}"),
             Self::InvalidDecimal(value) => write!(formatter, "invalid decimal value: {value}"),
+            Self::InvalidInput(value) => write!(formatter, "invalid fee input: {value}"),
         }
     }
 }
@@ -71,8 +73,9 @@ pub fn calculate_trade_fee(
 ) -> FeeResult<f64> {
     let price = decimal_from_f64(price)?;
     let quantity = Decimal::from(quantity);
-    let fee =
-        calculate_trade_fee_decimal(price, quantity, liquidity_role, fee_type, fee_multiplier)?;
+    let fee = calculate_trade_fee_decimal(
+        price, quantity, liquidity_role, fee_type, fee_multiplier, centicent(),
+    )?;
     Ok(decimal_to_f64(fee))
 }
 
@@ -82,11 +85,12 @@ fn calculate_trade_fee_decimal(
     liquidity_role: LiquidityRole,
     fee_type: Option<FeeType>,
     fee_multiplier: Option<f64>,
+    trade_increment: Decimal,
 ) -> FeeResult<Decimal> {
     let fee_type = fee_type.unwrap_or(FeeType::QuadraticWithMakerFees);
     let multiplier = resolve_fee_multiplier(liquidity_role, fee_type, fee_multiplier)?;
     let raw_fee = raw_trade_fee(price, quantity, multiplier, fee_type);
-    Ok(ceil_to_increment(raw_fee, centicent()))
+    Ok(ceil_to_increment(raw_fee, trade_increment))
 }
 
 pub fn apply_fee_rounding(
@@ -101,6 +105,8 @@ pub fn apply_fee_rounding(
         revenue,
         rounded_trade_fee,
         &mut accumulator,
+        cent(),
+        false,
     ))
 }
 
@@ -108,13 +114,21 @@ fn apply_fee_rounding_decimal(
     revenue: Decimal,
     rounded_trade_fee: Decimal,
     accumulator: &mut Decimal,
+    balance_increment: Decimal,
+    cap_rebate: bool,
 ) -> FeeCalculation {
     let balance_change = revenue - rounded_trade_fee;
-    let floored_balance_change = floor_to_increment(balance_change, cent());
+    let floored_balance_change = floor_to_increment(balance_change, balance_increment);
     let rounding_fee = balance_change - floored_balance_change;
 
     *accumulator += rounding_fee;
-    let rebate = floor_to_increment(*accumulator, cent());
+    let mut rebate = floor_to_increment(*accumulator, balance_increment);
+    if cap_rebate {
+        rebate = rebate.min(floor_to_increment(
+            rounded_trade_fee + rounding_fee,
+            balance_increment,
+        ));
+    }
     *accumulator -= rebate;
 
     let net_fee = rounded_trade_fee + rounding_fee - rebate;
@@ -139,8 +153,81 @@ pub fn calculate_fill_fee(
     fee_type: Option<FeeType>,
     fee_multiplier: Option<f64>,
 ) -> FeeResult<FeeCalculation> {
+    calculate_fill_fee_decimal(
+        action,
+        price,
+        Decimal::from(quantity),
+        liquidity_role,
+        fee_accumulator,
+        fee_type,
+        fee_multiplier,
+    )
+}
+
+/// The same fee schedule for an exact fractional quantity given in hundredths of a contract.
+/// A whole quantity produces the same result as [`calculate_fill_fee`].
+pub fn calculate_fill_fee_hundredths(
+    action: Action,
+    price: f64,
+    quantity_hundredths: i64,
+    liquidity_role: LiquidityRole,
+    fee_accumulator: f64,
+    fee_type: Option<FeeType>,
+    fee_multiplier: Option<f64>,
+) -> FeeResult<FeeCalculation> {
+    calculate_fill_fee_decimal(
+        action,
+        price,
+        Decimal::new(quantity_hundredths, 2),
+        liquidity_role,
+        fee_accumulator,
+        fee_type,
+        fee_multiplier,
+    )
+}
+
+/// Current Kalshi Predictions direct-member rounding for contract hundredths.
+///
+/// Trade fees round up to $0.000001; signed balance changes and rebates align to
+/// $0.0001. The caller retains the returned accumulator across every fill of the
+/// same order, including maker/taker transitions. Unlike the retained legacy schedule,
+/// a rebate cannot make the fill's net fee negative.
+pub fn calculate_direct_member_fill_fee_hundredths(
+    action: Action,
+    price: f64,
+    quantity_hundredths: i64,
+    liquidity_role: LiquidityRole,
+    fee_accumulator: f64,
+    fee_type: Option<FeeType>,
+    fee_multiplier: Option<f64>,
+) -> FeeResult<FeeCalculation> {
+    let price = decimal_from_f64(price)?;
+    let quantity = Decimal::new(quantity_hundredths, 2);
+    let mut accumulator = decimal_from_f64(fee_accumulator)?;
+    if price < zero() || price > one() || quantity < zero() || accumulator < zero()
+        || fee_multiplier.is_some_and(|value| !value.is_finite() || value < 0.0)
+    {
+        return Err(FeeError::InvalidInput("direct-member fill requires nonnegative quantity, accumulator and multiplier, and price in [0, 1]"));
+    }
+    let trade_fee = calculate_trade_fee_decimal(
+        price, quantity, liquidity_role, fee_type, fee_multiplier, Decimal::new(1, 6),
+    )?;
+    let revenue = if action == Action::Buy { -price * quantity } else { price * quantity };
+    Ok(apply_fee_rounding_decimal(
+        revenue, trade_fee, &mut accumulator, centicent(), true,
+    ))
+}
+
+fn calculate_fill_fee_decimal(
+    action: Action,
+    price: f64,
+    quantity_decimal: Decimal,
+    liquidity_role: LiquidityRole,
+    fee_accumulator: f64,
+    fee_type: Option<FeeType>,
+    fee_multiplier: Option<f64>,
+) -> FeeResult<FeeCalculation> {
     let price_decimal = decimal_from_f64(price)?;
-    let quantity_decimal = Decimal::from(quantity);
     let mut revenue = price_decimal * quantity_decimal;
     if action == Action::Buy {
         revenue = -revenue;
@@ -152,12 +239,15 @@ pub fn calculate_fill_fee(
         liquidity_role,
         fee_type,
         fee_multiplier,
+        centicent(),
     )?;
     let mut fee_accumulator = decimal_from_f64(fee_accumulator)?;
     Ok(apply_fee_rounding_decimal(
         revenue,
         trade_fee,
         &mut fee_accumulator,
+        cent(),
+        false,
     ))
 }
 

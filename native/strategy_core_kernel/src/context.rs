@@ -7,6 +7,7 @@ use crate::events::{
     ForecastInputSnapshot, OracleInputSnapshot, StationWeatherView, StrategyEventView,
     TickerPriceView,
 };
+use crate::state::{MarketState, StationState};
 use chrono::{DateTime, Utc};
 
 pub trait NativeKernel {
@@ -41,38 +42,50 @@ pub trait StrategyKernelContext {
     fn emit(&mut self, action: KernelAction) -> KernelResult<()>;
 }
 
+/// Complete scoped state as the host delivered it for this invocation.
+///
+/// Hosts must provide the canonical model, including supplied originals, derived facts,
+/// authority, revisions and provenance. Absent or out-of-scope state returns `None`.
+/// References remain valid for this invocation; access must not fetch provider data.
+/// Convenience access lives on the trait object below, so hosts cannot override it with
+/// independent reduced mappings.
 pub trait StrategyKernelState {
-    fn get_price(&self, ticker: &str) -> Option<TickerPriceView<'_>>;
+    fn station(&self, station_id: &str) -> Option<&StationState>;
 
-    fn get_weather(&self, _station_id: &str) -> Option<StationWeatherView> {
-        None
-    }
-
-    fn latest_forecast(&self, _station_id: &str) -> Option<ForecastInputSnapshot<'_>> {
-        None
-    }
-
-    fn latest_oracle_scores(
-        &self,
-        _station_id: &str,
-        _mode: Option<&str>,
-        _rank_by: Option<&str>,
-        _days: Option<&str>,
-    ) -> Option<OracleInputSnapshot<'_>> {
-        None
-    }
+    fn market(&self, ticker: &str) -> Option<&MarketState>;
 
     fn state_read_diagnostics(&self) -> Vec<StateReadDiagnostic> {
         Vec::new()
     }
+}
 
-    /// The complete canonical decision context behind these views, when the host delivers one.
-    ///
-    /// Trader delivers `strategy_core_v3::decision_v5::DecisionContextV5`; a kernel that needs a
-    /// supplied field without a view slot downcasts to it. Hosts without a canonical context
-    /// return `None`, so views remain the portable contract.
-    fn canonical_context(&self) -> Option<&dyn std::any::Any> {
-        None
+impl dyn StrategyKernelState + '_ {
+    pub fn get_price(&self, ticker: &str) -> Option<TickerPriceView<'_>> {
+        self.market(ticker).map(MarketState::ticker_view)
+    }
+
+    pub fn get_weather(&self, station_id: &str) -> Option<StationWeatherView> {
+        self.station(station_id)
+            .map(|station| station.weather.clone())
+    }
+
+    pub fn latest_forecast(&self, station_id: &str) -> Option<ForecastInputSnapshot<'_>> {
+        self.station(station_id)?
+            .forecast
+            .as_ref()
+            .map(|forecast| forecast.snapshot())
+    }
+
+    pub fn latest_oracle_scores(
+        &self,
+        station_id: &str,
+        mode: Option<&str>,
+        rank_by: Option<&str>,
+        days: Option<&str>,
+    ) -> Option<OracleInputSnapshot<'_>> {
+        self.station(station_id)?
+            .oracle_table(mode, rank_by, days)
+            .map(|table| table.snapshot())
     }
 }
 

@@ -4,26 +4,14 @@ use strategy_core_kernel::{
     KernelResult, MarketBracketView, NativeKernel, OrderAction, OrderResult, OrderStatus,
     OrderStatusView, OrderType, PlaceOrderRequest, PriceLevelView, PriceUpdateView,
     StrategyEventView, StrategyKernelBroker, StrategyKernelContext, StrategyKernelData,
-    StrategyKernelRuntime, StrategyKernelState, StrategyKernelTelemetry, TickerPriceView,
-    TimerWakeView, WakeAtRequest,
+    StrategyKernelRuntime, StrategyKernelState, StrategyKernelTelemetry, TimerWakeView,
+    WakeAtRequest,
 };
 
-const YES_BID_LEVELS: [PriceLevelView; 1] = [PriceLevelView {
-    price: 0.41,
-    quantity: 12,
-}];
-const YES_ASK_LEVELS: [PriceLevelView; 1] = [PriceLevelView {
-    price: 0.42,
-    quantity: 8,
-}];
-const NO_BID_LEVELS: [PriceLevelView; 1] = [PriceLevelView {
-    price: 0.58,
-    quantity: 9,
-}];
-const NO_ASK_LEVELS: [PriceLevelView; 1] = [PriceLevelView {
-    price: 0.59,
-    quantity: 7,
-}];
+const YES_BID_LEVELS: [PriceLevelView; 1] = [PriceLevelView::whole(0.41, 12)];
+const YES_ASK_LEVELS: [PriceLevelView; 1] = [PriceLevelView::whole(0.42, 8)];
+const NO_BID_LEVELS: [PriceLevelView; 1] = [PriceLevelView::whole(0.58, 9)];
+const NO_ASK_LEVELS: [PriceLevelView; 1] = [PriceLevelView::whole(0.59, 7)];
 
 #[derive(Default)]
 struct NoopKernel {
@@ -79,38 +67,12 @@ impl NativeKernel for OrderKernel {
 struct FakeState;
 
 impl StrategyKernelState for FakeState {
-    fn get_price(&self, _ticker: &str) -> Option<TickerPriceView<'_>> {
-        Some(TickerPriceView {
-            ticker: "KXHIGHMIA-26MAY30-B90",
-            source: "fixture",
-            event_ticker: "KXHIGHMIA-26MAY30",
-            event_date: "2026-05-30",
-            series_ticker: "KXHIGHMIA",
-            close_time: Some(Utc.with_ymd_and_hms(2026, 5, 30, 19, 0, 0).unwrap()),
-            fee_type: "kalshi",
-            fee_multiplier: Some(1.0),
-            strike_type: "above",
-            floor_strike: Some(90.0),
-            cap_strike: None,
-            yes_price: 0.42,
-            no_price: 0.58,
-            yes_bid: Some(0.41),
-            yes_ask: Some(0.42),
-            no_bid: Some(0.58),
-            no_ask: Some(0.59),
-            yes_bid_depth: Some(12),
-            yes_ask_depth: Some(8),
-            no_bid_depth: Some(9),
-            no_ask_depth: Some(7),
-            yes_bid_levels: &YES_BID_LEVELS,
-            yes_ask_levels: &YES_ASK_LEVELS,
-            no_bid_levels: &NO_BID_LEVELS,
-            no_ask_levels: &NO_ASK_LEVELS,
-            orderbook_depth: Some(2),
-            volume: Some(100.0),
-            peak_yes_ask: Some(0.43),
-            last_update: Some(Utc.with_ymd_and_hms(2026, 5, 30, 12, 0, 0).unwrap()),
-        })
+    fn station(&self, _station_id: &str) -> Option<&strategy_core_kernel::StationState> {
+        None
+    }
+
+    fn market(&self, _ticker: &str) -> Option<&strategy_core_kernel::MarketState> {
+        None
     }
 }
 
@@ -166,19 +128,19 @@ impl StrategyKernelRuntime for FakeRuntime {
 
 #[derive(Default)]
 struct FakeTelemetry {
-    counters: Vec<(String, f64, Vec<(String, String)>)>,
+    counters: Vec<strategy_core_kernel::TelemetryAction>,
 }
 
 impl StrategyKernelTelemetry for FakeTelemetry {
     fn counter(&mut self, name: &str, value: f64, fields: &[(&str, &str)]) -> KernelResult<()> {
-        self.counters.push((
-            name.to_string(),
+        self.counters.push(strategy_core_kernel::TelemetryAction {
+            name: name.to_string(),
             value,
-            fields
+            fields: fields
                 .iter()
                 .map(|(key, item)| ((*key).to_string(), (*item).to_string()))
                 .collect(),
-        ));
+        });
         Ok(())
     }
 }
@@ -388,20 +350,8 @@ fn event_views_preserve_price_update_fields() {
     );
     assert_eq!(market.yes_bid, Some(0.41));
     assert_eq!(market.yes_ask, Some(0.42));
-    assert_eq!(
-        market.yes_bid_levels,
-        &[PriceLevelView {
-            price: 0.41,
-            quantity: 12
-        }]
-    );
-    assert_eq!(
-        market.no_ask_levels,
-        &[PriceLevelView {
-            price: 0.59,
-            quantity: 7
-        }]
-    );
+    assert_eq!(market.yes_bid_levels, &[PriceLevelView::whole(0.41, 12)]);
+    assert_eq!(market.no_ask_levels, &[PriceLevelView::whole(0.59, 7)]);
     assert_eq!(market.orderbook_depth, Some(2));
 }
 
@@ -441,6 +391,7 @@ fn price_update_event<'a>() -> StrategyEventView<'a> {
             no_ask_levels: &NO_ASK_LEVELS,
             orderbook_depth: Some(2),
             volume: Some(123.0),
+            ..Default::default()
         }]
         .into_boxed_slice(),
     );

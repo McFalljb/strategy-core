@@ -25,11 +25,13 @@ pub enum OrderType {
 /// Exact contract quantity represented in hundredths of one contract.
 ///
 /// Callers must choose the scale explicitly; no value-shape or sentinel inference is supported.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ContractQuantity(i64);
 
 impl ContractQuantity {
+    pub const ZERO: Self = Self(0);
+
     pub const fn from_hundredths(hundredths: i64) -> Self {
         Self(hundredths)
     }
@@ -41,8 +43,153 @@ impl ContractQuantity {
         }
     }
 
+    /// A contract count that is exactly representable in hundredths; anything finer is
+    /// rejected rather than rounded.
+    pub fn checked_from_contracts_f64(contracts: f64) -> Option<Self> {
+        if !contracts.is_finite() {
+            return None;
+        }
+        // Interpret the caller's round-trip decimal value, not a rounded binary
+        // multiplication: an epsilon would admit off-grid quantities, and a float-to-int
+        // cast could saturate at the range boundary.
+        let value = crate::decimal::Decimal::parse(&contracts.to_string()).ok()?;
+        let hundredths = match value.scale {
+            0 => value.coefficient.checked_mul(100)?,
+            1 => value.coefficient.checked_mul(10)?,
+            2 => value.coefficient,
+            _ => return None,
+        };
+        Some(Self(hundredths))
+    }
+
     pub const fn hundredths(self) -> i64 {
         self.0
+    }
+
+    /// Whole contracts: the floor of the exact quantity.
+    pub const fn whole_contracts(self) -> i64 {
+        self.0.div_euclid(100)
+    }
+
+    pub const fn is_whole(self) -> bool {
+        self.0 % 100 == 0
+    }
+
+    /// The whole-contract count when the quantity is whole; `None` for a fractional quantity.
+    pub const fn checked_whole_contracts(self) -> Option<i64> {
+        if self.is_whole() {
+            Some(self.0 / 100)
+        } else {
+            None
+        }
+    }
+
+    /// The largest whole-contract quantity not above this one.
+    pub const fn floor_to_whole(self) -> Self {
+        Self(self.0.div_euclid(100) * 100)
+    }
+
+    pub const fn is_positive(self) -> bool {
+        self.0 > 0
+    }
+
+    pub const fn is_zero(self) -> bool {
+        self.0 == 0
+    }
+
+    /// The quantity as a floating-point contract count, for price arithmetic.
+    pub fn contracts_f64(self) -> f64 {
+        self.0 as f64 / 100.0
+    }
+
+    pub const fn abs(self) -> Self {
+        Self(self.0.abs())
+    }
+
+    pub const fn saturating_add(self, other: Self) -> Self {
+        Self(self.0.saturating_add(other.0))
+    }
+
+    pub const fn saturating_sub(self, other: Self) -> Self {
+        Self(self.0.saturating_sub(other.0))
+    }
+
+    pub const fn checked_add(self, other: Self) -> Option<Self> {
+        match self.0.checked_add(other.0) {
+            Some(value) => Some(Self(value)),
+            None => None,
+        }
+    }
+
+    pub const fn checked_sub(self, other: Self) -> Option<Self> {
+        match self.0.checked_sub(other.0) {
+            Some(value) => Some(Self(value)),
+            None => None,
+        }
+    }
+
+    pub const fn min(self, other: Self) -> Self {
+        if self.0 <= other.0 { self } else { other }
+    }
+
+    pub const fn max(self, other: Self) -> Self {
+        if self.0 >= other.0 { self } else { other }
+    }
+}
+
+impl core::ops::Add for ContractQuantity {
+    type Output = Self;
+    fn add(self, other: Self) -> Self {
+        Self(self.0 + other.0)
+    }
+}
+
+impl core::ops::Sub for ContractQuantity {
+    type Output = Self;
+    fn sub(self, other: Self) -> Self {
+        Self(self.0 - other.0)
+    }
+}
+
+impl core::ops::AddAssign for ContractQuantity {
+    fn add_assign(&mut self, other: Self) {
+        self.0 += other.0;
+    }
+}
+
+impl core::ops::SubAssign for ContractQuantity {
+    fn sub_assign(&mut self, other: Self) {
+        self.0 -= other.0;
+    }
+}
+
+impl core::iter::Sum for ContractQuantity {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Self::ZERO, |total, value| total + value)
+    }
+}
+
+impl<'a> core::iter::Sum<&'a ContractQuantity> for ContractQuantity {
+    fn sum<I: Iterator<Item = &'a Self>>(iter: I) -> Self {
+        iter.fold(Self::ZERO, |total, value| total + *value)
+    }
+}
+
+impl core::fmt::Display for ContractQuantity {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        if self.is_whole() {
+            write!(f, "{}", self.whole_contracts())
+        } else {
+            let negative = self.0 < 0;
+            let abs = self.0.unsigned_abs();
+            write!(
+                f,
+                "{}{}.{:02}",
+                if negative { "-" } else { "" },
+                abs / 100,
+                abs % 100
+            )
+        }
     }
 }
 

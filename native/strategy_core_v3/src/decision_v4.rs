@@ -6,6 +6,9 @@
 
 use bincode::{Decode, Encode};
 
+#[doc(hidden)]
+pub use crate::wire_v4::{RetainedObservationEncodingV4, RetainedWeatherEncodingV4};
+
 pub const DECISION_CONTEXT_V4_MAGIC: &[u8; 8] = b"SDCTXV4\0";
 pub const MAX_DECISION_CONTEXT_V4_BYTES: usize = 16 * 1024 * 1024;
 pub const MAX_STATIONS: usize = 5;
@@ -138,7 +141,7 @@ pub struct StationIdentityV4 {
     pub longitude_micros: Option<i64>,
     pub timezone: String,
 }
-#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ObservationV4 {
     pub station_id: String,
     pub observed_at_unix_ms: i64,
@@ -151,15 +154,11 @@ pub struct ObservationV4 {
     pub temperature_milli_c: Option<i32>,
     pub temperature_min_milli_c: Option<i32>,
     pub temperature_max_milli_c: Option<i32>,
-    pub wu_current_temperature_milli_c: Option<i32>,
-    pub wu_daily_high_milli_c: Option<i32>,
-    pub wu_daily_low_milli_c: Option<i32>,
-    pub wu_observation_at_unix_ms: Option<i64>,
-    pub wu_fetched_at_unix_ms: Option<i64>,
     pub temperature_day_mode: Option<String>,
     pub temperature_day_date: Option<String>,
-    pub wu_day_mode: Option<String>,
-    pub wu_day_date: Option<String>,
+    /// Codec-only evidence for retained records; no active weather meaning.
+    #[doc(hidden)]
+    pub retained_encoding: RetainedObservationEncodingV4,
     pub is_from_report: bool,
     pub report_type: Option<String>,
     pub source_report_id: Option<String>,
@@ -173,7 +172,7 @@ pub struct ObservationV4 {
     pub text_description: Option<String>,
     pub provenance: ProvenanceV4,
 }
-#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct WeatherV4 {
     pub station_id: String,
     pub current_temperature_milli_c: Option<i32>,
@@ -188,9 +187,9 @@ pub struct WeatherV4 {
     pub six_hour_low_milli_c: Option<i32>,
     pub asos_daily_high_milli_c: Option<i32>,
     pub asos_daily_low_milli_c: Option<i32>,
-    pub wu_current_temperature_milli_c: Option<i32>,
-    pub wu_daily_high_milli_c: Option<i32>,
-    pub wu_daily_low_milli_c: Option<i32>,
+    /// Codec-only evidence for retained records; no active weather meaning.
+    #[doc(hidden)]
+    pub retained_encoding: RetainedWeatherEncodingV4,
     pub dewpoint_micros: Option<i64>,
     pub heat_index_micros: Option<i64>,
     pub wind_chill_micros: Option<i64>,
@@ -648,10 +647,7 @@ pub fn decision_fence_v4_sha256(fence: &FenceV4) -> Result<String, DecisionV4Err
         .with_big_endian()
         .with_fixed_int_encoding();
     let bytes = bincode::encode_to_vec(fence, config).map_err(|_| DecisionV4Error::Encode)?;
-    Ok(Sha256::digest(bytes)
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect())
+    Ok(format!("{:x}", Sha256::digest(bytes)))
 }
 
 pub fn decode_decision_context_v4(bytes: &[u8]) -> Result<DecisionContextV4, DecisionV4Error> {
