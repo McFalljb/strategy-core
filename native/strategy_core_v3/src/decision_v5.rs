@@ -12,12 +12,17 @@ use sha2::{Digest, Sha256};
 use crate::decision_v4::{DecisionContextV4, DecisionV4Error, TriggerV4, decision_fence_v4_sha256};
 use crate::supplied_v5::{ExtremeKindV5, SuppliedEventV5, SuppliedInputsV5};
 use crate::wire_supplied::FrozenSuppliedInputsV5;
+mod replay_origin;
 #[doc(hidden)]
 pub use crate::wire_supplied::RetainedSuppliedEncodingV5;
+pub(crate) use replay_origin::{replay_origin_digest, replay_origin_encoding};
 
-/// Current V5 context encoding: explicit hundredths Broker-state quantities plus the canonical
-/// supplied original-precision inputs block (`supplied-inputs/2`).
-pub const DECISION_CONTEXT_V5_MAGIC: &[u8; 8] = b"SDCTXV5C";
+/// Current V5 context encoding, including bounded host-owned Broker replay state.
+pub const DECISION_CONTEXT_V5_MAGIC: &[u8; 8] = b"SDCTXV5E";
+/// Frozen host-selected weather, forecast, oracle and captured-origin encoding.
+pub const HOST_D_DECISION_CONTEXT_V5_MAGIC: &[u8; 8] = b"SDCTXV5D";
+/// Frozen canonical supplied-inputs/2 encoding, without per-field host winners.
+pub const CANONICAL_C_DECISION_CONTEXT_V5_MAGIC: &[u8; 8] = b"SDCTXV5C";
 /// Durable V5 context encoding carrying the first supplied inputs shape (`supplied-inputs/1`).
 pub const SUPPLIED_S_DECISION_CONTEXT_V5_MAGIC: &[u8; 8] = b"SDCTXV5S";
 /// Durable V5 context encoding with explicit hundredths quantities and no supplied inputs.
@@ -430,6 +435,12 @@ pub enum OwnerTriggerV5 {
         source_generation: u64,
         source_sequence: u64,
     },
+    /// Current packet event; complete accepted data is separate from current station state.
+    CapturedWeather {
+        station_id: String,
+        source_generation: u64,
+        source_sequence: u64,
+    },
 }
 
 impl OwnerTriggerV5 {
@@ -567,7 +578,19 @@ pub struct ResultDiagnosticV5 {
     pub message: String,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+pub struct StationWeatherV5 {
+    pub station_id: String,
+    pub facts: strategy_core_kernel::WeatherFacts,
+}
+
+#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+pub struct StationForecastIssuanceV5 {
+    pub station_id: String,
+    pub models: Vec<strategy_core_kernel::forecast::ForecastIssuance>,
+}
+
+#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
 pub struct DecisionContextV5 {
     pub owner_state: DecisionContextV4,
     pub strategy: StrategyScopeV5,
@@ -581,9 +604,18 @@ pub struct DecisionContextV5 {
     pub decision_time_unix_ms: i64,
     /// Provider inputs at their supplied precision plus the exact typed originating event.
     pub supplied: SuppliedInputsV5,
+    /// One explicit weather winner set per owner station. Absent only for historical or
+    /// controlled inputs whose host did not retain per-field acceptance evidence.
+    pub current_weather: Option<Vec<StationWeatherV5>>,
+    /// Accepted issuance for each delivered model; provider refresh originals remain separate.
+    pub forecast_issuance: Option<Vec<StationForecastIssuanceV5>>,
+    pub current_inputs: Option<crate::current_v5::CurrentInputsV5>,
     /// Private codec evidence preserved through durable outcome construction and cloning.
     #[doc(hidden)]
     pub retained_supplied_encoding: RetainedSuppliedEncodingV5,
+    /// Host-owned completed calls and the current returned Broker state. Absent in historical
+    /// deliveries and before the first Broker return; never part of private Strategy state.
+    pub broker_replay: Option<crate::replay_v5::BrokerReplayV5>,
 }
 
 /// Frozen C wire container; ordinary facts always come from the active context.
@@ -599,11 +631,16 @@ struct FrozenCDecisionContextV5 {
     supplied: FrozenSuppliedInputsV5,
 }
 
-impl Encode for DecisionContextV5 {
-    fn encode<E: bincode::enc::Encoder>(
-        &self,
-        encoder: &mut E,
-    ) -> Result<(), bincode::error::EncodeError> {
+impl DecisionContextV5 {
+    fn has_current_only_fields(&self) -> bool {
+        self.broker_replay.is_some()
+            || self.current_weather.is_some()
+            || self.forecast_issuance.is_some()
+            || self.current_inputs.is_some()
+            || crate::supplied_v5::has_current_only_fields(&self.supplied)
+    }
+
+    fn frozen_c(&self) -> FrozenCDecisionContextV5 {
         FrozenCDecisionContextV5 {
             owner_state: self.owner_state.clone(),
             strategy: self.strategy.clone(),
@@ -617,24 +654,16 @@ impl Encode for DecisionContextV5 {
                 &self.retained_supplied_encoding,
             ),
         }
-        .encode(encoder)
     }
 }
-impl<Context> Decode<Context> for DecisionContextV5 {
-    fn decode<D: bincode::de::Decoder<Context = Context>>(
-        decoder: &mut D,
-    ) -> Result<Self, bincode::error::DecodeError> {
-        convert_frozen_c_context(FrozenCDecisionContextV5::decode(decoder)?)
-            .map_err(|_| bincode::error::DecodeError::Other("invalid retained supplied encoding"))
-    }
-}
-bincode::impl_borrow_decode!(DecisionContextV5);
 
 fn convert_frozen_c_context(
     context: FrozenCDecisionContextV5,
 ) -> Result<DecisionContextV5, DecisionV5Error> {
-    let (supplied, retained_supplied_encoding) = context.supplied.into_current()?;
+    let (supplied, mut retained_supplied_encoding) = context.supplied.into_current()?;
+    retained_supplied_encoding.canonical_c = true;
     Ok(DecisionContextV5 {
+        broker_replay: None,
         owner_state: context.owner_state,
         strategy: context.strategy,
         broker: context.broker,
@@ -643,6 +672,9 @@ fn convert_frozen_c_context(
         continuation: context.continuation,
         decision_time_unix_ms: context.decision_time_unix_ms,
         supplied,
+        current_weather: None,
+        forecast_issuance: None,
+        current_inputs: None,
         retained_supplied_encoding,
     })
 }
@@ -822,16 +854,43 @@ struct LegacyDecisionResultV5 {
 
 impl DecisionContextV5 {
     pub fn validate(&self) -> Result<(), DecisionV5Error> {
-        self.owner_state.validate().map_err(DecisionV5Error::V4)?;
+        let max_points = if self.current_weather.is_some() {
+            crate::supplied_v5::MAX_SUPPLIED_FORECAST_POINTS
+        } else {
+            crate::decision_v4::MAX_POINTS_PER_MODEL
+        };
+        self.owner_state
+            .validate_with_forecast_point_bound(max_points)
+            .map_err(DecisionV5Error::V4)?;
         validate_scope(self)?;
         validate_broker(self)?;
+        crate::replay_v5::validate(self)?;
         if let Some(checkpoint) = &self.kernel_checkpoint {
             validate_kernel_checkpoint(&self.strategy, checkpoint)?;
         }
+        crate::current_v5::validate(self)?;
         validate_trigger(self)?;
+        if (self.retained_supplied_encoding.canonical_c && self.has_current_only_fields())
+            || (self.retained_supplied_encoding.canonical_d && self.broker_replay.is_some())
+            || (self.retained_supplied_encoding.canonical_c
+                && self.retained_supplied_encoding.canonical_d)
+        {
+            return Err(DecisionV5Error::InvalidContract);
+        }
         crate::supplied_v5::validate_supplied_inputs(&self.supplied)?;
+        self.retained_supplied_encoding.validate(&self.supplied)?;
         validate_supplied(self)?;
+        validate_current_weather(self)?;
+        validate_forecast_issuance(self)?;
         Ok(())
+    }
+
+    /// Latest coherent Broker state for admission; Source and original invocation inputs stay
+    /// frozen while the host-owned replay state advances between synchronous calls.
+    pub fn admission_broker(&self) -> &BrokerDetailV5 {
+        self.broker_replay
+            .as_ref()
+            .map_or(&self.broker, |replay| &replay.returned_state.broker)
     }
 
     /// The owner trigger that originated this transaction: the trigger itself, or the stored
@@ -930,7 +989,7 @@ pub fn validate_decision_result_v5(
     result.validate()?;
     if result.delivery_id != context.owner_state.delivery_id
         || result.sleeve_identity != context.owner_state.sleeve.sleeve_id
-        || result.expected_broker_revision != context.broker.revision
+        || result.expected_broker_revision != context.admission_broker().revision
         || result.state_fence != hex_digest(&decision_fence_v5_sha256(context)?)
     {
         return Err(DecisionV5Error::InvalidContract);
@@ -951,7 +1010,7 @@ pub fn validate_decision_result_v5(
                 order_id,
                 expected_order_revision,
                 ..
-            } if !context.broker.orders.iter().any(|order| {
+            } if !context.admission_broker().orders.iter().any(|order| {
                 order.order_id == *order_id && order.revision == *expected_order_revision
             }) =>
             {
@@ -1092,6 +1151,20 @@ fn hash_checkpoint_component(hasher: &mut Sha256, value: &[u8]) {
 
 pub fn encode_decision_context_v5(context: &DecisionContextV5) -> Result<Vec<u8>, DecisionV5Error> {
     context.validate()?;
+    if context.retained_supplied_encoding.canonical_d {
+        return encode_bounded(
+            HOST_D_DECISION_CONTEXT_V5_MAGIC,
+            &crate::wire_d::FrozenDDecisionContextV5::from_current(context),
+            MAX_DECISION_CONTEXT_V5_BYTES,
+        );
+    }
+    if context.retained_supplied_encoding.canonical_c {
+        return encode_bounded(
+            CANONICAL_C_DECISION_CONTEXT_V5_MAGIC,
+            &context.frozen_c(),
+            MAX_DECISION_CONTEXT_V5_BYTES,
+        );
+    }
     encode_bounded(
         DECISION_CONTEXT_V5_MAGIC,
         context,
@@ -1101,8 +1174,21 @@ pub fn encode_decision_context_v5(context: &DecisionContextV5) -> Result<Vec<u8>
 
 pub fn decode_decision_context_v5(bytes: &[u8]) -> Result<DecisionContextV5, DecisionV5Error> {
     let context = if bytes.starts_with(DECISION_CONTEXT_V5_MAGIC) {
-        convert_frozen_c_context(decode_bounded(
+        decode_bounded(
             DECISION_CONTEXT_V5_MAGIC,
+            bytes,
+            MAX_DECISION_CONTEXT_V5_BYTES,
+        )?
+    } else if bytes.starts_with(HOST_D_DECISION_CONTEXT_V5_MAGIC) {
+        let frozen: crate::wire_d::FrozenDDecisionContextV5 = decode_bounded(
+            HOST_D_DECISION_CONTEXT_V5_MAGIC,
+            bytes,
+            MAX_DECISION_CONTEXT_V5_BYTES,
+        )?;
+        frozen.into_current()
+    } else if bytes.starts_with(CANONICAL_C_DECISION_CONTEXT_V5_MAGIC) {
+        convert_frozen_c_context(decode_bounded(
+            CANONICAL_C_DECISION_CONTEXT_V5_MAGIC,
             bytes,
             MAX_DECISION_CONTEXT_V5_BYTES,
         )?)?
@@ -1139,6 +1225,7 @@ fn convert_supplied_s_context(
 ) -> Result<DecisionContextV5, DecisionV5Error> {
     let retained_supplied_encoding = RetainedSuppliedEncodingV5::from_s(&context.supplied)?;
     Ok(DecisionContextV5 {
+        broker_replay: None,
         owner_state: context.owner_state,
         strategy: context.strategy,
         broker: context.broker,
@@ -1147,6 +1234,9 @@ fn convert_supplied_s_context(
         continuation: context.continuation,
         decision_time_unix_ms: context.decision_time_unix_ms,
         supplied: crate::supplied_v5::from_frozen_s(context.supplied),
+        current_weather: None,
+        forecast_issuance: None,
+        current_inputs: None,
         retained_supplied_encoding,
     })
 }
@@ -1156,6 +1246,9 @@ fn convert_supplied_s_context(
 fn supplied_s_context_from_current(
     context: &DecisionContextV5,
 ) -> Result<SuppliedSDecisionContextV5, DecisionV5Error> {
+    if context.has_current_only_fields() {
+        return Err(DecisionV5Error::InvalidContract);
+    }
     let mut supplied = crate::supplied_v5::to_frozen_s(&context.supplied)?;
     context.retained_supplied_encoding.restore_s(&mut supplied);
     Ok(SuppliedSDecisionContextV5 {
@@ -1184,6 +1277,7 @@ fn supplied_s_decision_context_v5_sha256(
 
 fn convert_hundredths_context(context: HundredthsDecisionContextV5) -> DecisionContextV5 {
     DecisionContextV5 {
+        broker_replay: None,
         owner_state: context.owner_state,
         strategy: context.strategy,
         broker: context.broker,
@@ -1192,6 +1286,9 @@ fn convert_hundredths_context(context: HundredthsDecisionContextV5) -> DecisionC
         continuation: context.continuation,
         decision_time_unix_ms: context.decision_time_unix_ms,
         supplied: SuppliedInputsV5::default(),
+        current_weather: None,
+        forecast_issuance: None,
+        current_inputs: None,
         retained_supplied_encoding: Default::default(),
     }
 }
@@ -1200,7 +1297,7 @@ fn convert_hundredths_context(context: HundredthsDecisionContextV5) -> DecisionC
 fn hundredths_context_from_current(
     context: &DecisionContextV5,
 ) -> Result<HundredthsDecisionContextV5, DecisionV5Error> {
-    if !context.supplied.is_absent() {
+    if !context.supplied.is_absent() || context.has_current_only_fields() {
         return Err(DecisionV5Error::InvalidContract);
     }
     Ok(HundredthsDecisionContextV5 {
@@ -1286,10 +1383,14 @@ fn convert_legacy_context(
             orders,
         },
         trigger: convert_legacy_trigger(legacy.trigger)?,
+        broker_replay: None,
         kernel_checkpoint: legacy.kernel_checkpoint,
         continuation: legacy.continuation,
         decision_time_unix_ms: legacy.decision_time_unix_ms,
         supplied: SuppliedInputsV5::default(),
+        current_weather: None,
+        forecast_issuance: None,
+        current_inputs: None,
         retained_supplied_encoding: Default::default(),
     })
 }
@@ -1591,7 +1692,7 @@ fn legacy_command_from_current(
 fn legacy_context_from_current(
     context: &DecisionContextV5,
 ) -> Result<LegacyDecisionContextV5, DecisionV5Error> {
-    if !context.supplied.is_absent() {
+    if !context.supplied.is_absent() || context.has_current_only_fields() {
         return Err(DecisionV5Error::InvalidContract);
     }
     let whole_contracts = hundredths_to_whole_contracts;
@@ -1751,6 +1852,85 @@ pub fn decision_result_v5_sha256(result: &DecisionResultV5) -> Result<[u8; 32], 
     Ok(Sha256::digest(encoded).into())
 }
 
+fn validate_forecast_issuance(context: &DecisionContextV5) -> Result<(), DecisionV5Error> {
+    let Some(stations) = &context.forecast_issuance else {
+        return Ok(());
+    };
+    if context.retained_supplied_encoding.canonical_c
+        || stations.len() != context.owner_state.stations.len()
+    {
+        return Err(DecisionV5Error::InvalidContract);
+    }
+    for (accepted, station) in stations.iter().zip(&context.owner_state.stations) {
+        if accepted.station_id != station.identity.station_id
+            || accepted.models.len() != station.forecast.models.len()
+        {
+            return Err(DecisionV5Error::InvalidContract);
+        }
+        for (issued, model) in accepted.models.iter().zip(&station.forecast.models) {
+            if !issued.is_valid()
+                || issued.model_id != model.model_id
+                || issued.version != model.version || match model.issued_at_unix_ms {
+                Some(at) => at != issued.at_unix_ns.div_euclid(1_000_000),
+                None => {
+                    issued.basis
+                        != strategy_core_kernel::forecast::ForecastIssuanceBasis::TimestampedVersion
+                }
+            }
+                || issued.station_generation > station.provider_cursor.connection_generation
+                || (issued.station_generation == station.provider_cursor.connection_generation
+                    && (issued.station_revision > station.revision
+                        || issued.forecast_generation > station.forecast_meta.generation))
+            {
+                return Err(DecisionV5Error::InvalidContract);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_current_weather(context: &DecisionContextV5) -> Result<(), DecisionV5Error> {
+    let Some(stations) = &context.current_weather else {
+        return Ok(());
+    };
+    if context.retained_supplied_encoding.canonical_c
+        || stations.len() != context.owner_state.stations.len()
+        || stations
+            .iter()
+            .zip(&context.owner_state.stations)
+            .any(|(weather, station)| weather.station_id != station.identity.station_id)
+    {
+        return Err(DecisionV5Error::InvalidContract);
+    }
+    for (station, owner) in stations.iter().zip(&context.owner_state.stations) {
+        if !station.facts.values_are_valid() {
+            return Err(DecisionV5Error::InvalidContract);
+        }
+        if station
+            .facts
+            .text_values()
+            .any(|value| value.len() > crate::supplied_v5::MAX_SUPPLIED_TEXT_BYTES)
+        {
+            return Err(DecisionV5Error::BoundExceeded);
+        }
+        for fact in station.facts.fields.values() {
+            let provenance = &fact.provenance;
+            if provenance.owner_generation == 0
+                || provenance.owner_revision == 0
+                || provenance.owner_generation > owner.provider_cursor.connection_generation
+                || (provenance.owner_generation == owner.provider_cursor.connection_generation
+                    && provenance.owner_revision > owner.revision)
+            {
+                return Err(DecisionV5Error::InvalidContract);
+            }
+            if let Some(envelope) = &provenance.envelope {
+                crate::supplied_v5::validate_envelope(envelope)?;
+            }
+        }
+    }
+    Ok(())
+}
+
 fn validate_scope(context: &DecisionContextV5) -> Result<(), DecisionV5Error> {
     let scope = &context.strategy;
     if !strictly_sorted(scope.parameters.iter().map(|(key, _)| key.as_str()))
@@ -1823,7 +2003,25 @@ fn validate_scope(context: &DecisionContextV5) -> Result<(), DecisionV5Error> {
 }
 
 fn validate_broker(context: &DecisionContextV5) -> Result<(), DecisionV5Error> {
-    let broker = &context.broker;
+    if context.broker.revision != context.owner_state.broker.revision
+        || context.broker.revision != context.owner_state.fence.broker_revision
+    {
+        return Err(DecisionV5Error::InvalidContract);
+    }
+    validate_broker_parts(
+        &context.strategy.market_ids,
+        &context.broker,
+        context.owner_state.broker.locally_reserved_cash,
+        context.owner_state.broker.current_commitment,
+    )
+}
+
+pub(crate) fn validate_broker_parts(
+    market_ids: &[String],
+    broker: &BrokerDetailV5,
+    locally_reserved_cash: u64,
+    current_commitment: u64,
+) -> Result<(), DecisionV5Error> {
     if !strictly_sorted(
         broker
             .positions
@@ -1833,17 +2031,11 @@ fn validate_broker(context: &DecisionContextV5) -> Result<(), DecisionV5Error> {
     {
         return Err(DecisionV5Error::NonCanonicalOrder);
     }
-    let owner_market_ids = context
-        .strategy
-        .market_ids
+    let owner_market_ids = market_ids
         .iter()
         .map(String::as_str)
         .collect::<BTreeSet<_>>();
-    if broker.revision != context.owner_state.broker.revision
-        || broker.revision != context.owner_state.fence.broker_revision
-        || broker.positions.len() > MAX_BROKER_POSITIONS
-        || broker.orders.len() > MAX_BROKER_ORDERS
-    {
+    if broker.positions.len() > MAX_BROKER_POSITIONS || broker.orders.len() > MAX_BROKER_ORDERS {
         return Err(DecisionV5Error::InvalidContract);
     }
     if broker.positions.iter().any(|position| {
@@ -1853,6 +2045,13 @@ fn validate_broker(context: &DecisionContextV5) -> Result<(), DecisionV5Error> {
                 > maximum_quantity_value(position.quantity_hundredths)
             || !owner_market_ids.contains(position.market_id.as_str())
     }) || broker.orders.iter().any(|order| {
+        let accounted = order
+            .filled_quantity_hundredths
+            .checked_add(order.remaining_quantity_hundredths);
+        let quantities_valid = accounted == Some(order.quantity_hundredths)
+            || (order.status == BrokerOrderStatusV5::Cancelled
+                && order.remaining_quantity_hundredths == 0
+                && accounted.is_some_and(|quantity| quantity <= order.quantity_hundredths));
         !valid_identifier(&order.command_id)
             || !valid_identifier(&order.intent_id)
             || !valid_identifier(&order.order_id)
@@ -1861,10 +2060,7 @@ fn validate_broker(context: &DecisionContextV5) -> Result<(), DecisionV5Error> {
             || !owner_market_ids.contains(order.market_id.as_str())
             || order.quantity_hundredths == 0
             || order.quantity_hundredths > i64::MAX as u64
-            || order
-                .filled_quantity_hundredths
-                .checked_add(order.remaining_quantity_hundredths)
-                != Some(order.quantity_hundredths)
+            || !quantities_valid
             || order
                 .limit_price_micros
                 .is_some_and(|price| price > MAX_PRICE_MICROS)
@@ -1886,9 +2082,8 @@ fn validate_broker(context: &DecisionContextV5) -> Result<(), DecisionV5Error> {
         total + u128::from(position.cost_basis_micros) + u128::from(position.fees_micros)
     });
     if reserved_cash != u128::from(broker.reserved_cash_micros)
-        || reserved_cash > u128::from(context.owner_state.broker.locally_reserved_cash)
-        || position_commitment + reserved_cash
-            != u128::from(context.owner_state.broker.current_commitment)
+        || reserved_cash > u128::from(locally_reserved_cash)
+        || position_commitment + reserved_cash != u128::from(current_commitment)
     {
         return Err(DecisionV5Error::InvalidContract);
     }
@@ -1973,11 +2168,17 @@ fn validate_originating_context(
         .ok_or(DecisionV5Error::InvalidContract)?;
     let mut originating = originating_context_v5(context, originating_trigger);
     if commitment.originating_delivery_id != originating.owner_state.delivery_id
-        || commitment.expected_broker_revision != originating.broker.revision
+        || (context.broker_replay.is_none()
+            && commitment.expected_broker_revision != originating.broker.revision)
     {
         return Err(DecisionV5Error::InvalidContract);
     }
-    if originating_context_digest_matches(&originating, commitment.originating_context_sha256)? {
+    let digest_matches = |original: &DecisionContextV5| match &context.broker_replay {
+        Some(replay) => replay_origin_digest(original, replay.origin_encoding)
+            .map(|digest| digest == commitment.originating_context_sha256),
+        None => originating_context_digest_matches(original, commitment.originating_context_sha256),
+    };
+    if digest_matches(&originating)? {
         return Ok(());
     }
     // On the first invocation the originating context has no checkpoint, while the awaiting
@@ -1985,8 +2186,7 @@ fn validate_originating_context(
     // one bootstrap shape without weakening any later checkpoint binding.
     if commitment.pre_event_checkpoint.sequence == 1 {
         originating.kernel_checkpoint = None;
-        if originating_context_digest_matches(&originating, commitment.originating_context_sha256)?
-        {
+        if digest_matches(&originating)? {
             return Ok(());
         }
     }
@@ -1999,6 +2199,10 @@ fn originating_context_digest_matches(
 ) -> Result<bool, DecisionV5Error> {
     if decision_context_v5_sha256(context)? == expected {
         return Ok(true);
+    }
+    // Historical digests cannot attest newly attached winner data.
+    if context.has_current_only_fields() {
+        return Ok(false);
     }
     match supplied_s_decision_context_v5_sha256(context) {
         Ok(digest) if digest == expected => return Ok(true),
@@ -2040,6 +2244,7 @@ fn originating_context_v5(
         },
     };
     originating.continuation = None;
+    originating.broker_replay = None;
     originating
 }
 
@@ -2047,6 +2252,14 @@ fn validate_owner_trigger(
     context: &DecisionContextV5,
     trigger: &OwnerTriggerV5,
 ) -> Result<(), DecisionV5Error> {
+    if matches!(trigger, OwnerTriggerV5::CapturedWeather { .. }) {
+        return context
+            .current_inputs
+            .as_ref()
+            .and_then(|inputs| inputs.originating.as_ref())
+            .ok_or(DecisionV5Error::InvalidContract)?
+            .validate(context);
+    }
     let owner = &context.owner_state.trigger;
     let valid = match (trigger, owner) {
         (
@@ -2377,6 +2590,40 @@ fn validate_broker_outcome(
     {
         return Err(DecisionV5Error::InvalidContract);
     }
+    validate_broker_outcome_fields(context.admission_broker(), outcome)
+}
+
+pub(crate) fn cancelled_order_matches(broker: &BrokerDetailV5, outcome: &BrokerOutcomeV5) -> bool {
+    outcome.command_kind == BrokerCommandKindV5::CancelOrder
+        && outcome.status == BrokerOutcomeStatusV5::Cancelled
+        && matches!(
+            &outcome.return_value,
+            BrokerCommandReturnV5::CancelOrder(CancelOrderReturnV5::Ok(true))
+        )
+        && outcome.target_order_id == outcome.order_id
+        && broker.orders.iter().any(|order| {
+            outcome.order_id.as_ref() == Some(&order.order_id)
+                && order.status == BrokerOrderStatusV5::Cancelled
+                && outcome.requested_quantity_hundredths == order.quantity_hundredths
+                && outcome.filled_quantity_hundredths == order.filled_quantity_hundredths
+                && outcome.remaining_quantity_hundredths == order.remaining_quantity_hundredths
+                && outcome.average_fill_price_micros == order.average_fill_price_micros
+        })
+}
+
+pub(crate) fn validate_broker_outcome_fields(
+    broker: &BrokerDetailV5,
+    outcome: &BrokerOutcomeV5,
+) -> Result<(), DecisionV5Error> {
+    let accounted_quantity = outcome
+        .filled_quantity_hundredths
+        .checked_add(outcome.remaining_quantity_hundredths);
+    // A confirmed cancellation removes unfilled open quantity, not the original request.
+    // Accept that residual only against the exact cancelled order in the returned state.
+    let quantities_valid = accounted_quantity == Some(outcome.requested_quantity_hundredths)
+        || (accounted_quantity
+            .is_some_and(|quantity| quantity <= outcome.requested_quantity_hundredths)
+            && cancelled_order_matches(broker, outcome));
     if !valid_identifier(&outcome.outcome_id)
         || !valid_identifier(&outcome.continuation_id)
         || outcome.continuation_generation == 0
@@ -2388,10 +2635,7 @@ fn validate_broker_outcome(
         || !valid_optional_identifier(&outcome.provider_order_id)
         || !valid_optional_identifier(&outcome.provider_client_id)
         || outcome.requested_quantity_hundredths > i64::MAX as u64
-        || outcome
-            .filled_quantity_hundredths
-            .checked_add(outcome.remaining_quantity_hundredths)
-            != Some(outcome.requested_quantity_hundredths)
+        || !quantities_valid
         || outcome
             .average_fill_price_micros
             .is_some_and(|price| price > MAX_PRICE_MICROS)
@@ -2400,8 +2644,7 @@ fn validate_broker_outcome(
         return Err(DecisionV5Error::InvalidContract);
     }
     let matching_order = outcome.order_id.as_ref().and_then(|order_id| {
-        context
-            .broker
+        broker
             .orders
             .iter()
             .find(|order| order.order_id == *order_id)
@@ -2494,8 +2737,7 @@ fn validate_broker_outcome(
                 || cancelled_order_ids.len() > MAX_BROKER_ORDERS
                 || !strictly_sorted(cancelled_order_ids.iter().map(String::as_str))
                 || cancelled_order_ids.iter().any(|order_id| {
-                    !context
-                        .broker
+                    !broker
                         .orders
                         .iter()
                         .any(|order| order.order_id == *order_id)
@@ -3043,7 +3285,11 @@ mod tests {
             },
             decision_time_unix_ms: 1_788_062_400_000,
             supplied: SuppliedInputsV5::default(),
+            current_weather: None,
+            forecast_issuance: None,
+            current_inputs: None,
             retained_supplied_encoding: Default::default(),
+            broker_replay: None,
         }
     }
 
@@ -4038,6 +4284,7 @@ mod tests {
                 }],
             }),
             oracle_tables: vec![SuppliedOracleTableV5 {
+                updated_at_unix_ns: None,
                 source: "minutetemp.rest.oracle".to_owned(),
                 received_at_unix_ns: 1_788_000_000_000_000_000,
                 station_id: "KSEA".to_owned(),
@@ -4050,6 +4297,7 @@ mod tests {
                 notification_modes: vec!["day_of".to_owned()],
                 notification_updated_at_unix_ns: Some(1_788_000_000_000_000_000),
                 scores: vec![SuppliedOracleScoreV5 {
+                    rank: None,
                     model_id: "ncep_hrrr_conus".to_owned(),
                     model_name: "HRRR CONUS".to_owned(),
                     is_public: Some(false),
@@ -4157,6 +4405,136 @@ mod tests {
             MAX_DECISION_CONTEXT_V5_BYTES,
         )
         .unwrap()
+    }
+
+    #[test]
+    fn current_packet_retains_new_fields_without_historical_downgrade() {
+        let mut context = supplied_observation_context();
+        let historical_digest = supplied_s_decision_context_v5_sha256(&context).unwrap();
+        let table = &mut context.supplied.stations[0].oracle_tables[0];
+        table.updated_at_unix_ns = Some(1_788_000_000_000_000_123);
+        table.scores[0].rank = Some(1);
+        let bytes = encode_decision_context_v5(&context).unwrap();
+        assert_eq!(
+            decode_decision_context_v5(&bytes).unwrap(),
+            context,
+            "new packet fields must not disappear through a historical prefix"
+        );
+        assert!(!originating_context_digest_matches(&context, historical_digest).unwrap());
+        assert!(supplied_s_context_from_current(&context).is_err());
+        context.retained_supplied_encoding.canonical_c = true;
+        assert!(
+            encode_decision_context_v5(&context).is_err(),
+            "new fields cannot be silently encoded as C"
+        );
+        context.retained_supplied_encoding.canonical_c = false;
+        context.supplied.stations[0].oracle_tables[0].scores[0].rank = Some(0);
+        assert!(
+            context.validate().is_err(),
+            "a present rank must match provider row order"
+        );
+        let mut context = supplied_observation_context();
+        context.forecast_issuance = Some(
+            context
+                .owner_state
+                .stations
+                .iter()
+                .map(|station| StationForecastIssuanceV5 {
+                    station_id: station.identity.station_id.clone(),
+                    models: vec![],
+                })
+                .collect(),
+        );
+        context.validate().unwrap();
+        assert_eq!(
+            decode_decision_context_v5(&encode_decision_context_v5(&context).unwrap()).unwrap(),
+            context
+        );
+        assert!(!originating_context_digest_matches(&context, historical_digest).unwrap());
+        assert!(
+            supplied_s_context_from_current(&context).is_err(),
+            "S must not discard an attached issuance set, even present-empty"
+        );
+        context.retained_supplied_encoding.canonical_c = true;
+        assert!(encode_decision_context_v5(&context).is_err());
+
+        let context = current_packet_corpus_context();
+        assert_eq!(
+            decode_decision_context_v5(&encode_decision_context_v5(&context).unwrap()).unwrap(),
+            context
+        );
+        for result in [
+            supplied_s_context_from_current(&context).map(|_| ()),
+            hundredths_context_from_current(&context).map(|_| ()),
+            legacy_context_from_current(&context).map(|_| ()),
+        ] {
+            assert!(result.is_err());
+        }
+        let invalid = [
+            (
+                "current-duplicate-oracle-query",
+                (|context: &mut DecisionContextV5| {
+                    let inputs = &mut context.current_inputs.as_mut().unwrap().stations[0].oracles;
+                    inputs.push(inputs[0].clone());
+                }) as fn(&mut DecisionContextV5),
+            ),
+            ("current-oracle-query-label-conflict", |context| {
+                context.current_inputs.as_mut().unwrap().stations[0].oracles[0]
+                    .supplied
+                    .as_mut()
+                    .unwrap()
+                    .rank_by = Some("low".to_owned());
+            }),
+            ("current-future-weather-acceptance", |context| {
+                context.current_weather.as_mut().unwrap()[0]
+                    .facts
+                    .fields
+                    .values_mut()
+                    .next()
+                    .unwrap()
+                    .provenance
+                    .owner_revision = 8;
+            }),
+            ("current-future-oracle-revision", |context| {
+                context.current_inputs.as_mut().unwrap().stations[0].oracles[0]
+                    .meta
+                    .revision = 8;
+                context.owner_state.stations[0].oracle_meta.revision = 8;
+            }),
+            ("current-origin-supplied-mismatch", |context| {
+                let Some(SuppliedEventV5::Observation(value)) = &mut context
+                    .current_inputs
+                    .as_mut()
+                    .unwrap()
+                    .originating
+                    .as_mut()
+                    .unwrap()
+                    .supplied
+                else {
+                    unreachable!()
+                };
+                value.observed_at_unix_ns += 1_000_000;
+            }),
+            ("current-origin-text-bound", |context| {
+                let crate::current_v5::WeatherDataV5::Observation(value) = &mut context
+                    .current_inputs
+                    .as_mut()
+                    .unwrap()
+                    .originating
+                    .as_mut()
+                    .unwrap()
+                    .data
+                else {
+                    unreachable!()
+                };
+                value.text_description = Some("x".repeat(2049));
+            }),
+        ];
+        for (name, mutate) in invalid {
+            let mut invalid = context.clone();
+            mutate(&mut invalid);
+            assert!(invalid.validate().is_err(), "{name}");
+        }
     }
 
     #[test]
@@ -4410,7 +4788,7 @@ mod tests {
             .join("../../conformance/v5/decision-transactions.json");
         let corpus: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-        assert_eq!(corpus["schema"], "strategy-core-decision-v5-corpus/5");
+        assert_eq!(corpus["schema"], "strategy-core-decision-v5-corpus/7");
 
         let vectors = corpus["valid"].as_array().unwrap();
         let measured = corpus_measurements();
@@ -4433,7 +4811,7 @@ mod tests {
         );
 
         let invalid = corpus["invalid"].as_array().unwrap();
-        assert_eq!(invalid.len(), 23);
+        assert_eq!(invalid.len(), 36);
         let invalid_inventory = invalid
             .iter()
             .map(|vector| {
@@ -4481,17 +4859,233 @@ mod tests {
                     "invalid_contract"
                 ),
                 ("new-low-trigger-not-bound-to-extrema", "invalid_contract"),
+                ("current-duplicate-oracle-query", "invalid_contract"),
+                ("current-oracle-query-label-conflict", "invalid_contract"),
+                ("current-future-weather-acceptance", "invalid_contract"),
+                ("current-future-oracle-revision", "invalid_contract"),
+                ("current-origin-supplied-mismatch", "invalid_contract"),
+                ("current-origin-text-bound", "bound_exceeded"),
+                ("replay-missing-predecessor", "invalid_contract"),
+                ("replay-out-of-order-generation", "invalid_contract"),
+                ("replay-stale-call-fence", "invalid_contract"),
+                ("replay-incoherent-publication-revision", "invalid_contract"),
+                ("replay-incoherent-returned-finances", "invalid_contract"),
+                ("replay-cannot-downgrade-to-d", "invalid_contract"),
+                ("replay-call-bound-exceeded", "bound_exceeded"),
             ])
         );
 
-        for (id, _, bytes) in &measured {
+        for (id, kind, bytes) in &measured {
             let vector = vectors.iter().find(|vector| vector["id"] == *id).unwrap();
             assert_measurement(vector, bytes);
+            if matches!(
+                *kind,
+                "decision_context_v5_current" | "decision_context_v5_replay_e"
+            ) {
+                let restored = decode_decision_context_v5(bytes).unwrap();
+                assert_eq!(
+                    encode_decision_context_v5(&restored).unwrap(),
+                    *bytes,
+                    "D and E payloads must preserve their bytes and originating commitments"
+                );
+            }
         }
     }
 
     /// Every corpus vector's exact bytes. Durable earlier encodings are measured through their
     /// frozen shapes so recorded digests stay verifiable after the current encoding moves on.
+    fn encode_c_corpus_context(mut context: DecisionContextV5) -> Vec<u8> {
+        context.retained_supplied_encoding.canonical_c = true;
+        if let TriggerV5::BrokerOutcome {
+            originating_trigger,
+            ..
+        } = &context.trigger
+        {
+            let original = originating_context_v5(&context, originating_trigger);
+            context
+                .continuation
+                .as_mut()
+                .unwrap()
+                .originating_context_sha256 = decision_context_v5_sha256(&original).unwrap();
+        }
+        encode_decision_context_v5(&context).unwrap()
+    }
+
+    fn current_packet_corpus_context() -> DecisionContextV5 {
+        use crate::{current_v5::*, decision_v4::*};
+        use strategy_core_kernel::{
+            WeatherFact, WeatherFactProvenance, WeatherFacts, WeatherField, WeatherValue,
+        };
+        let mut context = supplied_observation_context();
+        let original = context.supplied.originating_event.take().unwrap();
+        let SuppliedEventV5::Observation(observation) = &original else {
+            unreachable!()
+        };
+        let envelope = observation.envelope.as_ref().unwrap();
+        let station = &mut context.owner_state.stations[0];
+        station.revision = 7;
+        station.observation.station_id = station.identity.station_id.clone();
+        station.provider_cursor = CursorV4 {
+            connection_generation: 3,
+            sequence: envelope.sequence,
+            event_id: envelope.event_id.clone(),
+            city_sequence: envelope.city_sequence,
+            emitted_at_unix_ms: envelope.emitted_at_unix_ns.div_euclid(1_000_000),
+            received_at_unix_ms: envelope.received_at_unix_ns.div_euclid(1_000_000),
+            snapshot_complete: true,
+        };
+        let meta = ComponentMetaV4 {
+            authority: AuthorityV4::Current,
+            revision: 7,
+            generation: 44,
+            provenance: vec![ProvenanceV4 {
+                provider: "minutetemp".to_owned(),
+                source: observation.source.clone(),
+                event_id: Some(envelope.event_id.clone()),
+                connection_epoch: Some(3),
+                sequence: Some(envelope.sequence),
+                provider_at_unix_ms: Some(envelope.emitted_at_unix_ns.div_euclid(1_000_000)),
+                received_at_unix_ms: envelope.received_at_unix_ns.div_euclid(1_000_000),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        station.observation_meta = meta.clone();
+        station.observation.provenance = meta.provenance[0].clone();
+        let mut facts = WeatherFacts::default();
+        facts.fields.insert(
+            WeatherField::Temperature,
+            WeatherFact {
+                value: WeatherValue::Temperature {
+                    c: observation.temperature_c,
+                    f: observation.temperature_f,
+                },
+                provenance: WeatherFactProvenance {
+                    source: observation.source.clone(),
+                    owner_generation: 3,
+                    owner_revision: 7,
+                    supplied: true,
+                    envelope: observation.envelope.clone(),
+                    ..Default::default()
+                },
+            },
+        );
+        context.current_weather = Some(vec![StationWeatherV5 {
+            station_id: "KSEA".to_owned(),
+            facts: facts.clone(),
+        }]);
+        let mut oracle = context.supplied.stations[0].oracle_tables.remove(0);
+        oracle.updated_at_unix_ns = Some(1_788_062_340_000_000_123);
+        oracle.scores[0].rank = Some(1);
+        let micros = |value: Option<crate::supplied_v5::DecimalV5>| {
+            value.map(|value| (value.to_f64() * 1_000_000.0).round() as i64)
+        };
+        station.oracle = OracleTableV4 {
+            query: OracleQueryV4 {
+                station_id: "KSEA".to_owned(),
+                mode: "day_of".to_owned(),
+                rank_by: RankByV4::High,
+                days: 7,
+            },
+            range_start: oracle.range_start.clone(),
+            range_end: oracle.range_end.clone(),
+            updated_at_unix_ms: oracle.updated_at_unix_ns.map(|at| at.div_euclid(1_000_000)),
+            rows: oracle
+                .scores
+                .iter()
+                .enumerate()
+                .map(|(index, row)| OracleRowV4 {
+                    rank: index as u8 + 1,
+                    model_id: row.model_id.clone(),
+                    model_name: row.model_name.clone(),
+                    is_public: row.is_public,
+                    high_mae_millionths: micros(row.high_mae),
+                    low_mae_millionths: micros(row.low_mae),
+                    combined_mae_millionths: micros(row.combined_mae),
+                    high_bias_millionths: micros(row.high_bias),
+                    low_bias_millionths: micros(row.low_bias),
+                    day_count: row.day_count.map(|value| value as u16),
+                })
+                .collect(),
+            provenance: meta.provenance[0].clone(),
+        };
+        station.oracle_meta = meta.clone();
+        let forecast = context.supplied.stations[0].forecast.as_mut().unwrap();
+        // The old corpus's millisecond-era fixture had inconsistent text/epoch pairs.
+        // Preserve those C rows verbatim; the separate current vector uses the actual instants.
+        let issued = 1_788_112_800_000_000_000_i64; // 2026-08-30T18:00:00Z
+        forecast.models[0].fetched_at_unix_ns = Some(issued);
+        for (index, point) in forecast.models[0].hourly.iter_mut().enumerate() {
+            point.time_unix_ns = issued + (index as i64 + 1) * 3_600_000_000_000;
+        }
+        let model = &forecast.models[0];
+        let version = model.version.clone().unwrap();
+        station.climate_day_start_utc_unix_ms = issued.div_euclid(1_000_000) - 11 * 60 * 60 * 1000; // 07:00 UTC, midnight PDT.
+        station.climate_day_end_utc_unix_ms =
+            station.climate_day_start_utc_unix_ms + 24 * 60 * 60 * 1000;
+        station.forecast.models = vec![ForecastModelV4 {
+            model_id: model.model_id.clone(),
+            version: version.clone(),
+            hourly: model
+                .hourly
+                .iter()
+                .map(|point| ForecastPointV4 {
+                    at_unix_ms: point.time_unix_ns.div_euclid(1_000_000),
+                    temperature_milli_c: point
+                        .temperature_2m_c
+                        .map(|value| (value.to_f64() * 1000.0).round() as i32),
+                    ..Default::default()
+                })
+                .collect(),
+            ..Default::default()
+        }];
+        station.forecast_meta = meta.clone();
+        context.forecast_issuance = Some(vec![StationForecastIssuanceV5 {
+            station_id: "KSEA".to_owned(),
+            models: vec![strategy_core_kernel::forecast::ForecastIssuance {
+                model_id: model.model_id.clone(),
+                version: version.clone(),
+                at_unix_ns: issued,
+                basis: strategy_core_kernel::forecast::ForecastIssuanceBasis::TimestampedVersion,
+                original_text: Some(version),
+                source: forecast.source.clone(),
+                received_at_unix_ns: forecast.received_at_unix_ns,
+                station_generation: 3,
+                station_revision: 7,
+                forecast_generation: 44,
+            }],
+        }]);
+        context.current_inputs = Some(CurrentInputsV5 {
+            stations: vec![StationInputsV5 {
+                station_id: "KSEA".to_owned(),
+                oracles: vec![OracleInputV5 {
+                    meta: meta.clone(),
+                    table: station.oracle.clone(),
+                    supplied: Some(oracle),
+                }],
+            }],
+            originating: Some(OriginatingWeatherV5 {
+                station_id: "KSEA".to_owned(),
+                source_generation: 3,
+                source_sequence: 44,
+                station_revision: 7,
+                meta,
+                cursor: station.provider_cursor.clone(),
+                data: WeatherDataV5::Observation(station.observation.clone()),
+                facts,
+                supplied: Some(original),
+            }),
+        });
+        context.trigger = TriggerV5::Owner(OwnerTriggerV5::CapturedWeather {
+            station_id: "KSEA".to_owned(),
+            source_generation: 3,
+            source_sequence: 44,
+        });
+        context
+    }
+
+    include!("decision_v5/replay_tests.rs");
+
     fn corpus_measurements() -> Vec<(&'static str, &'static str, Vec<u8>)> {
         let context = context();
         let mut measured = Vec::new();
@@ -4544,22 +5138,59 @@ mod tests {
         measured.push((
             "daily-high-side-aware-broker-context-supplied-absent",
             "decision_context_v5_supplied",
-            encode_decision_context_v5(&context).unwrap(),
+            encode_c_corpus_context(context.clone()),
         ));
         measured.push((
             "daily-high-exact-origin-broker-outcome-replay-supplied-absent",
             "decision_context_v5_supplied",
-            encode_decision_context_v5(&exact_replay_context()).unwrap(),
+            encode_c_corpus_context(exact_replay_context()),
         ));
         measured.push((
             "daily-high-observation-with-supplied-inputs",
             "decision_context_v5_supplied",
-            encode_decision_context_v5(&supplied_observation_context()).unwrap(),
+            encode_c_corpus_context(supplied_observation_context()),
         ));
         measured.push((
             "daily-high-ended-episode-with-supplied-inputs",
             "decision_context_v5_supplied",
-            encode_decision_context_v5(&supplied_ended_episode_context()).unwrap(),
+            encode_c_corpus_context(supplied_ended_episode_context()),
+        ));
+        // Schema 6's named D vectors are immutable historical evidence, not E fixtures.
+        let mut current = current_packet_corpus_context();
+        current.retained_supplied_encoding.canonical_d = true;
+        measured.push((
+            "current-complete-station-and-origin",
+            "decision_context_v5_current",
+            encode_decision_context_v5(&current).unwrap(),
+        ));
+        let result = awaiting_result_for(&current);
+        let commitment = continuation_commitment_v5(&current, &result)
+            .unwrap()
+            .unwrap();
+        let mut replay = current.clone();
+        replay.continuation = Some(commitment);
+        let TriggerV5::Owner(trigger) = current.trigger else {
+            unreachable!()
+        };
+        replay.trigger = TriggerV5::BrokerOutcome {
+            outcome: Box::new(resting_outcome_for_awaited_command()),
+            originating_trigger: Box::new(OriginatingTriggerV5::Owner(trigger)),
+        };
+        measured.push((
+            "current-complete-origin-outcome-replay",
+            "decision_context_v5_current",
+            encode_decision_context_v5(&replay).unwrap(),
+        ));
+        let current_e = current_packet_corpus_context();
+        measured.push((
+            "current-complete-station-and-origin-e",
+            "decision_context_v5_replay_e",
+            encode_decision_context_v5(&current_e).unwrap(),
+        ));
+        measured.push((
+            "current-bounded-broker-replay-e",
+            "decision_context_v5_replay_e",
+            encode_decision_context_v5(&replay_corpus_context(current_e, 2).unwrap()).unwrap(),
         ));
         measured
     }

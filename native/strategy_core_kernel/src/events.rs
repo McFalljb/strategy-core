@@ -127,6 +127,7 @@ pub struct EventProvenanceView<'a> {
     pub connection_epoch: Option<u64>,
     pub sid: Option<u64>,
     pub received_frame_ordinal: Option<u64>,
+    pub acceptance: Option<&'a crate::state::EventAcceptance>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -475,6 +476,8 @@ pub struct TickerPriceView<'a> {
     pub last_update: Option<DateTime<Utc>>,
 }
 
+// Preserve the borrowed callback interface without a new per-event box allocation.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum StrategyEventView<'a> {
     PriceUpdate(PriceUpdateView<'a>),

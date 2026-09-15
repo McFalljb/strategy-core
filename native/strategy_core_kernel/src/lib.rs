@@ -2,7 +2,8 @@
 //!
 //! This crate defines the contract only: the traits a kernel is driven through, the owned
 //! canonical state and event model (`state`, `event`), the supplied originals those carry
-//! (`supplied`, `decimal`) and the borrowed views kernels read (`events`). Trader and
+//! (`supplied`, `decimal`), the borrowed views kernels read (`events`), and pure execution
+//! fee calculations (`fees`). Trader and
 //! Backtester own their runtime adapters, codecs and broker/risk/accounting implementations.
 
 pub mod actions;
@@ -11,8 +12,13 @@ pub mod decimal;
 pub mod errors;
 pub mod event;
 pub mod events;
+pub mod fees;
+pub mod forecast;
 pub mod state;
 pub mod supplied;
+pub mod weather;
+
+pub use weather::{WeatherFact, WeatherFactProvenance, WeatherFacts, WeatherField, WeatherValue};
 
 pub use actions::{
     CancelAllOrdersRequest, CancelOrderRequest, ContractQuantity, ContractSide, KernelAction,
@@ -36,10 +42,11 @@ pub use events::{
     TickerPriceView, TimerWakeView, ValueOrigin, WeatherEventSourceView, WeatherEventView,
 };
 pub use state::{
-    Book, BookLevel, ClimateDay, ComponentAuthority, ComponentMeta, DailyExtremes, EventProvenance,
-    Extreme, FinalFact, Forecast, ForecastModel, ForecastPoint, LastTrade, MarketComponents,
-    MarketLifecycle, MarketState, Observation, OracleScore, OracleTable, Report, StationComponents,
-    StationIdentity, StationState, TickerQuote, WeatherEvent, WeatherEventSource,
+    Book, BookLevel, BrokerFinancialState, ClimateDay, ComponentAuthority, ComponentMeta,
+    DailyExtremes, EventProvenance, Extreme, FinalFact, Forecast, ForecastModel, ForecastPoint,
+    LastTrade, MarketComponents, MarketLifecycle, MarketState, Observation, OracleScore,
+    OracleTable, Report, StationComponents, StationIdentity, StationState, TickerQuote,
+    WeatherEvent, WeatherEventSource,
 };
 pub use supplied::{
     EventEnvelope, ExtremeKind, SUPPLIED_INPUTS_CONTRACT_VERSION, SuppliedDailyExtremes,

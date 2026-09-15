@@ -1,11 +1,12 @@
 //! Frozen supplied-inputs/2 containers. S and C share the observation/daily positional
-//! shapes; unchanged C forecast/report/oracle leaves remain shared until their layouts change.
+//! shapes, as do their oracle leaves. Unchanged C forecast/report leaves remain shared until
+//! their layouts change.
 
 use bincode::{Decode, Encode};
 
 use crate::{decision_v5::DecisionV5Error, supplied_s, supplied_v5::*};
 
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 struct ExcludedObservationFields {
     day_mode: Option<String>,
     day_date: Option<String>,
@@ -98,16 +99,80 @@ impl ExcludedObservationFields {
     }
 }
 
-/// Opaque codec evidence for excluded historical fields. Only decoding can populate it;
+/// Opaque codec evidence for historical encoding identity and excluded fields. Only decoding can populate it;
 /// neither kernel models nor their supplied originals carry this evidence.
 #[doc(hidden)]
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct RetainedSuppliedEncodingV5 {
+    pub(crate) canonical_c: bool,
+    pub(crate) canonical_d: bool,
     stations: Vec<(String, ExcludedObservationFields, ExcludedObservationFields)>,
     originating: ExcludedObservationFields,
 }
 
+// Wire payloads carry only retained historical evidence. Encoding selectors are never
+// serialized; only decoding an outer historical header can populate them.
+impl Encode for RetainedSuppliedEncodingV5 {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        self.stations.encode(encoder)?;
+        self.originating.encode(encoder)
+    }
+}
+impl<Context> Decode<Context> for RetainedSuppliedEncodingV5 {
+    fn decode<D: bincode::de::Decoder<Context = Context>>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        Ok(Self {
+            canonical_c: false,
+            canonical_d: false,
+            stations: Decode::decode(decoder)?,
+            originating: Decode::decode(decoder)?,
+        })
+    }
+}
+bincode::impl_borrow_decode!(RetainedSuppliedEncodingV5);
+
 impl RetainedSuppliedEncodingV5 {
+    pub(crate) fn validate(&self, inputs: &SuppliedInputsV5) -> Result<(), DecisionV5Error> {
+        if self.stations.len() > crate::decision_v4::MAX_STATIONS {
+            return Err(DecisionV5Error::BoundExceeded);
+        }
+        let empty = ExcludedObservationFields::default();
+        let mut previous = None;
+        for (id, observation, daily) in &self.stations {
+            if previous.is_some_and(|previous: &str| previous >= id.as_str()) {
+                return Err(DecisionV5Error::InvalidContract);
+            }
+            previous = Some(id.as_str());
+            let station = inputs
+                .stations
+                .iter()
+                .find(|station| station.station_id == *id)
+                .ok_or(DecisionV5Error::InvalidContract)?;
+            if (observation != &empty && station.observation.is_none())
+                || (daily != &empty && station.daily_extremes.is_none())
+                || (observation == &empty && daily == &empty)
+            {
+                return Err(DecisionV5Error::InvalidContract);
+            }
+            observation.validate()?;
+            daily.validate()?;
+        }
+        self.originating.validate()?;
+        if self.originating != empty
+            && !matches!(
+                inputs.originating_event,
+                Some(SuppliedEventV5::Observation(_))
+            )
+        {
+            return Err(DecisionV5Error::InvalidContract);
+        }
+        Ok(())
+    }
+
     fn station(
         &mut self,
         id: &str,
@@ -198,7 +263,7 @@ struct FrozenStationV5 {
     extreme_low: Option<SuppliedExtremeV5>,
     weather_events: Vec<SuppliedWeatherEventV5>,
     forecast: Option<SuppliedForecastV5>,
-    oracle_tables: Vec<SuppliedOracleTableV5>,
+    oracle_tables: Vec<supplied_s::SuppliedOracleTableV5>,
 }
 // Preserve the frozen event codec shape; this is not a Strategy-facing value.
 #[allow(clippy::large_enum_variant)]
@@ -235,7 +300,7 @@ impl FrozenSuppliedInputsV5 {
                     extreme_low: station.extreme_low.clone(),
                     weather_events: station.weather_events.clone(),
                     forecast: station.forecast.clone(),
-                    oracle_tables: station.oracle_tables.clone(),
+                    oracle_tables: station.oracle_tables.iter().map(oracle_to_s).collect(),
                 }
             })
             .collect();
@@ -250,7 +315,11 @@ impl FrozenSuppliedInputsV5 {
             SuppliedEventV5::WeatherEvent(event) => FrozenEventV5::WeatherEvent(event.clone()),
         });
         Self {
-            contract_version: value.contract_version.clone(),
+            contract_version: if value.is_absent() {
+                String::new()
+            } else {
+                "supplied-inputs/2".to_owned()
+            },
             stations,
             originating_event,
         }
@@ -258,6 +327,12 @@ impl FrozenSuppliedInputsV5 {
     pub(crate) fn into_current(
         self,
     ) -> Result<(SuppliedInputsV5, RetainedSuppliedEncodingV5), DecisionV5Error> {
+        let absent = self.contract_version.is_empty()
+            && self.stations.is_empty()
+            && self.originating_event.is_none();
+        if !absent && self.contract_version != "supplied-inputs/2" {
+            return Err(DecisionV5Error::InvalidContract);
+        }
         let mut retained = RetainedSuppliedEncodingV5::default();
         let mut stations = Vec::with_capacity(self.stations.len());
         for station in self.stations {
@@ -275,7 +350,11 @@ impl FrozenSuppliedInputsV5 {
                 extreme_low: station.extreme_low,
                 weather_events: station.weather_events,
                 forecast: station.forecast,
-                oracle_tables: station.oracle_tables,
+                oracle_tables: station
+                    .oracle_tables
+                    .into_iter()
+                    .map(oracle_from_s)
+                    .collect(),
             });
         }
         let originating_event = self.originating_event.map(|event| match event {
@@ -290,7 +369,11 @@ impl FrozenSuppliedInputsV5 {
         retained.originating.validate()?;
         Ok((
             SuppliedInputsV5 {
-                contract_version: self.contract_version,
+                contract_version: if absent {
+                    String::new()
+                } else {
+                    SUPPLIED_INPUTS_CONTRACT_VERSION.to_owned()
+                },
                 stations,
                 originating_event,
             },

@@ -87,6 +87,14 @@ struct FakeBroker {
 }
 
 impl StrategyKernelBroker for FakeBroker {
+    fn financial_state(&self) -> strategy_core_kernel::BrokerFinancialState {
+        strategy_core_kernel::BrokerFinancialState {
+            allowance_limit_micros: 100_000_000,
+            provider_available_balance_micros: 100_000_000,
+            ..Default::default()
+        }
+    }
+
     fn buying_power(&self) -> Option<f64> {
         Some(100.0)
     }

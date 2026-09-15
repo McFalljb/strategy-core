@@ -574,6 +574,13 @@ pub struct DecisionContextV4 {
 
 impl DecisionContextV4 {
     pub fn validate(&self) -> Result<(), DecisionV4Error> {
+        self.validate_with_forecast_point_bound(MAX_POINTS_PER_MODEL)
+    }
+
+    pub(crate) fn validate_with_forecast_point_bound(
+        &self,
+        max_points: usize,
+    ) -> Result<(), DecisionV4Error> {
         if self.delivery_id.is_empty()
             || self.stations.is_empty()
             || self.stations.len() > MAX_STATIONS
@@ -595,7 +602,7 @@ impl DecisionContextV4 {
                 || station.oracle.rows.len() > MAX_ORACLE_ROWS
                 || station.forecast.models.iter().any(|model| {
                     model.hourly.is_empty()
-                        || model.hourly.len() > MAX_POINTS_PER_MODEL
+                        || model.hourly.len() > max_points
                         || model.hourly.iter().any(|point| {
                             point.at_unix_ms < station.climate_day_start_utc_unix_ms
                                 || point.at_unix_ms >= station.climate_day_end_utc_unix_ms

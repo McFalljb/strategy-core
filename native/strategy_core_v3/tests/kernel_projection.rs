@@ -35,6 +35,9 @@ use strategy_core_v3::supplied_v5::{
     SuppliedWeatherEventV5,
 };
 
+#[path = "kernel_projection/replay.rs"]
+mod replay;
+
 const STATION: &str = "KSEA";
 const MARKET: &str = "KXHIGHTSEA-26AUG30-T80";
 const OPPORTUNITY: &str = "KXHIGHTSEA-26AUG30";
@@ -160,7 +163,11 @@ fn base_context() -> DecisionContextV5 {
         ..Default::default()
     };
     DecisionContextV5 {
+        current_weather: None,
+        forecast_issuance: None,
+        current_inputs: None,
         retained_supplied_encoding: Default::default(),
+        broker_replay: None,
         owner_state,
         strategy: StrategyScopeV5 {
             strategy_id: "fixture".to_owned(),
@@ -297,6 +304,8 @@ fn supplied_station(observation: SuppliedObservationV5) -> SuppliedStationV5 {
             }],
         }),
         oracle_tables: vec![SuppliedOracleTableV5 {
+            updated_at_unix_ns: Some(1_788_000_000_000_000_123),
+            notification_updated_at_unix_ns: Some(1_788_000_000_000_000_987),
             source: "minutetemp.rest.oracle".to_owned(),
             received_at_unix_ns: 1_788_000_000_000_000_000,
             station_id: STATION.to_owned(),
@@ -306,6 +315,7 @@ fn supplied_station(observation: SuppliedObservationV5) -> SuppliedStationV5 {
             score_mode: Some("day_of".to_owned()),
             rank_by: Some("high".to_owned()),
             scores: vec![SuppliedOracleScoreV5 {
+                rank: Some(1),
                 model_id: "hrrr".to_owned(),
                 model_name: "HRRR".to_owned(),
                 high_mae: decimal("0.123456789012345678"),
@@ -449,6 +459,58 @@ fn new_low_context() -> DecisionContextV5 {
     with_supplied(context, station, SuppliedEventV5::Extreme(extreme))
 }
 
+#[test]
+fn accepted_near_equal_extreme_does_not_select_the_older_rest_original() {
+    let mut context = new_low_context();
+    let station = &mut context.supplied.stations[0];
+    station.extreme_low.as_mut().unwrap().value_f = decimal("57.999999999");
+    station.extreme_low.as_mut().unwrap().value_c = decimal("14.44444444388889");
+    context.supplied.originating_event = Some(SuppliedEventV5::Extreme(
+        station.extreme_low.clone().unwrap(),
+    ));
+    context.owner_state.stations[0].weather.running_low_milli_c = Some(14_444);
+    context.owner_state.stations[0].revision = 4;
+    context.owner_state.stations[0]
+        .provider_cursor
+        .connection_generation = 3;
+    let mut facts = strategy_core_kernel::WeatherFacts::default();
+    facts.insert(
+        strategy_core_kernel::WeatherField::RunningLow,
+        strategy_core_kernel::WeatherValue::Temperature {
+            c: decimal("14.44444444388889"),
+            f: decimal("57.999999999"),
+        },
+        &strategy_core_kernel::WeatherFactProvenance {
+            source: "minutetemp.websocket.v1".to_owned(),
+            envelope: Some(envelope("evt-low-50", 50)),
+            owner_generation: 3,
+            owner_revision: 4,
+            supplied: true,
+            ..Default::default()
+        },
+    );
+    context.current_weather = Some(vec![strategy_core_v3::decision_v5::StationWeatherV5 {
+        station_id: STATION.to_owned(),
+        facts,
+    }]);
+    let encoded = encode_decision_context_v5(&context).unwrap();
+    assert!(encoded.starts_with(b"SDCTXV5E"));
+    assert_eq!(decode_decision_context_v5(&encoded).unwrap(), context);
+    let snapshot =
+        KernelSnapshot::from_context(&decode_decision_context_v5(&encoded).unwrap()).unwrap();
+    let current = snapshot.station(STATION).unwrap();
+    assert_eq!(
+        current.daily_extremes.as_ref().unwrap().daily_low_f,
+        Some(58.0)
+    );
+    assert_eq!(current.extreme_low.as_ref().unwrap().value_f, 57.999999999);
+    assert_eq!(
+        current.weather.running_low,
+        Some(57.999999999),
+        "the accepted extreme owns the summary even when its rounded milli-C equals REST"
+    );
+}
+
 fn ended_episode_context() -> DecisionContextV5 {
     let mut context = base_context();
     context.owner_state.trigger = TriggerV4::Weather {
@@ -524,6 +586,16 @@ impl NativeKernel for RecordingKernel {
             oracle.supplied.unwrap().scores[0].high_mae,
             decimal("0.123456789012345678")
         );
+        assert_eq!(
+            oracle.updated_at.unwrap().timestamp_nanos_opt(),
+            Some(1_788_000_000_000_000_123),
+            "table freshness must not borrow the notification timestamp"
+        );
+        assert_eq!(
+            oracle.supplied.unwrap().notification_updated_at_unix_ns,
+            Some(1_788_000_000_000_000_987)
+        );
+        assert_eq!(oracle.supplied.unwrap().scores[0].rank, Some(1));
         assert!(
             context
                 .state()

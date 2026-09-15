@@ -1086,6 +1086,43 @@ and unknown literal values raise `ValueError`.
 These helpers calculate portable fee math. The engine still owns fee-policy
 selection, maker/taker classification, posting, balances, settlement, and P/L.
 
+#### Exact Rust direct-member execution
+
+`strategy_core_kernel::fees::calculate_direct_member_fill_fee_micros` is the
+fixed-unit interface for the selected direct-member `$0.0001` posting grid:
+
+```rust
+use strategy_core_kernel::{OrderAction, fees::{
+    FeeType, LiquidityRole, calculate_direct_member_fill_fee_micros,
+}};
+
+let charge = calculate_direct_member_fill_fee_micros(
+    OrderAction::Buy, 600_000, 500, LiquidityRole::Taker,
+    0, FeeType::Quadratic, 1_000_000,
+)?;
+assert_eq!(charge.trade_fee_micros, 84_000);
+assert_eq!(charge.net_fee_micros, 84_000);
+assert_eq!(charge.posted_balance_change_micros, -3_084_000);
+```
+
+Inputs are price microdollars, quantity hundredths, the order's prior accumulator
+in microdollars, and explicit fee type/multiplier millionths. `FeeCalculationMicros`
+returns unsigned trade fee, rounding fee, rebate, net fee, and next accumulator;
+its signed cash change is `i128`. No amount passes through floating point.
+Non-exact microdollar principal and monetary overflow reject.
+
+Trade fees ceil to six decimals. Signed cash postings floor to `$0.0001`;
+rebates are grid-aligned and capped so a fill's net fee cannot be negative.
+Keep the accumulator across the same order's partial fills and maker/taker
+transitions. Cancellation does not create an additional terminal rebate.
+Conservative reservations are separate from these actual execution charges.
+
+This is pure arithmetic, not proof of venue authority, liquidity role, admission,
+durable posting, or live execution parity. The host owns those obligations.
+The broad Rust crate re-exports the fee authority types and exposes a corresponding
+exact-unit helper for its retained `Action` type; its existing floating helpers
+remain available and must not be used as a financial integer round trip.
+
 ### Station, city-code, and ticker helpers
 
 | Function | Result |

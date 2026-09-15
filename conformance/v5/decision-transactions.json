@@ -1,5 +1,5 @@
 {
-  "schema": "strategy-core-decision-v5-corpus/5",
+  "schema": "strategy-core-decision-v5-corpus/7",
   "valid": [
     {
       "byte_count": 1134,
@@ -72,6 +72,30 @@
       "id": "daily-high-ended-episode-with-supplied-inputs",
       "kind": "decision_context_v5_supplied",
       "sha256": "37b36ef5120bea7dfaa40d25f9c68ee8b40cb3f981ea52845605e539b63de40a"
+    },
+    {
+      "byte_count": 4742,
+      "id": "current-complete-station-and-origin",
+      "kind": "decision_context_v5_current",
+      "sha256": "1e21412ae29f554207dc1f8d035cd9f12eca6a586b290a850cf3f7cbc4296214"
+    },
+    {
+      "byte_count": 5236,
+      "id": "current-complete-origin-outcome-replay",
+      "kind": "decision_context_v5_current",
+      "sha256": "589dce8d1ed7d47fc5f78b7c577dbb71ff5919553614395d7669ff722eb42d0b"
+    },
+    {
+      "byte_count": 4743,
+      "id": "current-complete-station-and-origin-e",
+      "kind": "decision_context_v5_replay_e",
+      "sha256": "3d6dda7558f621a83834e8e8c63310efe820ce9739c4488ab612cdd7ad4ba342"
+    },
+    {
+      "byte_count": 5788,
+      "id": "current-bounded-broker-replay-e",
+      "kind": "decision_context_v5_replay_e",
+      "sha256": "a398dd1f7fe8ef81aeb05ee6b9f96c3ba123f0c243dc956091a85e4e0216d3e3"
     }
   ],
   "invalid": [
@@ -166,6 +190,19 @@
     {
       "id": "new-low-trigger-not-bound-to-extrema",
       "category": "invalid_contract"
-    }
+    },
+    { "id": "current-duplicate-oracle-query", "category": "invalid_contract" },
+    { "id": "current-oracle-query-label-conflict", "category": "invalid_contract" },
+    { "id": "current-future-weather-acceptance", "category": "invalid_contract" },
+    { "id": "current-future-oracle-revision", "category": "invalid_contract" },
+    { "id": "current-origin-supplied-mismatch", "category": "invalid_contract" },
+    { "id": "current-origin-text-bound", "category": "bound_exceeded" },
+    { "id": "replay-missing-predecessor", "category": "invalid_contract" },
+    { "id": "replay-out-of-order-generation", "category": "invalid_contract" },
+    { "id": "replay-stale-call-fence", "category": "invalid_contract" },
+    { "id": "replay-incoherent-publication-revision", "category": "invalid_contract" },
+    { "id": "replay-incoherent-returned-finances", "category": "invalid_contract" },
+    { "id": "replay-cannot-downgrade-to-d", "category": "invalid_contract" },
+    { "id": "replay-call-bound-exceeded", "category": "bound_exceeded" }
   ]
 }

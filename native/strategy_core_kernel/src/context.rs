@@ -7,7 +7,7 @@ use crate::events::{
     ForecastInputSnapshot, OracleInputSnapshot, StationWeatherView, StrategyEventView,
     TickerPriceView,
 };
-use crate::state::{MarketState, StationState};
+use crate::state::{BrokerFinancialState, MarketState, StationState};
 use chrono::{DateTime, Utc};
 
 pub trait NativeKernel {
@@ -114,6 +114,8 @@ pub struct StateReadDiagnostic {
 pub trait StrategyKernelData {}
 
 pub trait StrategyKernelBroker {
+    fn financial_state(&self) -> BrokerFinancialState;
+
     fn buying_power(&self) -> Option<f64>;
 
     fn position_quantity(&self, ticker: &str, side: ContractSide) -> ContractQuantity;

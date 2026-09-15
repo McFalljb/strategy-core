@@ -1,58 +1,13 @@
-use std::{error::Error, fmt, str::FromStr};
+use std::str::FromStr;
 
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 use crate::broker::Action;
-
-pub type FeeResult<T> = Result<T, FeeError>;
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum FeeError {
-    UnknownFeeType(String),
-    InvalidDecimal(String),
-    InvalidInput(&'static str),
-}
-
-impl fmt::Display for FeeError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::UnknownFeeType(value) => write!(formatter, "unknown Kalshi fee type: {value}"),
-            Self::InvalidDecimal(value) => write!(formatter, "invalid decimal value: {value}"),
-            Self::InvalidInput(value) => write!(formatter, "invalid fee input: {value}"),
-        }
-    }
-}
-
-impl Error for FeeError {}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum LiquidityRole {
-    Maker,
-    Taker,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum FeeType {
-    Quadratic,
-    QuadraticWithMakerFees,
-    Flat,
-}
-
-impl FromStr for FeeType {
-    type Err = FeeError;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value {
-            "quadratic" => Ok(Self::Quadratic),
-            "quadratic_with_maker_fees" => Ok(Self::QuadraticWithMakerFees),
-            "flat" => Ok(Self::Flat),
-            _ => Err(FeeError::UnknownFeeType(value.to_string())),
-        }
-    }
-}
+pub use strategy_core_kernel::fees::{
+    FeeCalculationMicros, FeeError, FeeResult, FeeType, LiquidityRole,
+    reserve_direct_member_buy_fee_micros,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct FeeCalculation {
@@ -74,7 +29,12 @@ pub fn calculate_trade_fee(
     let price = decimal_from_f64(price)?;
     let quantity = Decimal::from(quantity);
     let fee = calculate_trade_fee_decimal(
-        price, quantity, liquidity_role, fee_type, fee_multiplier, centicent(),
+        price,
+        quantity,
+        liquidity_role,
+        fee_type,
+        fee_multiplier,
+        centicent(),
     )?;
     Ok(decimal_to_f64(fee))
 }
@@ -89,8 +49,8 @@ fn calculate_trade_fee_decimal(
 ) -> FeeResult<Decimal> {
     let fee_type = fee_type.unwrap_or(FeeType::QuadraticWithMakerFees);
     let multiplier = resolve_fee_multiplier(liquidity_role, fee_type, fee_multiplier)?;
-    let raw_fee = raw_trade_fee(price, quantity, multiplier, fee_type);
-    Ok(ceil_to_increment(raw_fee, trade_increment))
+    let raw_fee = raw_trade_fee(price, quantity, multiplier, fee_type)?;
+    ceil_to_increment(raw_fee, trade_increment)
 }
 
 pub fn apply_fee_rounding(
@@ -99,7 +59,7 @@ pub fn apply_fee_rounding(
     fee_accumulator: f64,
 ) -> FeeResult<FeeCalculation> {
     let revenue = decimal_from_f64(revenue)?;
-    let rounded_trade_fee = ceil_to_increment(decimal_from_f64(trade_fee)?, centicent());
+    let rounded_trade_fee = ceil_to_increment(decimal_from_f64(trade_fee)?, centicent())?;
     let mut accumulator = decimal_from_f64(fee_accumulator)?;
     Ok(apply_fee_rounding_decimal(
         revenue,
@@ -204,18 +164,63 @@ pub fn calculate_direct_member_fill_fee_hundredths(
     let price = decimal_from_f64(price)?;
     let quantity = Decimal::new(quantity_hundredths, 2);
     let mut accumulator = decimal_from_f64(fee_accumulator)?;
-    if price < zero() || price > one() || quantity < zero() || accumulator < zero()
+    if price < zero()
+        || price > one()
+        || quantity < zero()
+        || accumulator < zero()
         || fee_multiplier.is_some_and(|value| !value.is_finite() || value < 0.0)
     {
-        return Err(FeeError::InvalidInput("direct-member fill requires nonnegative quantity, accumulator and multiplier, and price in [0, 1]"));
+        return Err(FeeError::InvalidInput(
+            "direct-member fill requires nonnegative quantity, accumulator and multiplier, and price in [0, 1]",
+        ));
     }
     let trade_fee = calculate_trade_fee_decimal(
-        price, quantity, liquidity_role, fee_type, fee_multiplier, Decimal::new(1, 6),
+        price,
+        quantity,
+        liquidity_role,
+        fee_type,
+        fee_multiplier,
+        Decimal::new(1, 6),
     )?;
-    let revenue = if action == Action::Buy { -price * quantity } else { price * quantity };
+    let revenue = if action == Action::Buy {
+        -price * quantity
+    } else {
+        price * quantity
+    };
     Ok(apply_fee_rounding_decimal(
-        revenue, trade_fee, &mut accumulator, centicent(), true,
+        revenue,
+        trade_fee,
+        &mut accumulator,
+        centicent(),
+        true,
     ))
+}
+
+/// Direct-member execution from exact price/quantity/fee-authority units.
+/// Principal must be representable in microdollars. Retain the returned accumulator
+/// for subsequent fills of this order; cancellation does not invent a final rebate.
+pub fn calculate_direct_member_fill_fee_micros(
+    action: Action,
+    price_micros: u64,
+    quantity_hundredths: u64,
+    liquidity_role: LiquidityRole,
+    fee_accumulator_micros: u64,
+    fee_type: FeeType,
+    fee_multiplier_millionths: u64,
+) -> FeeResult<FeeCalculationMicros> {
+    let action = match action {
+        Action::Buy => strategy_core_kernel::OrderAction::Buy,
+        Action::Sell => strategy_core_kernel::OrderAction::Sell,
+    };
+    strategy_core_kernel::fees::calculate_direct_member_fill_fee_micros(
+        action,
+        price_micros,
+        quantity_hundredths,
+        liquidity_role,
+        fee_accumulator_micros,
+        fee_type,
+        fee_multiplier_millionths,
+    )
 }
 
 fn calculate_fill_fee_decimal(
@@ -260,16 +265,10 @@ fn resolve_fee_multiplier(
         .map(decimal_from_f64)
         .transpose()?
         .unwrap_or_else(one);
-
-    let base = match (fee_type, liquidity_role) {
-        (FeeType::Quadratic, LiquidityRole::Maker) => zero(),
-        (FeeType::Quadratic, LiquidityRole::Taker) => general_taker_multiplier(),
-        (FeeType::QuadraticWithMakerFees, LiquidityRole::Taker) => general_taker_multiplier(),
-        (FeeType::QuadraticWithMakerFees, LiquidityRole::Maker) => general_maker_multiplier(),
-        (FeeType::Flat, LiquidityRole::Maker) => zero(),
-        (FeeType::Flat, LiquidityRole::Taker) => flat_taker_multiplier(),
-    };
-    Ok(base * multiplier)
+    let base =
+        Decimal::from(fee_type.base_rate_millionths(liquidity_role)) / Decimal::new(1_000_000, 0);
+    base.checked_mul(multiplier)
+        .ok_or(FeeError::InvalidInput("fee coefficient overflow"))
 }
 
 fn raw_trade_fee(
@@ -277,11 +276,17 @@ fn raw_trade_fee(
     quantity: Decimal,
     multiplier: Decimal,
     fee_type: FeeType,
-) -> Decimal {
+) -> FeeResult<Decimal> {
     match fee_type {
-        FeeType::Quadratic | FeeType::QuadraticWithMakerFees | FeeType::Flat => {
-            multiplier * quantity * price * (one() - price)
-        }
+        FeeType::Quadratic | FeeType::QuadraticWithMakerFees | FeeType::Flat => multiplier
+            .checked_mul(quantity)
+            .and_then(|value| value.checked_mul(price))
+            .and_then(|value| {
+                one()
+                    .checked_sub(price)
+                    .and_then(|complement| value.checked_mul(complement))
+            })
+            .ok_or(FeeError::InvalidInput("trade fee overflow")),
     }
 }
 
@@ -296,9 +301,11 @@ fn decimal_to_f64(value: Decimal) -> f64 {
         .expect("Decimal string should parse as f64")
 }
 
-fn ceil_to_increment(value: Decimal, increment: Decimal) -> Decimal {
-    let units = (value / increment).ceil();
-    units * increment
+fn ceil_to_increment(value: Decimal, increment: Decimal) -> FeeResult<Decimal> {
+    value
+        .checked_div(increment)
+        .and_then(|units| units.ceil().checked_mul(increment))
+        .ok_or(FeeError::InvalidInput("fee rounding overflow"))
 }
 
 fn floor_to_increment(value: Decimal, increment: Decimal) -> Decimal {
@@ -320,16 +327,4 @@ fn cent() -> Decimal {
 
 fn centicent() -> Decimal {
     Decimal::new(1, 4)
-}
-
-fn general_taker_multiplier() -> Decimal {
-    Decimal::new(7, 2)
-}
-
-fn general_maker_multiplier() -> Decimal {
-    Decimal::new(175, 4)
-}
-
-fn flat_taker_multiplier() -> Decimal {
-    Decimal::new(35, 3)
 }

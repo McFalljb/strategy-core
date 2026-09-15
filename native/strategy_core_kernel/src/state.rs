@@ -36,6 +36,22 @@ pub enum ComponentAuthority {
     Unavailable,
 }
 
+/// Host-retained provider evidence, not a reconstruction from the latest supplied object.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ComponentProvenance {
+    pub provider: String,
+    pub source: String,
+    pub event_id: Option<String>,
+    pub connection_epoch: Option<u64>,
+    pub sid: Option<u64>,
+    pub sequence: Option<u64>,
+    pub city_sequence: Option<u64>,
+    pub producer_sequence: Option<u64>,
+    pub received_frame_ordinal: Option<u64>,
+    pub provider_at_unix_ms: Option<i64>,
+    pub received_at_unix_ms: i64,
+}
+
 /// Authority, revision and freshness of one state component.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ComponentMeta {
@@ -45,6 +61,16 @@ pub struct ComponentMeta {
     pub updated_at: Option<DateTime<Utc>>,
     pub expected_version: Option<String>,
     pub refresh_error: Option<String>,
+    pub provenance: Vec<ComponentProvenance>,
+}
+
+/// Host acceptance of a partial weather update, separate from later station state.
+#[derive(Clone, Debug, PartialEq)]
+pub struct EventAcceptance {
+    pub station_generation: u64,
+    pub station_revision: u64,
+    pub component: ComponentMeta,
+    pub weather: crate::WeatherFacts,
 }
 
 /// Provider event identity and producer metadata of one fact.
@@ -70,6 +96,7 @@ pub struct EventProvenance {
     pub connection_epoch: Option<u64>,
     pub sid: Option<u64>,
     pub received_frame_ordinal: Option<u64>,
+    pub acceptance: Option<EventAcceptance>,
 }
 
 impl EventProvenance {
@@ -108,6 +135,7 @@ impl EventProvenance {
             connection_epoch: None,
             sid: None,
             received_frame_ordinal: None,
+            acceptance: None,
         }
     }
 
@@ -126,6 +154,7 @@ impl EventProvenance {
             connection_epoch: self.connection_epoch,
             sid: self.sid,
             received_frame_ordinal: self.received_frame_ordinal,
+            acceptance: self.acceptance.as_ref(),
         }
     }
 }
@@ -678,6 +707,8 @@ pub struct ForecastModel {
     pub timezone: Option<String>,
     pub utc_offset_seconds: Option<i64>,
     pub hourly: Vec<ForecastPoint>,
+    /// Host-selected issuance, including the acceptance that retained it.
+    pub issuance: Option<crate::forecast::ForecastIssuance>,
     pub origin: ValueOrigin,
     pub supplied: Option<SuppliedForecastModel>,
 }
@@ -697,6 +728,7 @@ impl ForecastModel {
             run_id: model.run_id.clone(),
             fetched_at: model.fetched_at_unix_ns.map(nanos),
             issued_at: model.issued_at_unix_ns.map(nanos),
+            issuance: None,
             timezone: model.timezone.clone(),
             utc_offset_seconds: model.utc_offset_seconds,
             hourly: model
@@ -863,7 +895,7 @@ impl OracleTable {
             all_time: table.all_time,
             range_start: table.range_start.clone(),
             range_end: table.range_end.clone(),
-            updated_at: table.notification_updated_at_unix_ns.map(nanos),
+            updated_at: table.updated_at_unix_ns.map(nanos),
             modes: table.notification_modes.clone(),
             scores: table
                 .scores
@@ -932,10 +964,9 @@ pub struct StationComponents {
 
 /// Complete scoped state of one station.
 ///
-/// `weather` is the derived current summary the frozen kernels read through `get_weather`:
-/// each of its facts is the freshest accepted value for that fact, projected from the supplied
-/// original when the original is at least as fresh as the host's derived component and from
-/// the derived component otherwise. The originals themselves live in `observation`,
+/// `weather` is the convenience summary the kernels read through `get_weather`. Current
+/// contexts project the explicit host winners in `weather_facts`; only historical contexts
+/// without winners use the legacy projection. Originals remain separate in `observation`,
 /// `daily_extremes`, `extreme_high`/`extreme_low`, `reports`, `weather_events`, `forecast`
 /// and `oracle_tables`.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -944,6 +975,8 @@ pub struct StationState {
     pub climate_day: ClimateDay,
     pub components: StationComponents,
     pub weather: StationWeatherView,
+    /// Explicit host winners underlying `weather`; absent in pre-winner historical contexts.
+    pub weather_facts: Option<crate::WeatherFacts>,
     pub observation: Option<Observation>,
     pub daily_extremes: Option<DailyExtremes>,
     pub extreme_high: Option<Extreme>,
@@ -1076,6 +1109,7 @@ pub struct MarketState {
     pub strike_type: String,
     pub fee_type: String,
     pub fee_multiplier: Option<f64>,
+    pub fee_multiplier_millionths: Option<i64>,
     /// Strikes in Fahrenheit; the exact fixed-point identity values follow.
     pub floor_strike: Option<f64>,
     pub cap_strike: Option<f64>,
@@ -1100,6 +1134,30 @@ pub struct MarketState {
     pub yes_ask_levels: Vec<PriceLevelView>,
     pub no_bid_levels: Vec<PriceLevelView>,
     pub no_ask_levels: Vec<PriceLevelView>,
+}
+
+/// Exact financial inputs for the scoped invocation. These are planning inputs, not a grant
+/// of Broker authority; order admission remains the host Broker's responsibility.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, bincode::Encode, bincode::Decode)]
+pub struct BrokerFinancialState {
+    pub allowance_limit_micros: u64,
+    pub current_commitment_micros: u64,
+    pub provider_available_balance_micros: u64,
+    pub locally_reserved_cash_micros: u64,
+}
+
+impl BrokerFinancialState {
+    pub fn remaining_event_allowance_micros(&self) -> u64 {
+        self.allowance_limit_micros
+            .saturating_sub(self.current_commitment_micros)
+    }
+
+    pub fn buying_power_micros(&self) -> u64 {
+        self.remaining_event_allowance_micros().min(
+            self.provider_available_balance_micros
+                .saturating_sub(self.locally_reserved_cash_micros),
+        )
+    }
 }
 
 impl MarketState {

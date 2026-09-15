@@ -37,6 +37,18 @@ pub const MAX_SUPPLIED_ORACLE_ROWS: usize = 32;
 pub const MAX_SUPPLIED_ADVERTISED_VERSIONS: usize = 32;
 pub const MAX_SUPPLIED_NOTIFICATION_MODES: usize = 3;
 
+/// Fields that cannot be represented or attested by a historical C/S packet.
+pub(crate) fn has_current_only_fields(inputs: &SuppliedInputsV5) -> bool {
+    inputs
+        .stations
+        .iter()
+        .flat_map(|station| &station.oracle_tables)
+        .any(|table| {
+            table.updated_at_unix_ns.is_some()
+                || table.scores.iter().any(|score| score.rank.is_some())
+        })
+}
+
 /// Structural validation of a supplied block independent of the owner projection.
 pub fn validate_supplied_inputs(inputs: &SuppliedInputsV5) -> Result<(), DecisionV5Error> {
     if inputs.is_absent() {
@@ -131,7 +143,8 @@ fn validate_station(station: &SuppliedStationV5) -> Result<(), DecisionV5Error> 
     Ok(())
 }
 
-pub(crate) fn validate_event(event: &SuppliedEventV5) -> Result<(), DecisionV5Error> {
+/// Validate a supplied event before host retention or admission.
+pub fn validate_event(event: &SuppliedEventV5) -> Result<(), DecisionV5Error> {
     match event {
         SuppliedEventV5::Observation(event) => validate_observation(event),
         SuppliedEventV5::Report(event) => validate_report(event),
@@ -140,7 +153,7 @@ pub(crate) fn validate_event(event: &SuppliedEventV5) -> Result<(), DecisionV5Er
     }
 }
 
-fn validate_envelope(envelope: &EventEnvelopeV5) -> Result<(), DecisionV5Error> {
+pub(crate) fn validate_envelope(envelope: &EventEnvelopeV5) -> Result<(), DecisionV5Error> {
     identifier(&envelope.event_id)?;
     if envelope.sequence == 0 || envelope.city_sequence == Some(0) {
         return Err(DecisionV5Error::InvalidContract);
@@ -374,7 +387,7 @@ fn validate_forecast(forecast: &SuppliedForecastV5) -> Result<(), DecisionV5Erro
     Ok(())
 }
 
-fn validate_oracle_table(table: &SuppliedOracleTableV5) -> Result<(), DecisionV5Error> {
+pub(crate) fn validate_oracle_table(table: &SuppliedOracleTableV5) -> Result<(), DecisionV5Error> {
     text(&table.source)?;
     identifier(&table.station_id)?;
     text(&table.range_start)?;
@@ -390,7 +403,10 @@ fn validate_oracle_table(table: &SuppliedOracleTableV5) -> Result<(), DecisionV5
         text(mode)?;
     }
     let mut seen = BTreeSet::new();
-    for score in &table.scores {
+    for (index, score) in table.scores.iter().enumerate() {
+        if score.rank.is_some_and(|rank| rank != index as u64 + 1) {
+            return Err(DecisionV5Error::InvalidContract);
+        }
         text(&score.model_id)?;
         text(&score.model_name)?;
         if !seen.insert(score.model_id.as_str()) {
@@ -485,6 +501,9 @@ pub(crate) fn from_frozen_s(inputs: supplied_s::SuppliedInputsV5) -> SuppliedInp
 pub(crate) fn to_frozen_s(
     inputs: &SuppliedInputsV5,
 ) -> Result<supplied_s::SuppliedInputsV5, DecisionV5Error> {
+    if has_current_only_fields(inputs) {
+        return Err(DecisionV5Error::InvalidContract);
+    }
     Ok(supplied_s::SuppliedInputsV5 {
         contract_version: if inputs.is_absent() {
             String::new()
@@ -981,8 +1000,9 @@ fn forecast_to_s(
     })
 }
 
-fn oracle_from_s(value: supplied_s::SuppliedOracleTableV5) -> SuppliedOracleTableV5 {
+pub(crate) fn oracle_from_s(value: supplied_s::SuppliedOracleTableV5) -> SuppliedOracleTableV5 {
     SuppliedOracleTableV5 {
+        updated_at_unix_ns: None,
         source: value.source,
         received_at_unix_ns: value.received_at_unix_ns,
         station_id: value.station_id,
@@ -998,6 +1018,7 @@ fn oracle_from_s(value: supplied_s::SuppliedOracleTableV5) -> SuppliedOracleTabl
             .scores
             .into_iter()
             .map(|score| SuppliedOracleScoreV5 {
+                rank: None,
                 model_id: score.model_id,
                 model_name: score.model_name,
                 is_public: score.is_public,
@@ -1012,7 +1033,7 @@ fn oracle_from_s(value: supplied_s::SuppliedOracleTableV5) -> SuppliedOracleTabl
     }
 }
 
-fn oracle_to_s(value: &SuppliedOracleTableV5) -> supplied_s::SuppliedOracleTableV5 {
+pub(crate) fn oracle_to_s(value: &SuppliedOracleTableV5) -> supplied_s::SuppliedOracleTableV5 {
     supplied_s::SuppliedOracleTableV5 {
         source: value.source.clone(),
         received_at_unix_ns: value.received_at_unix_ns,

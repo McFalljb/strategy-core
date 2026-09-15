@@ -18,6 +18,8 @@
 //!   derived value wins and the superseded original stays retained on the station.
 //! - Whole-contract quantities are explicit floors carried beside the exact hundredths.
 
+use std::collections::VecDeque;
+
 use chrono::{DateTime, TimeZone, Utc};
 use strategy_core_kernel::{
     Book, BookLevel, CancelOrderRequest, ClimateDay, ComponentAuthority, ComponentMeta,
@@ -59,6 +61,8 @@ pub enum KernelTransactionError {
     Kernel(String),
     MissingDeferredCommand,
     UnexpectedBrokerReturn,
+    MissingBrokerReplay,
+    BrokerReplayMismatch,
 }
 
 impl std::fmt::Display for KernelTransactionError {
@@ -132,24 +136,46 @@ pub fn run_transaction<F: TransactionKernelFactory>(
     };
     let mut candidate = restored.clone();
     let snapshot = KernelSnapshot::from_context(context)?;
-    let replay_return = match &context.trigger {
-        TriggerV5::BrokerOutcome { outcome, .. } => Some(outcome.return_value.clone()),
-        _ => None,
-    };
-    let mut host = KernelHost::new(snapshot, replay_return);
+    let mut host = KernelHost::for_transaction(snapshot, context)?;
     let event = KernelEvent::from_context(context)?;
     let outcome = event.run(&mut candidate, &mut host);
     let gate_code = factory.gate_telemetry_code();
 
     let decision = (|| {
-        if let Some(command) = host.deferred_command.take() {
-            if outcome
-                .as_ref()
-                .is_err_and(|error| error.message() != DEFERRED_BROKER_CALL)
+        if host.replay_failed || !host.replay.is_empty() {
+            return Err(KernelTransactionError::UnexpectedBrokerReturn);
+        }
+        for (index, attempt) in host.replayed.drain(..).enumerate() {
+            let cap = if matches!(&attempt.command, DeferredCommand::Place(request)
+                if request.action == OrderAction::Buy && request.order_type == strategy_core_kernel::OrderType::Market)
             {
-                return Err(KernelTransactionError::Kernel(
-                    outcome.unwrap_err().to_string(),
-                ));
+                replayed_market_buy_cap(&restored, context, index, &attempt.expected)?
+            } else {
+                None
+            };
+            let command = attempt.command.into_wire_fenced(
+                &context.owner_state.delivery_id,
+                attempt.expected.fence,
+                attempt.cancel_target,
+                cap,
+            )?;
+            if command.command_id() != attempt.expected.command_id
+                || !wire::strategy_command_v5_digest_matches(
+                    &command,
+                    attempt.expected.command_sha256,
+                )?
+            {
+                return Err(KernelTransactionError::BrokerReplayMismatch);
+            }
+        }
+        if let Some(command) = host.deferred_command.take() {
+            // Work after the first suspended call is speculative, including any error branch
+            // taken because the synchronous call has not returned yet.
+            host.actions.truncate(host.deferred_action_count);
+            if matches!(context.trigger, TriggerV5::BrokerOutcome { .. })
+                && context.broker_replay.is_none()
+            {
+                return Err(KernelTransactionError::MissingBrokerReplay);
             }
             let generation = context.continuation.as_ref().map_or(1, |commitment| {
                 commitment.continuation_generation.saturating_add(1)
@@ -158,19 +184,21 @@ pub fn run_transaction<F: TransactionKernelFactory>(
                 "continuation.{}.{}",
                 context.owner_state.delivery_id, generation
             );
-            let market_buy_price_cap_micros = match &command {
-                DeferredCommand::Place(request)
-                    if request.action == OrderAction::Buy
-                        && request.order_type == strategy_core_kernel::OrderType::Market =>
-                {
-                    candidate.market_buy_price_cap_micros(request)?
-                }
-                _ => None,
-            };
-            let command = command.into_wire(
-                context,
-                &continuation_id,
-                generation,
+            if generation > wire::MAX_STRATEGY_COMMANDS as u64 {
+                return Err(KernelTransactionError::Contract(
+                    DecisionV5Error::BoundExceeded,
+                ));
+            }
+            let market_buy_price_cap_micros = command.price_cap(&candidate)?;
+            let cancel_target = command.cancel_target(&host.snapshot.broker);
+            let command = command.into_wire_fenced(
+                &context.owner_state.delivery_id,
+                CommandFenceV5 {
+                    continuation_id: continuation_id.clone(),
+                    continuation_generation: generation,
+                    expected_broker_revision: context.admission_broker().revision,
+                },
+                cancel_target,
                 market_buy_price_cap_micros,
             )?;
             let awaited_command_id = command.command_id().to_owned();
@@ -199,9 +227,6 @@ pub fn run_transaction<F: TransactionKernelFactory>(
             append_kernel_telemetry(&host.actions, &mut result);
             wire::validate_decision_result_v5(context, &result)?;
             return Ok(result);
-        }
-        if host.replay_return.is_some() {
-            return Err(KernelTransactionError::UnexpectedBrokerReturn);
         }
         let next_sequence = context
             .kernel_checkpoint
@@ -239,6 +264,43 @@ pub fn run_transaction<F: TransactionKernelFactory>(
     decision
 }
 
+// The native cap accessor describes the request just suspended. Later returns can change the
+// kernel's private plan, so asking the final candidate for an earlier cap is incorrect. Recreate
+// only that suspension point, with no external Broker effects, then verify its complete request.
+// This adds at most one bounded prefix pass per replayed Market buy; Limit/cancel calls need none.
+fn replayed_market_buy_cap<K: TransactionKernel>(
+    restored: &K,
+    context: &DecisionContextV5,
+    preceding_calls: usize,
+    expected: &ReplayExpectation,
+) -> Result<Option<u64>, KernelTransactionError> {
+    let mut candidate = restored.clone();
+    let mut host = KernelHost::for_transaction(KernelSnapshot::from_context(context)?, context)?;
+    host.replay.truncate(preceding_calls);
+    let _ = KernelEvent::from_context(context)?.run(&mut candidate, &mut host);
+    if host.replay_failed || !host.replay.is_empty() {
+        return Err(KernelTransactionError::BrokerReplayMismatch);
+    }
+    let command = host
+        .deferred_command
+        .take()
+        .ok_or(KernelTransactionError::BrokerReplayMismatch)?;
+    let cap = command.price_cap(&candidate)?;
+    let cancel_target = command.cancel_target(&host.snapshot.broker);
+    let command = command.into_wire_fenced(
+        &context.owner_state.delivery_id,
+        expected.fence.clone(),
+        cancel_target,
+        cap,
+    )?;
+    if command.command_id() != expected.command_id
+        || !wire::strategy_command_v5_digest_matches(&command, expected.command_sha256)?
+    {
+        return Err(KernelTransactionError::BrokerReplayMismatch);
+    }
+    Ok(cap)
+}
+
 /// The Strategy parameters projected without loss into a JSON object for kernel initializers.
 pub fn strategy_parameters_json(
     context: &DecisionContextV5,
@@ -273,7 +335,7 @@ fn base_result(context: &DecisionContextV5) -> Result<DecisionResultV5, KernelTr
         delivery_id: context.owner_state.delivery_id.clone(),
         sleeve_identity: context.owner_state.sleeve.sleeve_id.clone(),
         state_fence: hex(&wire::decision_fence_v5_sha256(context)?),
-        expected_broker_revision: context.broker.revision,
+        expected_broker_revision: context.admission_broker().revision,
         disposition: DecisionDispositionV5::Completed,
         kernel_checkpoint: None,
         commands: Vec::new(),
@@ -317,7 +379,7 @@ pub struct KernelSnapshot {
     stations: Vec<StationState>,
     markets: Vec<MarketState>,
     broker: wire::BrokerDetailV5,
-    buying_power: f64,
+    finances: strategy_core_kernel::BrokerFinancialState,
 }
 
 impl KernelSnapshot {
@@ -331,6 +393,30 @@ impl KernelSnapshot {
                 station_state(
                     station,
                     context.supplied.station(&station.identity.station_id),
+                    context
+                        .current_weather
+                        .as_ref()
+                        .and_then(|stations| {
+                            stations
+                                .iter()
+                                .find(|weather| weather.station_id == station.identity.station_id)
+                        })
+                        .map(|weather| &weather.facts),
+                    context
+                        .forecast_issuance
+                        .as_ref()
+                        .and_then(|stations| {
+                            stations
+                                .iter()
+                                .find(|issued| issued.station_id == station.identity.station_id)
+                        })
+                        .map(|issued| issued.models.as_slice()),
+                    context.current_inputs.as_ref().and_then(|current| {
+                        current
+                            .stations
+                            .iter()
+                            .find(|input| input.station_id == station.identity.station_id)
+                    }),
                 )
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -340,24 +426,20 @@ impl KernelSnapshot {
             .iter()
             .map(|market| market_state(market, &context.strategy.event_date))
             .collect::<Result<Vec<_>, _>>()?;
-        let allowance_remaining = context
-            .owner_state
-            .broker
-            .allowance_limit
-            .saturating_sub(context.owner_state.broker.current_commitment);
-        let account_cash_remaining = context
-            .owner_state
-            .broker
-            .provider_available_balance
-            .saturating_sub(context.owner_state.broker.locally_reserved_cash);
-        let buying_power_micros = allowance_remaining.min(account_cash_remaining);
+        let broker = &context.owner_state.broker;
+        let finances = strategy_core_kernel::BrokerFinancialState {
+            allowance_limit_micros: broker.allowance_limit,
+            current_commitment_micros: broker.current_commitment,
+            provider_available_balance_micros: broker.provider_available_balance,
+            locally_reserved_cash_micros: broker.locally_reserved_cash,
+        };
         Ok(Self {
             now: millis(Some(context.decision_time_unix_ms))?
                 .ok_or(KernelTransactionError::InvalidTime)?,
             stations,
             markets,
             broker: context.broker.clone(),
-            buying_power: buying_power_micros as f64 / 1_000_000.0,
+            finances,
         })
     }
 
@@ -397,6 +479,9 @@ fn scoped_station(context: &DecisionContextV5) -> Result<&StationV4, KernelTrans
 fn station_state(
     station: &StationV4,
     supplied: Option<&SuppliedStationV5>,
+    weather_facts: Option<&strategy_core_kernel::WeatherFacts>,
+    forecast_issuance: Option<&[strategy_core_kernel::forecast::ForecastIssuance]>,
+    current: Option<&crate::current_v5::StationInputsV5>,
 ) -> Result<StationState, KernelTransactionError> {
     let station_id = station.identity.station_id.as_str();
     let event_date = station.climate_event_date.as_str();
@@ -434,6 +519,7 @@ fn station_state(
             updated_at: millis(report.updated_at_unix_ms)?,
             expected_version: None,
             refresh_error: None,
+            provenance: vec![component_provenance(&report.provenance)],
         };
         reports.push(model);
     }
@@ -457,10 +543,11 @@ fn station_state(
             updated_at: None,
             expected_version: None,
             refresh_error: None,
+            provenance: vec![component_provenance(&event.provenance)],
         };
         weather_events.push(model);
     }
-    let extreme_high = match supplied.and_then(|station| station.extreme_high.as_ref()) {
+    let mut extreme_high = match supplied.and_then(|station| station.extreme_high.as_ref()) {
         Some(event) => Some(Extreme::from_supplied(event, event_date)),
         None => station
             .extrema
@@ -469,7 +556,7 @@ fn station_state(
             .map(|extreme| derived_extreme(extreme, station_id, ExtremeKindV5::High, event_date))
             .transpose()?,
     };
-    let extreme_low = match supplied.and_then(|station| station.extreme_low.as_ref()) {
+    let mut extreme_low = match supplied.and_then(|station| station.extreme_low.as_ref()) {
         Some(event) => Some(Extreme::from_supplied(event, event_date)),
         None => station
             .extrema
@@ -478,6 +565,59 @@ fn station_state(
             .map(|extreme| derived_extreme(extreme, station_id, ExtremeKindV5::Low, event_date))
             .transpose()?,
     };
+    // Observation/report extrema are not fabricated new-high/new-low events. Their exact
+    // per-field originals remain in weather_facts; this component is an explicit derivation.
+    if let Some(facts) = weather_facts {
+        for (field, extreme) in [
+            (
+                strategy_core_kernel::WeatherField::ExtremeHigh,
+                &mut extreme_high,
+            ),
+            (
+                strategy_core_kernel::WeatherField::ExtremeLow,
+                &mut extreme_low,
+            ),
+        ] {
+            if let Some(extreme) = extreme
+                .as_mut()
+                .filter(|extreme| extreme.supplied.is_none())
+            {
+                if let Some(fact) = facts.fields.get(&field) {
+                    extreme.value_f =
+                        facts
+                            .temperature_f(field)
+                            .ok_or(KernelTransactionError::Contract(
+                                DecisionV5Error::InvalidContract,
+                            ))?;
+                    extreme.value_c =
+                        facts
+                            .temperature_c(field)
+                            .ok_or(KernelTransactionError::Contract(
+                                DecisionV5Error::InvalidContract,
+                            ))?;
+                    if fact.provenance.supplied {
+                        extreme.provenance = EventProvenance::from_envelope(
+                            fact.provenance.envelope.as_ref(),
+                            &fact.provenance.source,
+                            station_id,
+                        );
+                        extreme.provenance.received_at = fact
+                            .provenance
+                            .received_at_unix_ns
+                            .map(DateTime::from_timestamp_nanos);
+                        extreme.observed_at = fact
+                            .provenance
+                            .observed_at_unix_ns
+                            .map(DateTime::from_timestamp_nanos);
+                        extreme.report_type = fact.provenance.report_type.clone();
+                        extreme.source_report_id = fact.provenance.report_id.clone();
+                        extreme.temperature_day_mode = fact.provenance.temperature_day_mode.clone();
+                        extreme.temperature_day_date = fact.provenance.temperature_day_date.clone();
+                    }
+                }
+            }
+        }
+    }
     let mut forecast = match supplied.and_then(|station| station.forecast.as_ref()) {
         Some(supplied) => Some(Forecast::from_supplied(station_id, supplied)),
         None => (!station.forecast.models.is_empty())
@@ -486,6 +626,27 @@ fn station_state(
     };
     if let Some(forecast) = &mut forecast {
         forecast.meta = component_meta(&station.forecast_meta)?;
+        if let Some(accepted) = forecast_issuance {
+            forecast.advertised_versions = station.forecast.advertised_versions.clone();
+            forecast.models = station
+                .forecast
+                .models
+                .iter()
+                .zip(accepted)
+                .map(|(model, issued)| {
+                    let mut projected = forecast
+                        .models
+                        .iter()
+                        .find(|value| value.id == model.model_id)
+                        .cloned()
+                        .map_or_else(|| derived_forecast_model(model), Ok)?;
+                    projected.version = model.version.clone();
+                    projected.issued_at = Some(DateTime::from_timestamp_nanos(issued.at_unix_ns));
+                    projected.issuance = Some(issued.clone());
+                    Ok(projected)
+                })
+                .collect::<Result<Vec<_>, KernelTransactionError>>()?;
+        }
     }
     let mut oracle_tables = match supplied
         .map(|station| &station.oracle_tables)
@@ -493,15 +654,41 @@ fn station_state(
     {
         Some(tables) => tables.iter().map(OracleTable::from_supplied).collect(),
         None => (!station.oracle.rows.is_empty() || station.oracle.updated_at_unix_ms.is_some())
-            .then(|| derived_oracle(station))
+            .then(|| derived_oracle(&station.oracle))
             .transpose()?
             .into_iter()
             .collect::<Vec<_>>(),
     };
-    for table in &mut oracle_tables {
-        table.meta = component_meta(&station.oracle_meta)?;
+    if let Some(current) = current {
+        oracle_tables = current
+            .oracles
+            .iter()
+            .map(|input| {
+                let mut table = input
+                    .supplied
+                    .as_ref()
+                    .map(OracleTable::from_supplied)
+                    .map_or_else(|| derived_oracle(&input.table), Ok)?;
+                table.mode = input.table.query.mode.clone();
+                table.rank_by = match input.table.query.rank_by {
+                    RankByV4::High => "high",
+                    RankByV4::Low => "low",
+                }
+                .to_owned();
+                table.days = input.table.query.days.to_string();
+                table.meta = component_meta(&input.meta)?;
+                Ok(table)
+            })
+            .collect::<Result<Vec<_>, KernelTransactionError>>()?;
+    } else {
+        for table in &mut oracle_tables {
+            table.meta = component_meta(&station.oracle_meta)?;
+        }
     }
-    let weather = weather_summary(station, observation.as_ref(), daily_extremes.as_ref())?;
+    let weather = match weather_facts {
+        Some(facts) => facts.summary(station_id),
+        None => legacy_weather_summary(station, observation.as_ref(), daily_extremes.as_ref())?,
+    };
     Ok(StationState {
         identity: StationIdentity {
             station_id: station_id.to_owned(),
@@ -528,6 +715,7 @@ fn station_state(
             oracle: component_meta(&station.oracle_meta)?,
         },
         weather,
+        weather_facts: weather_facts.cloned(),
         observation,
         daily_extremes,
         extreme_high,
@@ -539,14 +727,15 @@ fn station_state(
     })
 }
 
-/// The derived current summary for `get_weather`.
+/// Compatibility projection for contexts captured before per-field acceptance was retained.
+/// New Trader deliveries use explicit host winners instead; this is not a freshness authority.
 ///
-/// Replacement rule: a fact is projected from its supplied original only while that original
+/// Historical replacement rule: a fact is projected from its supplied original only while that original
 /// is still the current fact in the owner's merged state, i.e. the owner's derived value agrees
 /// with the original at the derived precision. A newer accepted update that changed the
 /// derived value wins, and the superseded original stays retained on the station
 /// (`daily_extremes`, `observation`) as evidence.
-fn weather_summary(
+fn legacy_weather_summary(
     station: &StationV4,
     observation: Option<&Observation>,
     daily: Option<&DailyExtremes>,
@@ -676,6 +865,22 @@ fn weather_summary(
     })
 }
 
+fn component_provenance(value: &ProvenanceV4) -> strategy_core_kernel::state::ComponentProvenance {
+    strategy_core_kernel::state::ComponentProvenance {
+        provider: value.provider.clone(),
+        source: value.source.clone(),
+        event_id: value.event_id.clone(),
+        connection_epoch: value.connection_epoch,
+        sid: value.sid,
+        sequence: value.sequence,
+        city_sequence: value.city_sequence,
+        producer_sequence: value.producer_sequence,
+        received_frame_ordinal: value.received_frame_ordinal,
+        provider_at_unix_ms: value.provider_at_unix_ms,
+        received_at_unix_ms: value.received_at_unix_ms,
+    }
+}
+
 fn component_meta(meta: &ComponentMetaV4) -> Result<ComponentMeta, KernelTransactionError> {
     Ok(ComponentMeta {
         authority: authority(&meta.authority),
@@ -684,6 +889,7 @@ fn component_meta(meta: &ComponentMetaV4) -> Result<ComponentMeta, KernelTransac
         updated_at: millis(meta.updated_at_unix_ms)?,
         expected_version: meta.expected_version.clone(),
         refresh_error: meta.refresh_error.clone(),
+        provenance: meta.provenance.iter().map(component_provenance).collect(),
     })
 }
 
@@ -695,6 +901,7 @@ fn market_meta(meta: &MarketMetaV4) -> Result<ComponentMeta, KernelTransactionEr
         updated_at: millis(meta.updated_at_unix_ms)?,
         expected_version: meta.expected_version.clone(),
         refresh_error: meta.refresh_error.clone(),
+        provenance: meta.provenance.iter().map(component_provenance).collect(),
     })
 }
 
@@ -736,6 +943,7 @@ fn derived_provenance(provenance: &ProvenanceV4, station_id: &str) -> EventProve
         connection_epoch: provenance.connection_epoch,
         sid: provenance.sid,
         received_frame_ordinal: provenance.received_frame_ordinal,
+        acceptance: None,
     }
 }
 
@@ -911,6 +1119,7 @@ fn derived_forecast_model(
         run_id: model.run_id.clone(),
         fetched_at: millis(model.fetched_at_unix_ms)?,
         issued_at: millis(model.issued_at_unix_ms)?,
+        issuance: None,
         timezone: model.timezone.clone(),
         utc_offset_seconds: model.utc_offset_seconds.map(i64::from),
         hourly: model
@@ -942,8 +1151,9 @@ fn derived_forecast_model(
     })
 }
 
-fn derived_oracle(station: &StationV4) -> Result<OracleTable, KernelTransactionError> {
-    let oracle = &station.oracle;
+fn derived_oracle(
+    oracle: &crate::decision_v4::OracleTableV4,
+) -> Result<OracleTable, KernelTransactionError> {
     Ok(OracleTable {
         station_id: oracle.query.station_id.clone(),
         source: "minutetemp".to_owned(),
@@ -958,7 +1168,7 @@ fn derived_oracle(station: &StationV4) -> Result<OracleTable, KernelTransactionE
         all_time: None,
         range_start: oracle.range_start.clone(),
         range_end: oracle.range_end.clone(),
-        updated_at: millis(station.oracle_meta.updated_at_unix_ms)?,
+        updated_at: millis(oracle.updated_at_unix_ms)?,
         modes: vec![oracle.query.mode.clone()],
         scores: oracle
             .rows
@@ -1002,6 +1212,7 @@ fn market_state(
             .identity
             .fee_multiplier_millionths
             .map(|value| value as f64 / 1_000_000.0),
+        fee_multiplier_millionths: market.identity.fee_multiplier_millionths,
         floor_strike: market
             .identity
             .floor_strike_milli_f
@@ -1133,11 +1344,33 @@ fn market_state(
 // Broker bridge
 // ---------------------------------------------------------------------------------------------
 
-/// Host context handed to the kernel: projected state, deferred economic call, replayed return.
+struct ReplayExpectation {
+    command_id: String,
+    command_sha256: [u8; 32],
+    fence: CommandFenceV5,
+}
+
+struct ReplayStep {
+    value: BrokerCommandReturnV5,
+    expected: Option<ReplayExpectation>,
+    returned_state: Option<crate::replay_v5::BrokerExecutionStateV5>,
+}
+
+struct ReplayAttempt {
+    command: DeferredCommand,
+    expected: ReplayExpectation,
+    cancel_target: Option<(String, u64)>,
+}
+
+/// Host context handed to the kernel. All completed calls are replayed in order before a new
+/// call may be deferred. Only Broker state advances between returns, never Source inputs.
 pub struct KernelHost {
     pub snapshot: KernelSnapshot,
-    pub replay_return: Option<BrokerCommandReturnV5>,
+    replay: VecDeque<ReplayStep>,
+    replayed: Vec<ReplayAttempt>,
+    replay_failed: bool,
     pub deferred_command: Option<DeferredCommand>,
+    deferred_action_count: usize,
     pub actions: Vec<KernelAction>,
 }
 
@@ -1145,55 +1378,126 @@ impl KernelHost {
     pub fn new(snapshot: KernelSnapshot, replay_return: Option<BrokerCommandReturnV5>) -> Self {
         Self {
             snapshot,
-            replay_return,
+            replay: replay_return
+                .into_iter()
+                .map(|value| ReplayStep {
+                    value,
+                    expected: None,
+                    returned_state: None,
+                })
+                .collect(),
+            replayed: Vec::new(),
+            replay_failed: false,
             deferred_command: None,
+            deferred_action_count: 0,
             actions: Vec::new(),
         }
     }
 
-    fn emit_economic(&mut self, command: DeferredCommand) -> KernelResult<()> {
-        match self.replay_return.take() {
-            Some(BrokerCommandReturnV5::PlaceOrder(PlaceOrderReturnV5::Ok(_)))
-                if matches!(&command, DeferredCommand::Place(_)) =>
-            {
-                Ok(())
+    fn for_transaction(
+        snapshot: KernelSnapshot,
+        context: &DecisionContextV5,
+    ) -> Result<Self, KernelTransactionError> {
+        let mut host = Self::new(snapshot, None);
+        let TriggerV5::BrokerOutcome { outcome, .. } = &context.trigger else {
+            return Ok(host);
+        };
+        let commitment = context
+            .continuation
+            .as_ref()
+            .ok_or(KernelTransactionError::MissingBrokerReplay)?;
+        if let Some(history) = &context.broker_replay {
+            for call in &history.preceding {
+                host.replay.push_back(ReplayStep {
+                    value: call.outcome.return_value.clone(),
+                    expected: Some(ReplayExpectation {
+                        command_id: call.outcome.command_id.clone(),
+                        command_sha256: call.command_sha256,
+                        fence: CommandFenceV5 {
+                            continuation_id: call.outcome.continuation_id.clone(),
+                            continuation_generation: call.outcome.continuation_generation,
+                            expected_broker_revision: call.expected_broker_revision,
+                        },
+                    }),
+                    returned_state: Some(call.returned_state.clone()),
+                });
             }
-            Some(BrokerCommandReturnV5::PlaceOrder(PlaceOrderReturnV5::Err(error)))
-                if matches!(&command, DeferredCommand::Place(_)) =>
-            {
-                Err(KernelError::new(error.message))
-            }
-            Some(BrokerCommandReturnV5::CancelOrder(CancelOrderReturnV5::Ok(_)))
-                if matches!(&command, DeferredCommand::Cancel(_)) =>
-            {
-                Ok(())
-            }
-            Some(BrokerCommandReturnV5::CancelOrder(CancelOrderReturnV5::Err(error)))
-                if matches!(&command, DeferredCommand::Cancel(_)) =>
-            {
-                Err(KernelError::new(error.message))
-            }
-            Some(BrokerCommandReturnV5::CancelAllOrders(CancelAllOrdersReturnV5::Ok {
-                ..
-            })) if matches!(&command, DeferredCommand::CancelAll) => Ok(()),
-            Some(BrokerCommandReturnV5::CancelAllOrders(CancelAllOrdersReturnV5::Err(error)))
-                if matches!(&command, DeferredCommand::CancelAll) =>
-            {
-                Err(KernelError::new(error.message))
-            }
-            Some(other) => {
-                self.replay_return = Some(other);
-                Err(KernelError::new("unexpected broker return kind"))
-            }
-            None => self.defer(command),
+        } else if outcome.continuation_generation != 1 {
+            return Err(KernelTransactionError::MissingBrokerReplay);
         }
+        host.replay.push_back(ReplayStep {
+            value: outcome.return_value.clone(),
+            expected: Some(ReplayExpectation {
+                command_id: commitment.command_id.clone(),
+                command_sha256: commitment.command_sha256,
+                fence: CommandFenceV5 {
+                    continuation_id: commitment.continuation_id.clone(),
+                    continuation_generation: commitment.continuation_generation,
+                    expected_broker_revision: commitment.expected_broker_revision,
+                },
+            }),
+            returned_state: context
+                .broker_replay
+                .as_ref()
+                .map(|history| history.returned_state.clone()),
+        });
+        Ok(host)
     }
 
-    fn defer(&mut self, command: DeferredCommand) -> KernelResult<()> {
-        if self.deferred_command.replace(command).is_some() {
-            return Err(KernelError::new("multiple deferred broker commands"));
+    fn broker_call(&mut self, command: DeferredCommand) -> KernelResult<BrokerCommandReturnV5> {
+        if self.deferred_command.is_some() {
+            return Err(KernelError::new(DEFERRED_BROKER_CALL));
         }
-        Err(KernelError::new(DEFERRED_BROKER_CALL))
+        let Some(step) = self.replay.pop_front() else {
+            self.deferred_action_count = self.actions.len();
+            self.deferred_command = Some(command);
+            return Err(KernelError::new(DEFERRED_BROKER_CALL));
+        };
+        let matches = matches!(
+            (&command, &step.value),
+            (
+                DeferredCommand::Place(_),
+                BrokerCommandReturnV5::PlaceOrder(_)
+            ) | (
+                DeferredCommand::Cancel(_),
+                BrokerCommandReturnV5::CancelOrder(_)
+            ) | (
+                DeferredCommand::CancelAll,
+                BrokerCommandReturnV5::CancelAllOrders(_)
+            )
+        );
+        if !matches
+            || step.expected.as_ref().is_some_and(|expected| {
+                expected.fence.expected_broker_revision != self.snapshot.broker.revision
+            })
+        {
+            self.replay_failed = true;
+            return Err(KernelError::new("broker replay call mismatch"));
+        }
+        if let Some(expected) = step.expected {
+            let cancel_target = command.cancel_target(&self.snapshot.broker);
+            self.replayed.push(ReplayAttempt {
+                command,
+                expected,
+                cancel_target,
+            });
+        }
+        if let Some(state) = step.returned_state {
+            self.snapshot.broker = state.broker;
+            self.snapshot.finances = state.finances;
+        }
+        Ok(step.value)
+    }
+
+    fn emit_economic(&mut self, command: DeferredCommand) -> KernelResult<()> {
+        match self.broker_call(command)? {
+            BrokerCommandReturnV5::PlaceOrder(PlaceOrderReturnV5::Err(error))
+            | BrokerCommandReturnV5::CancelOrder(CancelOrderReturnV5::Err(error))
+            | BrokerCommandReturnV5::CancelAllOrders(CancelAllOrdersReturnV5::Err(error)) => {
+                Err(KernelError::new(error.message))
+            }
+            _ => Ok(()),
+        }
     }
 }
 
@@ -1231,8 +1535,11 @@ impl StrategyKernelContext for KernelHost {
 }
 
 impl StrategyKernelBroker for KernelHost {
+    fn financial_state(&self) -> strategy_core_kernel::BrokerFinancialState {
+        self.snapshot.finances
+    }
     fn buying_power(&self) -> Option<f64> {
-        Some(self.snapshot.buying_power)
+        Some(self.snapshot.finances.buying_power_micros() as f64 / 1_000_000.0)
     }
     fn position_quantity(&self, ticker: &str, side: ContractSide) -> ContractQuantity {
         self.snapshot
@@ -1311,43 +1618,29 @@ impl StrategyKernelBroker for KernelHost {
             })
     }
     fn place_order(&mut self, request: PlaceOrderRequest) -> KernelResult<OrderResult> {
-        match self.replay_return.take() {
-            Some(BrokerCommandReturnV5::PlaceOrder(value)) => map_place_return(value),
-            Some(other) => {
-                self.replay_return = Some(other);
-                Err(KernelError::new("unexpected broker return kind"))
-            }
-            None => self
-                .defer(DeferredCommand::Place(request))
-                .and_then(|()| Err(KernelError::new(DEFERRED_BROKER_CALL))),
+        match self.broker_call(DeferredCommand::Place(request))? {
+            BrokerCommandReturnV5::PlaceOrder(value) => map_place_return(value),
+            _ => Err(KernelError::new("unexpected broker return kind")),
         }
     }
     fn cancel_order(&mut self, request: CancelOrderRequest) -> KernelResult<bool> {
-        match self.replay_return.take() {
-            Some(BrokerCommandReturnV5::CancelOrder(CancelOrderReturnV5::Ok(value))) => Ok(value),
-            Some(BrokerCommandReturnV5::CancelOrder(CancelOrderReturnV5::Err(error))) => {
+        match self.broker_call(DeferredCommand::Cancel(request))? {
+            BrokerCommandReturnV5::CancelOrder(CancelOrderReturnV5::Ok(value)) => Ok(value),
+            BrokerCommandReturnV5::CancelOrder(CancelOrderReturnV5::Err(error)) => {
                 Err(KernelError::new(error.message))
             }
-            Some(other) => {
-                self.replay_return = Some(other);
-                Err(KernelError::new("unexpected broker return kind"))
-            }
-            None => self.defer(DeferredCommand::Cancel(request)).map(|()| false),
+            _ => Err(KernelError::new("unexpected broker return kind")),
         }
     }
     fn cancel_all_orders(&mut self) -> KernelResult<usize> {
-        match self.replay_return.take() {
-            Some(BrokerCommandReturnV5::CancelAllOrders(CancelAllOrdersReturnV5::Ok {
+        match self.broker_call(DeferredCommand::CancelAll)? {
+            BrokerCommandReturnV5::CancelAllOrders(CancelAllOrdersReturnV5::Ok {
                 cancelled_order_ids,
-            })) => Ok(cancelled_order_ids.len()),
-            Some(BrokerCommandReturnV5::CancelAllOrders(CancelAllOrdersReturnV5::Err(error))) => {
+            }) => Ok(cancelled_order_ids.len()),
+            BrokerCommandReturnV5::CancelAllOrders(CancelAllOrdersReturnV5::Err(error)) => {
                 Err(KernelError::new(error.message))
             }
-            Some(other) => {
-                self.replay_return = Some(other);
-                Err(KernelError::new("unexpected broker return kind"))
-            }
-            None => self.defer(DeferredCommand::CancelAll).map(|()| 0),
+            _ => Err(KernelError::new("unexpected broker return kind")),
         }
     }
 }
@@ -1385,6 +1678,34 @@ pub enum DeferredCommand {
 }
 
 impl DeferredCommand {
+    fn price_cap(
+        &self,
+        kernel: &impl TransactionKernel,
+    ) -> Result<Option<u64>, KernelTransactionError> {
+        match self {
+            Self::Place(request)
+                if request.action == OrderAction::Buy
+                    && request.order_type == strategy_core_kernel::OrderType::Market =>
+            {
+                kernel.market_buy_price_cap_micros(request)
+            }
+            _ => Ok(None),
+        }
+    }
+
+    fn cancel_target(&self, broker: &wire::BrokerDetailV5) -> Option<(String, u64)> {
+        let Self::Cancel(request) = self else {
+            return None;
+        };
+        broker
+            .orders
+            .iter()
+            .find(|order| {
+                order.order_id == request.order_id || order.provider_client_id == request.order_id
+            })
+            .map(|order| (order.order_id.clone(), order.revision))
+    }
+
     pub fn into_wire(
         self,
         context: &DecisionContextV5,
@@ -1392,11 +1713,27 @@ impl DeferredCommand {
         generation: u64,
         market_buy_price_cap_micros: Option<u64>,
     ) -> Result<StrategyCommandV5, KernelTransactionError> {
-        let fence = CommandFenceV5 {
-            continuation_id: continuation_id.to_owned(),
-            continuation_generation: generation,
-            expected_broker_revision: context.broker.revision,
-        };
+        let cancel_target = self.cancel_target(context.admission_broker());
+        self.into_wire_fenced(
+            &context.owner_state.delivery_id,
+            CommandFenceV5 {
+                continuation_id: continuation_id.to_owned(),
+                continuation_generation: generation,
+                expected_broker_revision: context.admission_broker().revision,
+            },
+            cancel_target,
+            market_buy_price_cap_micros,
+        )
+    }
+
+    fn into_wire_fenced(
+        self,
+        delivery_id: &str,
+        fence: CommandFenceV5,
+        cancel_target: Option<(String, u64)>,
+        market_buy_price_cap_micros: Option<u64>,
+    ) -> Result<StrategyCommandV5, KernelTransactionError> {
+        let generation = fence.continuation_generation;
         match self {
             Self::Place(request) => {
                 let provider_client_id = request
@@ -1431,28 +1768,18 @@ impl DeferredCommand {
                     metadata: Vec::new(),
                 }))
             }
-            Self::Cancel(request) => {
-                let order = context
-                    .broker
-                    .orders
-                    .iter()
-                    .find(|order| {
-                        order.order_id == request.order_id
-                            || order.provider_client_id == request.order_id
-                    })
-                    .ok_or(KernelTransactionError::MissingDeferredCommand)?;
+            Self::Cancel(_) => {
+                let (order_id, revision) =
+                    cancel_target.ok_or(KernelTransactionError::MissingDeferredCommand)?;
                 Ok(StrategyCommandV5::CancelOrder {
-                    command_id: format!("command.cancel.{}.{}", order.order_id, generation),
+                    command_id: format!("command.cancel.{order_id}.{generation}"),
                     fence,
-                    order_id: order.order_id.clone(),
-                    expected_order_revision: order.revision,
+                    order_id,
+                    expected_order_revision: revision,
                 })
             }
             Self::CancelAll => Ok(StrategyCommandV5::CancelAllOrders {
-                command_id: format!(
-                    "command.cancel-all.{}.{}",
-                    context.owner_state.delivery_id, generation
-                ),
+                command_id: format!("command.cancel-all.{}.{}", delivery_id, generation),
                 fence,
             }),
         }
@@ -1607,6 +1934,72 @@ pub fn append_kernel_telemetry(actions: &[KernelAction], result: &mut DecisionRe
 // Event projection
 // ---------------------------------------------------------------------------------------------
 
+fn captured_weather_event(
+    originating: &crate::current_v5::OriginatingWeatherV5,
+    event_date: &str,
+) -> Result<StrategyEvent, KernelTransactionError> {
+    use crate::current_v5::WeatherDataV5;
+    let supplied = originating.supplied.as_ref();
+    let station = originating.station_id.as_str();
+    let mut event = match &originating.data {
+        WeatherDataV5::Observation(value) => StrategyEvent::Observation(Box::new(match supplied {
+            Some(SuppliedEventV5::Observation(event)) => Observation::from_supplied(event),
+            _ => derived_observation(value, station)?,
+        })),
+        WeatherDataV5::Report(value) => StrategyEvent::StationReport(Box::new(match supplied {
+            Some(SuppliedEventV5::Report(event)) => Report::from_supplied(event),
+            _ => derived_report(value, station),
+        })),
+        WeatherDataV5::WeatherEvent(value) => {
+            StrategyEvent::WeatherEvent(Box::new(match supplied {
+                Some(SuppliedEventV5::WeatherEvent(event)) => WeatherEvent::from_supplied(event),
+                _ => derived_weather_event(value, station)?,
+            }))
+        }
+        WeatherDataV5::Extreme { high, value } => {
+            let extreme = Box::new(match supplied {
+                Some(SuppliedEventV5::Extreme(event)) => Extreme::from_supplied(event, event_date),
+                _ => derived_extreme(
+                    value,
+                    station,
+                    if *high {
+                        ExtremeKindV5::High
+                    } else {
+                        ExtremeKindV5::Low
+                    },
+                    event_date,
+                )?,
+            });
+            if *high {
+                StrategyEvent::NewHigh(extreme)
+            } else {
+                StrategyEvent::NewLow(extreme)
+            }
+        }
+    };
+    let provenance = match &mut event {
+        StrategyEvent::Observation(event) => &mut event.provenance,
+        StrategyEvent::StationReport(event) => {
+            event.meta = component_meta(&originating.meta)?;
+            &mut event.provenance
+        }
+        StrategyEvent::WeatherEvent(event) => {
+            event.meta = component_meta(&originating.meta)?;
+            &mut event.provenance
+        }
+        StrategyEvent::NewHigh(event) | StrategyEvent::NewLow(event) => &mut event.provenance,
+        _ => unreachable!(),
+    };
+    provenance.connection_epoch = Some(originating.cursor.connection_generation);
+    provenance.acceptance = Some(strategy_core_kernel::state::EventAcceptance {
+        station_generation: originating.cursor.connection_generation,
+        station_revision: originating.station_revision,
+        component: component_meta(&originating.meta)?,
+        weather: originating.facts.clone(),
+    });
+    Ok(event)
+}
+
 /// The exact typed event for one transaction. `None` for bootstrap/recovery, which invoke
 /// `on_start` instead of `on_event`.
 pub struct KernelEvent {
@@ -1615,6 +2008,21 @@ pub struct KernelEvent {
 
 impl KernelEvent {
     pub fn from_context(context: &DecisionContextV5) -> Result<Self, KernelTransactionError> {
+        if let Some(originating) = context
+            .current_inputs
+            .as_ref()
+            .and_then(|current| current.originating.as_ref())
+        {
+            originating
+                .validate(context)
+                .map_err(KernelTransactionError::Contract)?;
+            return Ok(Self {
+                event: Some(captured_weather_event(
+                    originating,
+                    &context.strategy.event_date,
+                )?),
+            });
+        }
         let trigger = match &context.trigger {
             TriggerV5::BrokerOutcome {
                 originating_trigger,
@@ -1633,6 +2041,11 @@ impl KernelEvent {
         let supplied_event = context.supplied.originating_event.as_ref();
         let event_date = context.strategy.event_date.as_str();
         let event = match trigger {
+            TriggerRef::Owner(OwnerTriggerV5::CapturedWeather { .. }) => {
+                return Err(KernelTransactionError::Contract(
+                    wire::DecisionV5Error::InvalidContract,
+                ));
+            }
             TriggerRef::BrokerState => Some(StrategyEvent::Unknown {
                 event_type: "broker_state".to_owned(),
                 emitted_at: Some(decision_at),
@@ -1758,12 +2171,46 @@ impl KernelEvent {
             TriggerRef::Owner(OwnerTriggerV5::OracleScoresUpdated {
                 emitted_at_unix_ms, ..
             }) => {
-                let snapshot_station =
-                    station_state(station, context.supplied.station(station_id))?;
+                let snapshot_station = station_state(
+                    station,
+                    context.supplied.station(station_id),
+                    context
+                        .current_weather
+                        .as_ref()
+                        .and_then(|stations| {
+                            stations
+                                .iter()
+                                .find(|weather| weather.station_id == *station_id)
+                        })
+                        .map(|weather| &weather.facts),
+                    context
+                        .forecast_issuance
+                        .as_ref()
+                        .and_then(|stations| {
+                            stations
+                                .iter()
+                                .find(|issued| issued.station_id == *station_id)
+                        })
+                        .map(|issued| issued.models.as_slice()),
+                    context.current_inputs.as_ref().and_then(|current| {
+                        current
+                            .stations
+                            .iter()
+                            .find(|input| input.station_id == *station_id)
+                    }),
+                )?;
                 let day_of = snapshot_station
                     .oracle_tables
                     .iter()
-                    .find(|table| table.mode == "day_of")
+                    .find(|table| {
+                        table.mode == "day_of"
+                            && (context.current_inputs.is_none()
+                                || table.rank_by
+                                    == match station.oracle.query.rank_by {
+                                        RankByV4::High => "high",
+                                        RankByV4::Low => "low",
+                                    })
+                    })
                     .cloned();
                 let modes = day_of
                     .as_ref()
@@ -1785,7 +2232,7 @@ impl KernelEvent {
                         updated_at: day_of
                             .as_ref()
                             .and_then(|table| table.updated_at)
-                            .or(Some(emitted_at)),
+                            .or_else(|| context.current_inputs.is_none().then_some(emitted_at)),
                         overall: None,
                         day_ahead: None,
                         day_of,

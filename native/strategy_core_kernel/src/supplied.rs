@@ -2,8 +2,8 @@
 //!
 //! These structs are the originals inside the canonical strategy-facing model: every kernel
 //! view that presents a convenience `f64` also exposes the supplied original it was projected
-//! from. Decision Context codecs serialize these active facts through private frozen wire
-//! shapes; excluded historical WU evidence is not part of these models. Numbers are exact
+//! from. Current Decision Contexts serialize these typed facts directly; historical codecs
+//! use frozen wire shapes. Excluded historical WU evidence is not part of these models. Numbers are exact
 //! decimal digits, times are nanosecond instants,
 //! `Option` is absent-or-null, and strings are present even when empty.
 //!
@@ -15,7 +15,7 @@ use bincode::{Decode, Encode};
 use crate::decimal::Decimal;
 
 /// Identity of the supplied-inputs shape carried by [`SuppliedInputs::contract_version`].
-pub const SUPPLIED_INPUTS_CONTRACT_VERSION: &str = "supplied-inputs/2";
+pub const SUPPLIED_INPUTS_CONTRACT_VERSION: &str = "supplied-inputs/3";
 
 /// Provider event envelope and producer metadata shared by every WebSocket event family.
 #[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
@@ -227,6 +227,8 @@ pub struct SuppliedForecast {
 
 #[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct SuppliedOracleScore {
+    /// Explicit provider rank; absence is distinct from the row's position.
+    pub rank: Option<u64>,
     pub model_id: String,
     pub model_name: String,
     pub is_public: Option<bool>,
@@ -240,6 +242,8 @@ pub struct SuppliedOracleScore {
 
 #[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct SuppliedOracleTable {
+    /// The table's own update instant, distinct from host receipt and notification time.
+    pub updated_at_unix_ns: Option<i64>,
     pub source: String,
     pub received_at_unix_ns: i64,
     pub station_id: String,
