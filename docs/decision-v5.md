@@ -50,8 +50,11 @@ Production D also carries one `forecast_issuance` set per delivered station. Eac
 - Numbers are `DecimalV5 { coefficient, scale }`: Trader captures the original numeric token
   before floating-point conversion, then normalizes equal values to one encoding. The signed
   64-bit coefficient and scale at most 18 are checked bounds, not unlimited precision. No
-  milli/micro rounding is performed. Historical producers that already converted to a double
-  cannot recover discarded lexical digits.
+  milli/micro rounding is performed. MinuteTemp oracle score analytics are the sole adapter
+  exception: an already binary-floating provider token that exceeds the scale profile is rounded
+  once to 18 fractional decimal places before entering `SuppliedOracleScoreV5`; in-profile tokens
+  remain exact. Historical producers that already converted to a double cannot recover discarded
+  lexical digits.
 - Supplied times are `*_unix_ns` nanosecond instants; derived times stay `*_unix_ms`.
 - `Option` means absent-or-null on the wire; provider serializers omit nil pointers so the two
   are indistinguishable. Supplied strings may be present and empty.
