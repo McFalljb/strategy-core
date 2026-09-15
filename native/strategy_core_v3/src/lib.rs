@@ -1,5 +1,18 @@
 //! Pure, bounded, runtime-neutral Strategy Core V3 semantics.
 
+pub mod current_v5;
+pub mod decision_v4;
+pub mod decision_v5;
+#[cfg(feature = "kernel")]
+pub mod kernel_v5;
+mod supplied_s;
+pub mod supplied_v5;
+pub use strategy_core_kernel::{forecast, weather};
+pub mod replay_v5;
+mod wire_d;
+mod wire_supplied;
+mod wire_v4;
+
 use std::fmt;
 
 use sha2::{Digest, Sha256};
@@ -400,7 +413,7 @@ pub fn canonical_bytes(domain: &str, value: &CanonicalValue) -> Result<Vec<u8>, 
 
 pub fn canonical_sha256(domain: &str, value: &CanonicalValue) -> Result<String, CanonicalError> {
     let digest = Sha256::digest(canonical_bytes(domain, value)?);
-    Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
+    Ok(format!("{digest:x}"))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

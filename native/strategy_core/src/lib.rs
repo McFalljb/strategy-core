@@ -44,8 +44,10 @@ pub use events::{
     WeatherEvent, WeatherEventSource, WuDayMode,
 };
 pub use fees::{
-    FeeCalculation, FeeError, FeeResult, FeeType, LiquidityRole, apply_fee_rounding,
-    calculate_fill_fee, calculate_trade_fee,
+    FeeCalculation, FeeCalculationMicros, FeeError, FeeResult, FeeType, LiquidityRole,
+    apply_fee_rounding, calculate_direct_member_fill_fee_hundredths,
+    calculate_direct_member_fill_fee_micros, calculate_fill_fee, calculate_fill_fee_hundredths,
+    calculate_trade_fee, reserve_direct_member_buy_fee_micros,
 };
 pub use http::{HttpClient, HttpMethod, HttpRequest, HttpResponse};
 pub use kalshi::{

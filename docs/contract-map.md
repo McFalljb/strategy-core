@@ -1086,6 +1086,43 @@ and unknown literal values raise `ValueError`.
 These helpers calculate portable fee math. The engine still owns fee-policy
 selection, maker/taker classification, posting, balances, settlement, and P/L.
 
+#### Exact Rust direct-member execution
+
+`strategy_core_kernel::fees::calculate_direct_member_fill_fee_micros` is the
+fixed-unit interface for the selected direct-member `$0.0001` posting grid:
+
+```rust
+use strategy_core_kernel::{OrderAction, fees::{
+    FeeType, LiquidityRole, calculate_direct_member_fill_fee_micros,
+}};
+
+let charge = calculate_direct_member_fill_fee_micros(
+    OrderAction::Buy, 600_000, 500, LiquidityRole::Taker,
+    0, FeeType::Quadratic, 1_000_000,
+)?;
+assert_eq!(charge.trade_fee_micros, 84_000);
+assert_eq!(charge.net_fee_micros, 84_000);
+assert_eq!(charge.posted_balance_change_micros, -3_084_000);
+```
+
+Inputs are price microdollars, quantity hundredths, the order's prior accumulator
+in microdollars, and explicit fee type/multiplier millionths. `FeeCalculationMicros`
+returns unsigned trade fee, rounding fee, rebate, net fee, and next accumulator;
+its signed cash change is `i128`. No amount passes through floating point.
+Non-exact microdollar principal and monetary overflow reject.
+
+Trade fees ceil to six decimals. Signed cash postings floor to `$0.0001`;
+rebates are grid-aligned and capped so a fill's net fee cannot be negative.
+Keep the accumulator across the same order's partial fills and maker/taker
+transitions. Cancellation does not create an additional terminal rebate.
+Conservative reservations are separate from these actual execution charges.
+
+This is pure arithmetic, not proof of venue authority, liquidity role, admission,
+durable posting, or live execution parity. The host owns those obligations.
+The broad Rust crate re-exports the fee authority types and exposes a corresponding
+exact-unit helper for its retained `Action` type; its existing floating helpers
+remain available and must not be used as a financial integer round trip.
+
 ### Station, city-code, and ticker helpers
 
 | Function | Result |
@@ -1352,9 +1389,11 @@ impl NativeKernel for MyKernel {
 
 Optional lifecycle hooks are `on_start`, `on_event`, and `on_finish`.
 
-### Complete kernel export inventory
+### Kernel export inventory — migration in progress
 
-The kernel crate has 45 public contract names:
+**2026-09-12:** the kernel crate owns canonical `StationState`, `MarketState`, `StrategyEvent`, `Decimal` and supplied-input types in addition to the legacy borrowed surfaces below. See `native/strategy_core_kernel/src/lib.rs` for the current exports and [Decision V5](decision-v5.md) for codec/transaction details. Mandatory borrowed canonical access is implemented for the Trader/Core slice; legacy/Backtester host migration and full application qualification remain unfinished. This section does not claim final cross-consumer qualification. Broader Python/legacy models documented elsewhere may retain WU for separate compatibility/research uses; WU is excluded from Trader's active canonical kernel input path.
+
+The legacy export groups are:
 
 | Category | Exports |
 |---|---|
@@ -1371,10 +1410,14 @@ constructs an error and `message()` returns its text.
 The native context exposes these exact trait surfaces:
 
 - `StrategyKernelContext::state() -> &dyn StrategyKernelState`:
-  `get_price(ticker)`, `get_weather(station_id)`,
-  `latest_forecast(station_id)`,
-  `latest_oracle_scores(station_id, mode, rank_by, days)`, and
-  `state_read_diagnostics()`.
+  hosts must implement `station(station_id) -> Option<&StationState>` and
+  `market(ticker) -> Option<&MarketState>`. Models remain valid for the invocation;
+  absent or out-of-scope state returns `None`. Core's non-overridable trait-object
+  conveniences `get_price(ticker)`, `get_weather(station_id)`,
+  `latest_forecast(station_id)` and
+  `latest_oracle_scores(station_id, mode, rank_by, days)` derive from those models.
+  `state_read_diagnostics()` remains a host diagnostic hook. Getters do not fetch
+  provider data.
 - `StrategyKernelContext::data() -> &dyn StrategyKernelData`: reserved narrow
   data trait; it has no methods today.
 - `StrategyKernelContext::broker() -> &mut dyn StrategyKernelBroker`:
@@ -1402,10 +1445,10 @@ The native context exposes these exact trait surfaces:
 
 | View | Fields |
 |---|---|
-| `PriceLevelView` | `price`, `quantity` |
+| `PriceLevelView` | `price`, whole-floor `quantity`, authoritative hundredths `exact`; removing planner use of the floor remains R3 work. |
 | `MarketBracketView` | The same fields as `MarketBracket`; bid/ask level collections contain `PriceLevelView`. |
 | `PriceUpdateView` | The same fields as `PriceUpdate` except the serialized `type` discriminator. |
-| `ObservationView` | The same fields as `Observation` except the serialized `type` discriminator. |
+| `ObservationView` | Normal observation fields, including independent C/F, ordinary day/report metadata, pressure/precipitation/is_locf, provenance, origin and supplied original; no serialized `type` discriminator and no WU fields. |
 | `StationReportView` | The same fields as `StationReport` except the serialized `type` discriminator. |
 | `WeatherEventSourceView` | The same fields as `WeatherEventSource`. |
 | `WeatherEventView` | The same fields as `WeatherEvent` except `type`; its payload `event_type` is named `event_type_name`. |
@@ -1416,7 +1459,7 @@ The native context exposes these exact trait surfaces:
 | `ForecastVersionsView` | The same fields as `ForecastVersions` except `type`. |
 | `OracleScoresUpdatedView` | `event_id`, `sequence`, `emitted_at`, `slug`, `station_id`, `modes`, `updated_at`, `overall`, `day_ahead`, `day_of`; mode payloads are `OracleInputSnapshot`. |
 | `TickerPriceView` | The same fields as `TickerPrices`. |
-| `StationWeatherView` | `station_id`, `current_temp`, `running_high`, `running_low`, `last_metar_time`, `temp_min_f`, `temp_max_f`, `temp_min_c`, `temp_max_c`, `preliminary`, `dsm_high`, `dsm_low`, `dsm_high_time`, `dsm_low_time`, `six_hr_high`, `six_hr_low`, `last_dsm_time`, `last_six_hr_time`, `asos_daily_high_f`, `asos_daily_low_f`, `wu_daily_high_f`, `wu_daily_low_f`, `wu_current_temp_f`, `wu_current_temp_c`, `wu_daily_high_c`, `wu_daily_low_c`, `wu_observation_time`, `wu_fetched_at`, `dewpoint`, `heat_index`, `wind_chill`, `relative_humidity`, `wind_speed`, `wind_direction`, `wind_gust`, `text_description`, `lag_seconds` |
+| `StationWeatherView` | `station_id`, `current_temp`, `running_high`, `running_low`, `last_metar_time`, `temp_min_f`, `temp_max_f`, `temp_min_c`, `temp_max_c`, `preliminary`, `dsm_high`, `dsm_low`, `dsm_high_time`, `dsm_low_time`, `six_hr_high`, `six_hr_low`, `last_dsm_time`, `last_six_hr_time`, `asos_daily_high_f`, `asos_daily_low_f`, `dewpoint`, `heat_index`, `wind_chill`, `relative_humidity`, `wind_speed`, `wind_direction`, `wind_gust`, `text_description`, `lag_seconds`; no WU fields. |
 | `ForecastHourlySnapshot` | The same fields as `ForecastHourly`. |
 | `ForecastModelSnapshot` | `model_id`, `value`, `version`, `updated_at`, `run_issued_at`, `hourly` |
 | `ForecastInputSnapshot` | `station_id`, `received_at`, `source`, `models` |
@@ -1428,6 +1471,8 @@ the event or state borrow that produced them; copy owned data before retaining
 it beyond that call.
 
 ### Kernel actions and broker values
+
+`ContractQuantity` is the kernel's authoritative quantity type and stores exact hundredths of one contract. Use `ContractQuantity::from_hundredths` for exact quantities such as `1` (0.01), `125` (1.25), and `250` (2.50). Whole-contract entry policies use the checked `ContractQuantity::checked_from_whole_contracts` conversion. There are no parallel whole/fractional fields or sentinel values. This is a compile-time interface change: downstream Strategies and Trader kernel adapters must construct `ContractQuantity`, return it from `position_quantity`, and read `.hundredths()` before adopting this Strategy Core revision.
 
 Kernel action variants are:
 
@@ -1447,7 +1492,7 @@ Kernel action variants are:
 `updated_at`.
 
 The kernel `OrderResult` fields are `order_id`, `sleeve_id`, `status`,
-`filled_quantity`, `fill_price`, `fee_cost`, and `reason`.
+`filled_quantity`, `fill_price`, `fee_cost`, and `reason`. `PlaceOrderRequest.quantity`, all pending/status quantities, `OrderResult.filled_quantity`, and `StrategyKernelBroker.position_quantity` use `ContractQuantity`; each value is authoritative hundredths.
 
 Kernel order enums are `Buy`/`Sell`, `Yes`/`No`, `Market`/`Limit`, and result
 statuses `Filled`, `Partial`, `Pending`, `Rejected`, `Cancelled`. The kernel

@@ -103,6 +103,7 @@ AGENTS.md        # Contributor commands and conventions
 
 - [docs/contract-map.md](docs/contract-map.md) — complete bot API, options, examples, native paths, and ownership rules
 - [docs/v3-contract.md](docs/v3-contract.md) — pure V3 semantic and canonical profile contract
+- [docs/decision-v5.md](docs/decision-v5.md) — stateful V5 transaction, durability, and Broker quantity codec contract
 - [docs/releases/strategy-core-v3.md](docs/releases/strategy-core-v3.md) — immutable V3 release qualification and publish procedure
 
 ## License

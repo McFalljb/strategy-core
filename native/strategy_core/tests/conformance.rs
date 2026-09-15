@@ -242,6 +242,7 @@ fn fee_result<T: Serialize>(result: Result<T, FeeError>) -> Value {
         Ok(value) => helper_ok(value),
         Err(FeeError::UnknownFeeType(_)) => helper_error("unknown_fee_type"),
         Err(FeeError::InvalidDecimal(_)) => helper_error("invalid_decimal"),
+        Err(FeeError::InvalidInput(_)) => helper_error("invalid_input"),
     }
 }
 

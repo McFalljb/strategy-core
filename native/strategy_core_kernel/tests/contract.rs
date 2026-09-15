@@ -1,28 +1,17 @@
 use chrono::{TimeZone, Utc};
 use strategy_core_kernel::{
-    CancelAllOrdersRequest, CancelOrderRequest, ContractSide, KernelAction, KernelResult,
-    MarketBracketView, NativeKernel, OrderAction, OrderResult, OrderStatus, OrderStatusView,
-    OrderType, PlaceOrderRequest, PriceLevelView, PriceUpdateView, StrategyEventView,
-    StrategyKernelBroker, StrategyKernelContext, StrategyKernelData, StrategyKernelRuntime,
-    StrategyKernelState, StrategyKernelTelemetry, TickerPriceView, TimerWakeView, WakeAtRequest,
+    CancelAllOrdersRequest, CancelOrderRequest, ContractQuantity, ContractSide, KernelAction,
+    KernelResult, MarketBracketView, NativeKernel, OrderAction, OrderResult, OrderStatus,
+    OrderStatusView, OrderType, PlaceOrderRequest, PriceLevelView, PriceUpdateView,
+    StrategyEventView, StrategyKernelBroker, StrategyKernelContext, StrategyKernelData,
+    StrategyKernelRuntime, StrategyKernelState, StrategyKernelTelemetry, TimerWakeView,
+    WakeAtRequest,
 };
 
-const YES_BID_LEVELS: [PriceLevelView; 1] = [PriceLevelView {
-    price: 0.41,
-    quantity: 12,
-}];
-const YES_ASK_LEVELS: [PriceLevelView; 1] = [PriceLevelView {
-    price: 0.42,
-    quantity: 8,
-}];
-const NO_BID_LEVELS: [PriceLevelView; 1] = [PriceLevelView {
-    price: 0.58,
-    quantity: 9,
-}];
-const NO_ASK_LEVELS: [PriceLevelView; 1] = [PriceLevelView {
-    price: 0.59,
-    quantity: 7,
-}];
+const YES_BID_LEVELS: [PriceLevelView; 1] = [PriceLevelView::whole(0.41, 12)];
+const YES_ASK_LEVELS: [PriceLevelView; 1] = [PriceLevelView::whole(0.42, 8)];
+const NO_BID_LEVELS: [PriceLevelView; 1] = [PriceLevelView::whole(0.58, 9)];
+const NO_ASK_LEVELS: [PriceLevelView; 1] = [PriceLevelView::whole(0.59, 7)];
 
 #[derive(Default)]
 struct NoopKernel {
@@ -60,13 +49,13 @@ impl NativeKernel for OrderKernel {
     ) -> KernelResult<()> {
         ctx.emit(KernelAction::PlaceOrder(PlaceOrderRequest {
             ticker: "KXHIGHMIA-26MAY30-B90".to_string(),
-            action: OrderAction::Buy,
+            action: OrderAction::Sell,
             contract_side: ContractSide::Yes,
             order_type: OrderType::Limit,
-            quantity: 2,
+            quantity: ContractQuantity::from_hundredths(125),
             limit_price: Some(0.42),
             expires_after_ms: Some(30_000),
-            reduce_only: false,
+            reduce_only: true,
             signal_type: Some("test_signal".to_string()),
             signal_metadata: Some("{\"source\":\"fixture\"}".to_string()),
             client_order_id: Some("kernel-1".to_string()),
@@ -78,38 +67,12 @@ impl NativeKernel for OrderKernel {
 struct FakeState;
 
 impl StrategyKernelState for FakeState {
-    fn get_price(&self, _ticker: &str) -> Option<TickerPriceView<'_>> {
-        Some(TickerPriceView {
-            ticker: "KXHIGHMIA-26MAY30-B90",
-            source: "fixture",
-            event_ticker: "KXHIGHMIA-26MAY30",
-            event_date: "2026-05-30",
-            series_ticker: "KXHIGHMIA",
-            close_time: Some(Utc.with_ymd_and_hms(2026, 5, 30, 19, 0, 0).unwrap()),
-            fee_type: "kalshi",
-            fee_multiplier: Some(1.0),
-            strike_type: "above",
-            floor_strike: Some(90.0),
-            cap_strike: None,
-            yes_price: 0.42,
-            no_price: 0.58,
-            yes_bid: Some(0.41),
-            yes_ask: Some(0.42),
-            no_bid: Some(0.58),
-            no_ask: Some(0.59),
-            yes_bid_depth: Some(12),
-            yes_ask_depth: Some(8),
-            no_bid_depth: Some(9),
-            no_ask_depth: Some(7),
-            yes_bid_levels: &YES_BID_LEVELS,
-            yes_ask_levels: &YES_ASK_LEVELS,
-            no_bid_levels: &NO_BID_LEVELS,
-            no_ask_levels: &NO_ASK_LEVELS,
-            orderbook_depth: Some(2),
-            volume: Some(100.0),
-            peak_yes_ask: Some(0.43),
-            last_update: Some(Utc.with_ymd_and_hms(2026, 5, 30, 12, 0, 0).unwrap()),
-        })
+    fn station(&self, _station_id: &str) -> Option<&strategy_core_kernel::StationState> {
+        None
+    }
+
+    fn market(&self, _ticker: &str) -> Option<&strategy_core_kernel::MarketState> {
+        None
     }
 }
 
@@ -124,12 +87,20 @@ struct FakeBroker {
 }
 
 impl StrategyKernelBroker for FakeBroker {
+    fn financial_state(&self) -> strategy_core_kernel::BrokerFinancialState {
+        strategy_core_kernel::BrokerFinancialState {
+            allowance_limit_micros: 100_000_000,
+            provider_available_balance_micros: 100_000_000,
+            ..Default::default()
+        }
+    }
+
     fn buying_power(&self) -> Option<f64> {
         Some(100.0)
     }
 
-    fn position_quantity(&self, _ticker: &str, _side: ContractSide) -> i64 {
-        0
+    fn position_quantity(&self, _ticker: &str, _side: ContractSide) -> ContractQuantity {
+        ContractQuantity::from_hundredths(125)
     }
 
     fn position_avg_price(&self, _ticker: &str, _side: ContractSide) -> Option<f64> {
@@ -137,12 +108,13 @@ impl StrategyKernelBroker for FakeBroker {
     }
 
     fn place_order(&mut self, request: PlaceOrderRequest) -> KernelResult<OrderResult> {
+        let filled_quantity = request.quantity;
         self.placed.push(request);
         Ok(OrderResult {
             order_id: "order-1".to_string(),
             sleeve_id: "demo:KMIA".to_string(),
             status: OrderStatus::Filled,
-            filled_quantity: 2,
+            filled_quantity,
             fill_price: 0.42,
             fee_cost: 0.01,
             reason: String::new(),
@@ -164,19 +136,19 @@ impl StrategyKernelRuntime for FakeRuntime {
 
 #[derive(Default)]
 struct FakeTelemetry {
-    counters: Vec<(String, f64, Vec<(String, String)>)>,
+    counters: Vec<strategy_core_kernel::TelemetryAction>,
 }
 
 impl StrategyKernelTelemetry for FakeTelemetry {
     fn counter(&mut self, name: &str, value: f64, fields: &[(&str, &str)]) -> KernelResult<()> {
-        self.counters.push((
-            name.to_string(),
+        self.counters.push(strategy_core_kernel::TelemetryAction {
+            name: name.to_string(),
             value,
-            fields
+            fields: fields
                 .iter()
                 .map(|(key, item)| ((*key).to_string(), (*item).to_string()))
                 .collect(),
-        ));
+        });
         Ok(())
     }
 }
@@ -243,8 +215,8 @@ fn kernel_can_emit_deterministic_place_order_action() {
         encoded,
         concat!(
             r#"{"type":"place_order","ticker":"KXHIGHMIA-26MAY30-B90","#,
-            r#""action":"buy","contract_side":"yes","order_type":"limit","#,
-            r#""quantity":2,"limit_price":0.42,"expires_after_ms":30000,"reduce_only":false,"#,
+            r#""action":"sell","contract_side":"yes","order_type":"limit","#,
+            r#""quantity":125,"limit_price":0.42,"expires_after_ms":30000,"reduce_only":true,"#,
             r#""signal_type":"test_signal","#,
             r#""signal_metadata":"{\"source\":\"fixture\"}","client_order_id":"kernel-1"}"#
         ),
@@ -275,9 +247,9 @@ fn order_status_view_preserves_borrowed_contract_fields() {
         order_id: "order-1",
         client_order_id: "kernel-1",
         status: OrderStatus::Partial,
-        requested_quantity: 3,
-        filled_quantity: 1,
-        remaining_quantity: 2,
+        requested_quantity: ContractQuantity::from_hundredths(250),
+        filled_quantity: ContractQuantity::from_hundredths(125),
+        remaining_quantity: ContractQuantity::from_hundredths(125),
         reason: "resting",
         updated_at: Some(updated_at),
     };
@@ -285,11 +257,56 @@ fn order_status_view_preserves_borrowed_contract_fields() {
     assert_eq!(status.order_id, "order-1");
     assert_eq!(status.client_order_id, "kernel-1");
     assert_eq!(status.status, OrderStatus::Partial);
-    assert_eq!(status.requested_quantity, 3);
-    assert_eq!(status.filled_quantity, 1);
-    assert_eq!(status.remaining_quantity, 2);
+    assert_eq!(status.requested_quantity.hundredths(), 250);
+    assert_eq!(status.filled_quantity.hundredths(), 125);
+    assert_eq!(status.remaining_quantity.hundredths(), 125);
     assert_eq!(status.reason, "resting");
     assert_eq!(status.updated_at, Some(updated_at));
+}
+
+#[test]
+fn fractional_quantity_flows_through_broker_position_and_order_result() {
+    let mut broker = FakeBroker::default();
+    assert_eq!(
+        broker
+            .position_quantity("KXHIGHMIA-26MAY30-B90", ContractSide::Yes)
+            .hundredths(),
+        125,
+    );
+
+    let request = PlaceOrderRequest {
+        ticker: "KXHIGHMIA-26MAY30-B90".to_string(),
+        action: OrderAction::Sell,
+        contract_side: ContractSide::Yes,
+        order_type: OrderType::Limit,
+        quantity: ContractQuantity::from_hundredths(125),
+        limit_price: Some(0.42),
+        expires_after_ms: None,
+        reduce_only: true,
+        signal_type: None,
+        signal_metadata: None,
+        client_order_id: Some("fractional-exit-1".to_string()),
+    };
+    let result = broker.place_order(request).unwrap();
+
+    assert_eq!(result.filled_quantity.hundredths(), 125);
+    assert_eq!(broker.placed.len(), 1);
+    assert_eq!(broker.placed[0].quantity.hundredths(), 125);
+    assert!(broker.placed[0].reduce_only);
+}
+
+#[test]
+fn contract_quantity_requires_an_explicit_scale_and_preserves_fractional_values() {
+    assert_eq!(ContractQuantity::from_hundredths(1).hundredths(), 1);
+    assert_eq!(ContractQuantity::from_hundredths(125).hundredths(), 125);
+    assert_eq!(ContractQuantity::from_hundredths(250).hundredths(), 250);
+    assert_eq!(
+        ContractQuantity::checked_from_whole_contracts(2)
+            .unwrap()
+            .hundredths(),
+        200,
+    );
+    assert!(ContractQuantity::checked_from_whole_contracts(i64::MAX).is_none());
 }
 
 #[test]
@@ -341,20 +358,8 @@ fn event_views_preserve_price_update_fields() {
     );
     assert_eq!(market.yes_bid, Some(0.41));
     assert_eq!(market.yes_ask, Some(0.42));
-    assert_eq!(
-        market.yes_bid_levels,
-        &[PriceLevelView {
-            price: 0.41,
-            quantity: 12
-        }]
-    );
-    assert_eq!(
-        market.no_ask_levels,
-        &[PriceLevelView {
-            price: 0.59,
-            quantity: 7
-        }]
-    );
+    assert_eq!(market.yes_bid_levels, &[PriceLevelView::whole(0.41, 12)]);
+    assert_eq!(market.no_ask_levels, &[PriceLevelView::whole(0.59, 7)]);
     assert_eq!(market.orderbook_depth, Some(2));
 }
 
@@ -394,6 +399,7 @@ fn price_update_event<'a>() -> StrategyEventView<'a> {
             no_ask_levels: &NO_ASK_LEVELS,
             orderbook_depth: Some(2),
             volume: Some(123.0),
+            ..Default::default()
         }]
         .into_boxed_slice(),
     );

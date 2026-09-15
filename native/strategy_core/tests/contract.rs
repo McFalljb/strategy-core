@@ -224,6 +224,345 @@ fn fee_rounding_accumulator_applies_rebate_once_whole_cent_is_reached() {
 }
 
 #[test]
+fn direct_member_fee_precision_preserves_signed_fractional_revenue() {
+    // Kalshi's current fee-rounding rules: ceil to six decimals, then floor signed
+    // revenue minus that fee to the direct member's $0.0001 balance grid.
+    for (action, price, quantity, trade_fee, rounding_fee, net_fee, change) in [
+        (Action::Buy, 0.055, 100, 0.003639, 0.000061, 0.0037, -0.0587),
+        (Action::Sell, 0.055, 100, 0.003639, 0.000061, 0.0037, 0.0513),
+        (
+            Action::Buy,
+            0.5555,
+            1,
+            0.000173,
+            0.000072,
+            0.000245,
+            -0.0058,
+        ),
+        (
+            Action::Sell,
+            0.5555,
+            1,
+            0.000173,
+            0.000082,
+            0.000255,
+            0.0053,
+        ),
+        (Action::Buy, 0.60, 500, 0.084, 0.0, 0.084, -3.084),
+    ] {
+        let fee = strategy_core::calculate_direct_member_fill_fee_hundredths(
+            action,
+            price,
+            quantity,
+            strategy_core::LiquidityRole::Taker,
+            0.0,
+            Some(FeeType::Quadratic),
+            None,
+        )
+        .unwrap();
+        assert_eq!(fee.trade_fee, trade_fee);
+        assert_eq!(fee.rounding_fee, rounding_fee);
+        assert_eq!(fee.net_fee, net_fee);
+        assert_eq!(fee.posted_balance_change, change);
+        assert_eq!(fee.fee_accumulator, rounding_fee);
+        let exact = strategy_core::calculate_direct_member_fill_fee_micros(
+            action,
+            (price * 1_000_000.0).round() as u64,
+            quantity as u64,
+            strategy_core::LiquidityRole::Taker,
+            0,
+            FeeType::Quadratic,
+            1_000_000,
+        )
+        .unwrap();
+        assert_eq!(
+            exact.trade_fee_micros,
+            (trade_fee * 1_000_000.0).round() as u64
+        );
+        assert_eq!(
+            exact.rounding_fee_micros,
+            (rounding_fee * 1_000_000.0).round() as u64
+        );
+        assert_eq!(exact.net_fee_micros, (net_fee * 1_000_000.0).round() as u64);
+        assert_eq!(
+            exact.posted_balance_change_micros,
+            (change * 1_000_000.0).round() as i128
+        );
+        assert_eq!(exact.fee_accumulator_micros, exact.rounding_fee_micros);
+    }
+    use strategy_core::LiquidityRole::{Maker, Taker};
+    for (fee_type, role, multiplier, expected) in [
+        (FeeType::Flat, Taker, 1_000_000, 42_000),
+        (FeeType::QuadraticWithMakerFees, Maker, 1_000_000, 21_000),
+        (FeeType::Quadratic, Taker, 1_250_000, 105_000),
+    ] {
+        let exact = strategy_core::calculate_direct_member_fill_fee_micros(
+            Action::Buy,
+            600_000,
+            500,
+            role,
+            0,
+            fee_type,
+            multiplier,
+        )
+        .unwrap();
+        assert_eq!(exact.trade_fee_micros, expected);
+        assert_eq!(exact.net_fee_micros, expected);
+    }
+    // This exact charge is above f64's consecutive-integer range and is odd.
+    // Neither the fee nor persisted accumulator may pass through a float.
+    let exact = strategy_core::calculate_direct_member_fill_fee_micros(
+        Action::Buy,
+        500_000,
+        90_071_992_547_409,
+        strategy_core::LiquidityRole::Taker,
+        0,
+        FeeType::Quadratic,
+        1_000_000,
+    )
+    .unwrap();
+    assert_eq!(exact.trade_fee_micros, 15_762_598_695_796_575);
+    assert_eq!(exact.net_fee_micros, 15_762_598_695_796_600);
+    assert_eq!(exact.posted_balance_change_micros, -466_122_561_432_841_600);
+    assert_eq!(exact.fee_accumulator_micros, 25);
+    // The unreduced numerator exceeds u128, but all monetary outputs are representable.
+    let large = strategy_core::calculate_direct_member_fill_fee_micros(
+        Action::Sell,
+        500_000,
+        3_000_000_000_000_000,
+        Taker,
+        0,
+        FeeType::Quadratic,
+        10_000_000,
+    )
+    .unwrap();
+    assert_eq!(large.trade_fee_micros, 5_250_000_000_000_000_000);
+    assert_eq!(
+        large.posted_balance_change_micros,
+        9_750_000_000_000_000_000
+    );
+    for (price, quantity, multiplier) in [
+        (1_000_001, 1, 1_000_000),
+        (1, 1, 1_000_000),
+        (500_000, u64::MAX, u64::MAX),
+        (500_000, 1_000_000_000_000_000, u64::MAX),
+    ] {
+        assert!(
+            strategy_core::calculate_direct_member_fill_fee_micros(
+                Action::Buy,
+                price,
+                quantity,
+                strategy_core::LiquidityRole::Taker,
+                0,
+                FeeType::Quadratic,
+                multiplier,
+            )
+            .is_err(),
+            "invalid price, sub-micro principal and overflow must reject"
+        );
+    }
+}
+
+#[test]
+fn direct_member_reservation_covers_fragmented_and_mixed_role_fills() {
+    use strategy_core::{
+        LiquidityRole::{Maker, Taker},
+        calculate_direct_member_fill_fee_micros as fill,
+        reserve_direct_member_buy_fee_micros as reserve,
+    };
+    for (cap, quantity, expected) in [
+        (10_100, 100, 10_000),
+        (600_000, 1_729, 292_300),
+        (600_000, 500, 84_600),
+        (990_000, 100, 800),
+    ] {
+        assert_eq!(
+            reserve(cap, quantity, FeeType::Quadratic, 1_000_000).unwrap(),
+            expected
+        );
+    }
+    let mut carried = 0;
+    let mut paid = 0;
+    for _ in 0..100 {
+        let charge = fill(
+            Action::Buy,
+            10_100,
+            1,
+            Taker,
+            carried,
+            FeeType::Quadratic,
+            1_000_000,
+        )
+        .unwrap();
+        carried = charge.fee_accumulator_micros;
+        paid += charge.net_fee_micros;
+    }
+    assert_eq!(paid, 9_900);
+    assert!(paid <= reserve(10_100, 100, FeeType::Quadratic, 1_000_000).unwrap());
+    let aggregate = fill(
+        Action::Buy,
+        10_100,
+        100,
+        Taker,
+        0,
+        FeeType::Quadratic,
+        1_000_000,
+    )
+    .unwrap();
+    assert!(
+        paid > aggregate.net_fee_micros,
+        "an aggregate charge is not a safe fill-split reserve"
+    );
+
+    for curve in [
+        FeeType::Quadratic,
+        FeeType::QuadraticWithMakerFees,
+        FeeType::Flat,
+    ] {
+        for multiplier in [0, 1_000_000, 1_250_000, 10_000_000, 100_000_000] {
+            for cap in [
+                10_100, 10_150, 400_000, 555_500, 600_000, 990_000, 1_000_000,
+            ] {
+                let prices: Vec<_> = (100..=cap)
+                    .step_by(100)
+                    .chain([cap, cap - 1, cap / 2 + 37])
+                    .map(|price| {
+                        let quantum = (1..=100).find(|count| price * count % 100 == 0).unwrap();
+                        (price, quantum)
+                    })
+                    .collect();
+                let mut budgets = std::collections::BTreeMap::new();
+                // Each price gets its own order; cheaper earlier fills must not
+                // conceal an insufficient reserve at a later, expensive price.
+                for (price, quantum) in prices {
+                    let total_quantity = 12 * quantum;
+                    let budget = *budgets.entry(quantum).or_insert_with(|| {
+                        cap * total_quantity / 100
+                            + reserve(cap, total_quantity, curve, multiplier).unwrap()
+                    });
+                    for roles in [[Maker; 4], [Taker; 4], [Maker, Taker, Taker, Maker]] {
+                        let mut carried = 0;
+                        let mut spent = 0;
+                        let mut quantity = 0;
+                        for (role, count) in roles.into_iter().zip([1, 1, 7, 3]) {
+                            let count = count * quantum;
+                            let charge =
+                                fill(Action::Buy, price, count, role, carried, curve, multiplier)
+                                    .unwrap();
+                            carried = charge.fee_accumulator_micros;
+                            spent += u64::try_from(-charge.posted_balance_change_micros).unwrap();
+                            quantity += count;
+                            assert!(
+                                spent + cap * (total_quantity - quantity) / 100 <= budget,
+                                "curve={curve:?}, multiplier={multiplier}, cap={cap}, price={price}, quantity={quantity}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(
+        reserve(500_000, 0, FeeType::Quadratic, 1_000_000).unwrap(),
+        0
+    );
+    assert!(reserve(1_000_001, 1, FeeType::Quadratic, 1_000_000).is_err());
+    assert!(reserve(500_000, u64::MAX, FeeType::Quadratic, 1_000_000).is_err());
+    assert!(reserve(500_000, 10_000, FeeType::Quadratic, u64::MAX).is_err());
+}
+
+#[test]
+fn direct_member_rebates_remain_aligned_and_cannot_make_a_fill_fee_negative() {
+    use strategy_core::LiquidityRole::{Maker, Taker};
+    let mut accumulator = 0.0;
+    let mut exact_accumulator = 0;
+    for (role, price, trade, rounding, rebate, net, change, carried) in [
+        (
+            Taker, 0.0055, 0.000004, 0.000041, 0.0, 0.000045, -0.0001, 0.000041,
+        ),
+        (
+            Maker, 0.0055, 0.0, 0.000045, 0.0, 0.000045, -0.0001, 0.000086,
+        ),
+        // A $0.0001 refund here would make this fill's fee negative. Retain it instead.
+        (
+            Maker, 0.0055, 0.0, 0.000045, 0.0, 0.000045, -0.0001, 0.000131,
+        ),
+        (
+            Taker, 0.50, 0.000175, 0.000025, 0.0001, 0.0001, -0.0051, 0.000056,
+        ),
+    ] {
+        let fee = strategy_core::calculate_direct_member_fill_fee_hundredths(
+            Action::Buy,
+            price,
+            1,
+            role,
+            accumulator,
+            Some(FeeType::Quadratic),
+            None,
+        )
+        .unwrap();
+        assert_eq!(fee.trade_fee, trade);
+        assert_eq!(fee.rounding_fee, rounding);
+        assert_eq!(fee.rebate, rebate);
+        assert_eq!(fee.net_fee, net);
+        assert_eq!(fee.posted_balance_change, change);
+        assert_eq!(fee.fee_accumulator, carried);
+        accumulator = fee.fee_accumulator;
+        let exact = strategy_core::calculate_direct_member_fill_fee_micros(
+            Action::Buy,
+            (price * 1_000_000.0).round() as u64,
+            1,
+            role,
+            exact_accumulator,
+            FeeType::Quadratic,
+            1_000_000,
+        )
+        .unwrap();
+        assert_eq!(exact.trade_fee_micros, (trade * 1_000_000.0).round() as u64);
+        assert_eq!(
+            exact.rounding_fee_micros,
+            (rounding * 1_000_000.0).round() as u64
+        );
+        assert_eq!(exact.rebate_micros, (rebate * 1_000_000.0).round() as u64);
+        assert_eq!(exact.net_fee_micros, (net * 1_000_000.0).round() as u64);
+        assert_eq!(
+            exact.posted_balance_change_micros,
+            (change * 1_000_000.0).round() as i128
+        );
+        assert_eq!(
+            exact.fee_accumulator_micros,
+            (carried * 1_000_000.0).round() as u64
+        );
+        exact_accumulator = exact.fee_accumulator_micros;
+    }
+    let carried = strategy_core::calculate_direct_member_fill_fee_micros(
+        Action::Buy,
+        5_500,
+        1,
+        Maker,
+        9_007_199_254_740_902,
+        FeeType::Quadratic,
+        1_000_000,
+    )
+    .unwrap();
+    assert_eq!(carried.rebate_micros, 0);
+    assert_eq!(carried.fee_accumulator_micros, 9_007_199_254_740_947);
+    assert!(
+        strategy_core::calculate_direct_member_fill_fee_micros(
+            Action::Buy,
+            5_500,
+            1,
+            Maker,
+            u64::MAX - 44,
+            FeeType::Quadratic,
+            1_000_000,
+        )
+        .is_err(),
+        "accumulator overflow must reject before committing a charge"
+    );
+}
+
+#[test]
 fn signed_fee_inputs_round_toward_positive_infinity() {
     assert_eq!(
         calculate_trade_fee(0.25, -1, strategy_core::LiquidityRole::Taker, None, None,).unwrap(),
