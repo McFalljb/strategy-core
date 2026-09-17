@@ -47,6 +47,7 @@ impl FrozenDDecisionContextV5 {
     pub(crate) fn into_current(mut self) -> DecisionContextV5 {
         self.retained_supplied_encoding.canonical_d = true;
         DecisionContextV5 {
+            market_strikes: None,
             owner_state: self.owner_state,
             strategy: self.strategy,
             broker: self.broker,

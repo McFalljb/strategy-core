@@ -1,5 +1,5 @@
 {
-  "schema": "strategy-core-decision-v5-corpus/7",
+  "schema": "strategy-core-decision-v5-corpus/8",
   "valid": [
     {
       "byte_count": 1134,
@@ -96,6 +96,18 @@
       "id": "current-bounded-broker-replay-e",
       "kind": "decision_context_v5_replay_e",
       "sha256": "a398dd1f7fe8ef81aeb05ee6b9f96c3ba123f0c243dc956091a85e4e0216d3e3"
+    },
+    {
+      "byte_count": 4774,
+      "id": "current-native-fahrenheit-market-caps-f",
+      "kind": "decision_context_v5_native_strikes_f",
+      "sha256": "f0d3affe58659654da7033ccf7cc6e15f0091e9ba2f103ecd308defbddaf8ffc"
+    },
+    {
+      "byte_count": 5819,
+      "id": "current-native-caps-broker-replay-f",
+      "kind": "decision_context_v5_native_strikes_f",
+      "sha256": "d8798a832bc2194e293684456d8132fc67f984c925fb96ca8104796941c23e67"
     }
   ],
   "invalid": [

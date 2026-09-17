@@ -424,7 +424,7 @@ impl KernelSnapshot {
             .owner_state
             .markets
             .iter()
-            .map(|market| market_state(market, &context.strategy.event_date))
+            .map(|market| market_state(market, &context.strategy.event_date, context))
             .collect::<Result<Vec<_>, _>>()?;
         let broker = &context.owner_state.broker;
         let finances = strategy_core_kernel::BrokerFinancialState {
@@ -1195,7 +1195,17 @@ fn derived_oracle(
 fn market_state(
     market: &MarketV4,
     event_date: &str,
+    context: &DecisionContextV5,
 ) -> Result<MarketState, KernelTransactionError> {
+    let cap_strike_milli_f = context
+        .market_strikes
+        .as_ref()
+        .and_then(|strikes| {
+            strikes
+                .iter()
+                .find(|strike| strike.market_id == market.identity.market_id)
+        })
+        .and_then(|strike| strike.cap_strike_milli_f);
     let ticker = market.ticker.as_ref();
     let quantity = |value: Option<u64>| value.map(hundredths_quantity);
     let mut state = MarketState {
@@ -1223,10 +1233,15 @@ fn market_state(
                     .floor_strike_milli_c
                     .map(|value| value as f64 / 1_000.0 * 9.0 / 5.0 + 32.0)
             }),
-        cap_strike: market
-            .identity
-            .cap_strike_milli_c
-            .map(|value| value as f64 / 1_000.0 * 9.0 / 5.0 + 32.0),
+        cap_strike: cap_strike_milli_f
+            .map(|value| value as f64 / 1_000.0)
+            .or_else(|| {
+                market
+                    .identity
+                    .cap_strike_milli_c
+                    .map(|value| value as f64 / 1_000.0 * 9.0 / 5.0 + 32.0)
+            }),
+        cap_strike_milli_f,
         floor_strike_milli_c: market.identity.floor_strike_milli_c,
         floor_strike_milli_f: market.identity.floor_strike_milli_f,
         cap_strike_milli_c: market.identity.cap_strike_milli_c,
@@ -2146,7 +2161,7 @@ impl KernelEvent {
                         .owner_state
                         .markets
                         .iter()
-                        .map(|market| market_state(market, event_date))
+                        .map(|market| market_state(market, event_date, context))
                         .collect::<Result<_, _>>()?,
                 })))
             }

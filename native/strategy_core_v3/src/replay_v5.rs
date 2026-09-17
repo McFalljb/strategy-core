@@ -20,6 +20,8 @@ pub enum ReplayOriginEncodingV5 {
     SuppliedS,
     Hundredths,
     Whole,
+    /// Appended to preserve every historical variant index.
+    NativeStrikesF,
 }
 
 /// One coherent host Broker publication, not a financial state inferred from fill averages.
@@ -174,6 +176,7 @@ pub fn broker_outcome_context_v5(
     let mut replay = originating.clone();
     replay.retained_supplied_encoding.canonical_c = false;
     replay.retained_supplied_encoding.canonical_d = false;
+    replay.retained_supplied_encoding.canonical_e = false;
     replay.kernel_checkpoint = Some(commitment.pre_event_checkpoint.clone());
     replay.continuation = Some(commitment.clone());
     replay.trigger = TriggerV5::BrokerOutcome {

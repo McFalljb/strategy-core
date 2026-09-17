@@ -10,6 +10,7 @@ pub mod supplied_v5;
 pub use strategy_core_kernel::{forecast, weather};
 pub mod replay_v5;
 mod wire_d;
+mod wire_e;
 mod wire_supplied;
 mod wire_v4;
 

@@ -151,9 +151,19 @@ fn invalid_replay_cases() -> Vec<(&'static str, DecisionContextV5, DecisionV5Err
 #[test]
 fn v5_replay_encoding_preserves_d_origins_and_enforces_order_finances_and_bounds() {
     use crate::replay_v5::ReplayOriginEncodingV5;
-    for historical_d in [false, true] {
+    for (historical_d, historical_e, encoding) in [
+        (false, false, ReplayOriginEncodingV5::NativeStrikesF),
+        (false, true, ReplayOriginEncodingV5::CurrentE),
+        (true, false, ReplayOriginEncodingV5::HostSelectedD),
+    ] {
         let mut origin = current_packet_corpus_context();
         origin.retained_supplied_encoding.canonical_d = historical_d;
+        origin.retained_supplied_encoding.canonical_e = historical_e;
+        if !historical_d && !historical_e {
+            origin.market_strikes = Some(origin.owner_state.markets.iter().map(|market| MarketStrikesV5 {
+                market_id: market.identity.market_id.clone(), cap_strike_milli_f: Some(84_000),
+            }).collect());
+        }
         let origin_bytes = encode_decision_context_v5(&origin).unwrap();
         let restored = decode_decision_context_v5(&origin_bytes).unwrap();
         let replay = replay_corpus_context(restored.clone(), 2).unwrap();
@@ -162,15 +172,22 @@ fn v5_replay_encoding_preserves_d_origins_and_enforces_order_finances_and_bounds
         assert_eq!(replay.kernel_checkpoint, restored.kernel_checkpoint);
         assert_eq!(
             replay.broker_replay.as_ref().unwrap().origin_encoding,
-            if historical_d {
-                ReplayOriginEncodingV5::HostSelectedD
-            } else {
-                ReplayOriginEncodingV5::CurrentE
-            }
+            encoding
         );
         let encoded = encode_decision_context_v5(&replay).unwrap();
         assert!(encoded.starts_with(DECISION_CONTEXT_V5_MAGIC));
         assert_eq!(decode_decision_context_v5(&encoded).unwrap(), replay);
+        if encoding == ReplayOriginEncodingV5::NativeStrikesF {
+            let mut tampered = replay.clone();
+            tampered.market_strikes.as_mut().unwrap()[0].cap_strike_milli_f = Some(85_000);
+            assert_eq!(tampered.validate(), Err(DecisionV5Error::InvalidContract));
+            for historical in [ReplayOriginEncodingV5::CurrentE, ReplayOriginEncodingV5::HostSelectedD] {
+                assert_eq!(replay_origin_digest(&origin, historical), Err(DecisionV5Error::InvalidContract));
+            }
+            let mut downgrade = origin.clone();
+            downgrade.retained_supplied_encoding.canonical_e = true;
+            assert_eq!(encode_decision_context_v5(&downgrade), Err(DecisionV5Error::InvalidContract));
+        }
     }
     for (id, invalid, error) in invalid_replay_cases() {
         assert_eq!(encode_decision_context_v5(&invalid), Err(error), "{id}");

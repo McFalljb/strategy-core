@@ -1116,6 +1116,7 @@ pub struct MarketState {
     pub floor_strike_milli_c: Option<i64>,
     pub floor_strike_milli_f: Option<i64>,
     pub cap_strike_milli_c: Option<i64>,
+    pub cap_strike_milli_f: Option<i64>,
     pub close_time: Option<DateTime<Utc>>,
     pub expiration_time: Option<DateTime<Utc>>,
     pub components: MarketComponents,

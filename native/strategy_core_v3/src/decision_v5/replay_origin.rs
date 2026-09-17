@@ -9,10 +9,19 @@ pub(crate) fn replay_origin_digest(
     original.broker_replay = None;
     original.retained_supplied_encoding.canonical_c = false;
     original.retained_supplied_encoding.canonical_d = false;
+    original.retained_supplied_encoding.canonical_e = false;
+    if original.market_strikes.is_some() && encoding != ReplayOriginEncodingV5::NativeStrikesF {
+        return Err(DecisionV5Error::InvalidContract);
+    }
     let bytes = match encoding {
-        ReplayOriginEncodingV5::CurrentE => encode_bounded(
+        ReplayOriginEncodingV5::NativeStrikesF => encode_bounded(
             DECISION_CONTEXT_V5_MAGIC,
             &original,
+            MAX_DECISION_CONTEXT_V5_BYTES,
+        )?,
+        ReplayOriginEncodingV5::CurrentE => encode_bounded(
+            REPLAY_E_DECISION_CONTEXT_V5_MAGIC,
+            &crate::wire_e::FrozenEDecisionContextV5::from_current(&original),
             MAX_DECISION_CONTEXT_V5_BYTES,
         )?,
         ReplayOriginEncodingV5::HostSelectedD => encode_bounded(
@@ -46,6 +55,7 @@ pub(crate) fn replay_origin_encoding(
     expected: [u8; 32],
 ) -> Result<ReplayOriginEncodingV5, DecisionV5Error> {
     for encoding in [
+        ReplayOriginEncodingV5::NativeStrikesF,
         ReplayOriginEncodingV5::CurrentE,
         ReplayOriginEncodingV5::HostSelectedD,
         ReplayOriginEncodingV5::SuppliedC,

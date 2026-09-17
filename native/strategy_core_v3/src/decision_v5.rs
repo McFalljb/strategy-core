@@ -17,8 +17,10 @@ mod replay_origin;
 pub use crate::wire_supplied::RetainedSuppliedEncodingV5;
 pub(crate) use replay_origin::{replay_origin_digest, replay_origin_encoding};
 
-/// Current V5 context encoding, including bounded host-owned Broker replay state.
-pub const DECISION_CONTEXT_V5_MAGIC: &[u8; 8] = b"SDCTXV5E";
+/// Current V5 context encoding, including exact native Fahrenheit Market caps.
+pub const DECISION_CONTEXT_V5_MAGIC: &[u8; 8] = b"SDCTXV5F";
+/// Frozen context with bounded host-owned Broker replay and no native Market caps.
+pub const REPLAY_E_DECISION_CONTEXT_V5_MAGIC: &[u8; 8] = b"SDCTXV5E";
 /// Frozen host-selected weather, forecast, oracle and captured-origin encoding.
 pub const HOST_D_DECISION_CONTEXT_V5_MAGIC: &[u8; 8] = b"SDCTXV5D";
 /// Frozen canonical supplied-inputs/2 encoding, without per-field host winners.
@@ -48,6 +50,9 @@ pub const MAX_RESULT_DIAGNOSTIC_BYTES: usize = 4 * 1024;
 pub const MAX_KERNEL_CHECKPOINT_BYTES: usize = 128 * 1024;
 pub const MAX_IDENTIFIER_BYTES: usize = 160;
 pub const MAX_SHORT_TEXT_BYTES: usize = 512;
+/// State plus three identifiers, the profile digest, and bounded binary codec overhead.
+pub const MAX_ENCODED_KERNEL_CHECKPOINT_BYTES: usize =
+    MAX_KERNEL_CHECKPOINT_BYTES + 3 * MAX_IDENTIFIER_BYTES + MAX_SHORT_TEXT_BYTES + 64;
 pub const MAX_REASON_BYTES: usize = 4 * 1024;
 pub const MAX_PRICE_MICROS: u64 = 1_000_000;
 const SLEEVE_ID_DOMAIN: &[u8] = b"trader-v3/sleeve-id/v1\0";
@@ -268,6 +273,13 @@ pub struct KernelCheckpointV5 {
     pub sequence: u64,
     pub state: Vec<u8>,
     pub state_sha256: [u8; 32],
+}
+
+impl KernelCheckpointV5 {
+    /// Checks shape, byte bounds and integrity; callers still enforce scope/sequence authority.
+    pub fn validate(&self) -> Result<(), DecisionV5Error> {
+        validate_kernel_checkpoint_shape(self)
+    }
 }
 
 #[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
@@ -590,6 +602,14 @@ pub struct StationForecastIssuanceV5 {
     pub models: Vec<strategy_core_kernel::forecast::ForecastIssuance>,
 }
 
+/// Exact native cap for one scoped Market. The existing V4 identity already carries
+/// its native Fahrenheit floor; its Celsius slots remain historical/derived evidence.
+#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+pub struct MarketStrikesV5 {
+    pub market_id: String,
+    pub cap_strike_milli_f: Option<i64>,
+}
+
 #[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
 pub struct DecisionContextV5 {
     pub owner_state: DecisionContextV4,
@@ -616,6 +636,8 @@ pub struct DecisionContextV5 {
     /// Host-owned completed calls and the current returned Broker state. Absent in historical
     /// deliveries and before the first Broker return; never part of private Strategy state.
     pub broker_replay: Option<crate::replay_v5::BrokerReplayV5>,
+    /// Complete scoped Market order when present; absent in historical contexts.
+    pub market_strikes: Option<Vec<MarketStrikesV5>>,
 }
 
 /// Frozen C wire container; ordinary facts always come from the active context.
@@ -632,8 +654,20 @@ struct FrozenCDecisionContextV5 {
 }
 
 impl DecisionContextV5 {
+    /// Attach newly supplied native caps to a new invocation. Retained historical
+    /// evidence stays intact, but its old encoding cannot attest the added facts.
+    /// An existing continuation still has to validate against its original digest.
+    pub fn with_market_strikes(mut self, strikes: Vec<MarketStrikesV5>) -> Self {
+        self.market_strikes = Some(strikes);
+        self.retained_supplied_encoding.canonical_c = false;
+        self.retained_supplied_encoding.canonical_d = false;
+        self.retained_supplied_encoding.canonical_e = false;
+        self
+    }
+
     fn has_current_only_fields(&self) -> bool {
         self.broker_replay.is_some()
+            || self.market_strikes.is_some()
             || self.current_weather.is_some()
             || self.forecast_issuance.is_some()
             || self.current_inputs.is_some()
@@ -663,6 +697,7 @@ fn convert_frozen_c_context(
     let (supplied, mut retained_supplied_encoding) = context.supplied.into_current()?;
     retained_supplied_encoding.canonical_c = true;
     Ok(DecisionContextV5 {
+        market_strikes: None,
         broker_replay: None,
         owner_state: context.owner_state,
         strategy: context.strategy,
@@ -870,10 +905,20 @@ impl DecisionContextV5 {
         }
         crate::current_v5::validate(self)?;
         validate_trigger(self)?;
-        if (self.retained_supplied_encoding.canonical_c && self.has_current_only_fields())
-            || (self.retained_supplied_encoding.canonical_d && self.broker_replay.is_some())
-            || (self.retained_supplied_encoding.canonical_c
-                && self.retained_supplied_encoding.canonical_d)
+        let encoding = &self.retained_supplied_encoding;
+        if (encoding.canonical_c && self.has_current_only_fields())
+            || (encoding.canonical_d
+                && (self.broker_replay.is_some() || self.market_strikes.is_some()))
+            || (encoding.canonical_e && self.market_strikes.is_some())
+            || [
+                encoding.canonical_c,
+                encoding.canonical_d,
+                encoding.canonical_e,
+            ]
+            .into_iter()
+            .filter(|selected| *selected)
+            .count()
+                > 1
         {
             return Err(DecisionV5Error::InvalidContract);
         }
@@ -882,6 +927,7 @@ impl DecisionContextV5 {
         validate_supplied(self)?;
         validate_current_weather(self)?;
         validate_forecast_issuance(self)?;
+        validate_market_strikes(self)?;
         Ok(())
     }
 
@@ -908,6 +954,28 @@ impl DecisionContextV5 {
             },
         }
     }
+}
+
+fn validate_market_strikes(context: &DecisionContextV5) -> Result<(), DecisionV5Error> {
+    let Some(strikes) = &context.market_strikes else {
+        return Ok(());
+    };
+    if strikes.len() != context.owner_state.markets.len() {
+        return Err(DecisionV5Error::InvalidContract);
+    }
+    for (strike, market) in strikes.iter().zip(&context.owner_state.markets) {
+        let identity = &market.identity;
+        if strike.market_id != identity.market_id
+            || (strike.cap_strike_milli_f.is_some() && identity.cap_strike_milli_c.is_some())
+            || identity
+                .floor_strike_milli_f
+                .zip(strike.cap_strike_milli_f)
+                .is_some_and(|(floor, cap)| floor > cap)
+        {
+            return Err(DecisionV5Error::InvalidContract);
+        }
+    }
+    Ok(())
 }
 
 impl DecisionResultV5 {
@@ -1151,6 +1219,13 @@ fn hash_checkpoint_component(hasher: &mut Sha256, value: &[u8]) {
 
 pub fn encode_decision_context_v5(context: &DecisionContextV5) -> Result<Vec<u8>, DecisionV5Error> {
     context.validate()?;
+    if context.retained_supplied_encoding.canonical_e {
+        return encode_bounded(
+            REPLAY_E_DECISION_CONTEXT_V5_MAGIC,
+            &crate::wire_e::FrozenEDecisionContextV5::from_current(context),
+            MAX_DECISION_CONTEXT_V5_BYTES,
+        );
+    }
     if context.retained_supplied_encoding.canonical_d {
         return encode_bounded(
             HOST_D_DECISION_CONTEXT_V5_MAGIC,
@@ -1179,6 +1254,13 @@ pub fn decode_decision_context_v5(bytes: &[u8]) -> Result<DecisionContextV5, Dec
             bytes,
             MAX_DECISION_CONTEXT_V5_BYTES,
         )?
+    } else if bytes.starts_with(REPLAY_E_DECISION_CONTEXT_V5_MAGIC) {
+        let frozen: crate::wire_e::FrozenEDecisionContextV5 = decode_bounded(
+            REPLAY_E_DECISION_CONTEXT_V5_MAGIC,
+            bytes,
+            MAX_DECISION_CONTEXT_V5_BYTES,
+        )?;
+        frozen.into_current()
     } else if bytes.starts_with(HOST_D_DECISION_CONTEXT_V5_MAGIC) {
         let frozen: crate::wire_d::FrozenDDecisionContextV5 = decode_bounded(
             HOST_D_DECISION_CONTEXT_V5_MAGIC,
@@ -1225,6 +1307,7 @@ fn convert_supplied_s_context(
 ) -> Result<DecisionContextV5, DecisionV5Error> {
     let retained_supplied_encoding = RetainedSuppliedEncodingV5::from_s(&context.supplied)?;
     Ok(DecisionContextV5 {
+        market_strikes: None,
         broker_replay: None,
         owner_state: context.owner_state,
         strategy: context.strategy,
@@ -1277,6 +1360,7 @@ fn supplied_s_decision_context_v5_sha256(
 
 fn convert_hundredths_context(context: HundredthsDecisionContextV5) -> DecisionContextV5 {
     DecisionContextV5 {
+        market_strikes: None,
         broker_replay: None,
         owner_state: context.owner_state,
         strategy: context.strategy,
@@ -1374,6 +1458,7 @@ fn convert_legacy_context(
         })
         .collect::<Result<Vec<_>, DecisionV5Error>>()?;
     Ok(DecisionContextV5 {
+        market_strikes: None,
         owner_state: legacy.owner_state,
         strategy: legacy.strategy,
         broker: BrokerDetailV5 {
@@ -3135,6 +3220,11 @@ pub fn decision_fence_v5_sha256(context: &DecisionContextV5) -> Result<[u8; 32],
         None => hasher.update([0]),
     }
     hasher.update(context.decision_time_unix_ms.to_be_bytes());
+    if let Some(strikes) = &context.market_strikes {
+        hasher.update(b"strategy-core/decision-v5/native-market-strikes/v1\0");
+        hasher
+            .update(bincode::encode_to_vec(strikes, config).map_err(|_| DecisionV5Error::Encode)?);
+    }
     Ok(hasher.finalize().into())
 }
 
@@ -3233,6 +3323,7 @@ mod tests {
             ..Default::default()
         };
         DecisionContextV5 {
+            market_strikes: None,
             owner_state,
             trigger: TriggerV5::Owner(OwnerTriggerV5::Recovery),
             kernel_checkpoint: Some(checkpoint(1, b"durable-kernel-state")),
@@ -4788,7 +4879,7 @@ mod tests {
             .join("../../conformance/v5/decision-transactions.json");
         let corpus: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-        assert_eq!(corpus["schema"], "strategy-core-decision-v5-corpus/7");
+        assert_eq!(corpus["schema"], "strategy-core-decision-v5-corpus/8");
 
         let vectors = corpus["valid"].as_array().unwrap();
         let measured = corpus_measurements();
@@ -4880,13 +4971,15 @@ mod tests {
             assert_measurement(vector, bytes);
             if matches!(
                 *kind,
-                "decision_context_v5_current" | "decision_context_v5_replay_e"
+                "decision_context_v5_current"
+                    | "decision_context_v5_replay_e"
+                    | "decision_context_v5_native_strikes_f"
             ) {
                 let restored = decode_decision_context_v5(bytes).unwrap();
                 assert_eq!(
                     encode_decision_context_v5(&restored).unwrap(),
                     *bytes,
-                    "D and E payloads must preserve their bytes and originating commitments"
+                    "D, E and F payloads must preserve their bytes and originating commitments"
                 );
             }
         }
@@ -5181,16 +5274,41 @@ mod tests {
             "decision_context_v5_current",
             encode_decision_context_v5(&replay).unwrap(),
         ));
-        let current_e = current_packet_corpus_context();
+        let mut current_e = current_packet_corpus_context();
+        current_e.retained_supplied_encoding.canonical_e = true;
         measured.push((
             "current-complete-station-and-origin-e",
             "decision_context_v5_replay_e",
             encode_decision_context_v5(&current_e).unwrap(),
         ));
+        let mut replay_e = replay_corpus_context(current_e, 2).unwrap();
+        replay_e.retained_supplied_encoding.canonical_e = true;
         measured.push((
             "current-bounded-broker-replay-e",
             "decision_context_v5_replay_e",
-            encode_decision_context_v5(&replay_corpus_context(current_e, 2).unwrap()).unwrap(),
+            encode_decision_context_v5(&replay_e).unwrap(),
+        ));
+        let mut current_f = current_packet_corpus_context();
+        current_f.market_strikes = Some(
+            current_f
+                .owner_state
+                .markets
+                .iter()
+                .map(|market| MarketStrikesV5 {
+                    market_id: market.identity.market_id.clone(),
+                    cap_strike_milli_f: Some(84_000),
+                })
+                .collect(),
+        );
+        measured.push((
+            "current-native-fahrenheit-market-caps-f",
+            "decision_context_v5_native_strikes_f",
+            encode_decision_context_v5(&current_f).unwrap(),
+        ));
+        measured.push((
+            "current-native-caps-broker-replay-f",
+            "decision_context_v5_native_strikes_f",
+            encode_decision_context_v5(&replay_corpus_context(current_f, 2).unwrap()).unwrap(),
         ));
         measured
     }

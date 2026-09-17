@@ -106,6 +106,7 @@ impl ExcludedObservationFields {
 pub struct RetainedSuppliedEncodingV5 {
     pub(crate) canonical_c: bool,
     pub(crate) canonical_d: bool,
+    pub(crate) canonical_e: bool,
     stations: Vec<(String, ExcludedObservationFields, ExcludedObservationFields)>,
     originating: ExcludedObservationFields,
 }
@@ -128,6 +129,7 @@ impl<Context> Decode<Context> for RetainedSuppliedEncodingV5 {
         Ok(Self {
             canonical_c: false,
             canonical_d: false,
+            canonical_e: false,
             stations: Decode::decode(decoder)?,
             originating: Decode::decode(decoder)?,
         })

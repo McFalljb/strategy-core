@@ -23,7 +23,7 @@ The host must call `validate_decision_result_v5(context, result)` rather than va
 
 A Broker outcome is deliverable only when its commitment is still present and unconsumed in the host ledger for the exact Sleeve identity, incarnation, originating process attempt, route epoch, continuation identity/generation, command identity/digest, expected Broker revision, and canonical originating-context digest. A later runtime process may recover and route the ledger row, but the replay context itself retains the originating process attempt. Delivery consumes the commitment once.
 
-Trader persists the canonical input/result bytes and continuation commitment before command admission. `broker_outcome_context_v5` preserves the original owner, Strategy, Broker, pre-event checkpoint and decision clock, then attaches the typed outcome and `BrokerReplayV5`. Each completed call carries its request digest, pre-call revision, exact return and coherent returned Broker detail/financial state. The current return remains in the trigger; only predecessors are repeated. The retained origin encoding explicitly binds E, D, C, S, H or whole bytes. Source inputs and the original Broker snapshot never change; only the kernel's Broker capability advances after consuming each verified return.
+Trader persists the canonical input/result bytes and continuation commitment before command admission. `broker_outcome_context_v5` preserves the original owner, Strategy, Broker, pre-event checkpoint and decision clock, then attaches the typed outcome and `BrokerReplayV5`. Each completed call carries its request digest, pre-call revision, exact return and coherent returned Broker detail/financial state. The current return remains in the trigger; only predecessors are repeated. The retained origin encoding explicitly binds F, E, D, C, S, H or whole bytes. Source inputs and the original Broker snapshot never change; only the kernel's Broker capability advances after consuming each verified return.
 
 Replay admits at most 64 synchronous calls (63 predecessors), within the 20-MiB context bound and outside the 128-KiB private checkpoint budget. Market-buy cap verification recreates the corresponding suspension point from the pre-event kernel and exact earlier returns: a later private planning state cannot supply an earlier cap. This adds at most one bounded prefix pass per replayed Market buy; Limit and cancellation calls need none. Missing earlier returned states fail closed; balances are never reconstructed from fill averages. The first suspended call wins, and speculative actions after suspension are discarded. Every replayed request must match its command identity/digest and fence before a result is exposed. New commands use the last returned Broker revision via `admission_broker()`, not the original revision.
 
@@ -31,13 +31,29 @@ Trader verifies every extension against its exact retained invocation and earlie
 
 ### Broker quantity codec compatibility
 
-New candidate contexts are identified by `SDCTXV5E` and current results by `SDRESV5H`; `SDCTXV5D` and `SDCTXV5C` remain frozen historical context formats; `SDCTXV5H` is the retained pre-supplied hundredths context. Broker positions, Broker orders, `PlaceOrderV5`, `BrokerOutcomeV5`, and `KernelOrderResultV5` encode every authoritative quantity explicitly in hundredths of one contract. Public wire fields use `quantity_hundredths`, `requested_quantity_hundredths`, `filled_quantity_hundredths`, and `remaining_quantity_hundredths`; scale is never inferred from value shape.
+New candidate contexts are identified by `SDCTXV5F` and current results by `SDRESV5H`; `SDCTXV5E`, `SDCTXV5D` and `SDCTXV5C` remain frozen historical context formats; `SDCTXV5H` is the retained pre-supplied hundredths context. Broker positions, Broker orders, `PlaceOrderV5`, `BrokerOutcomeV5`, and `KernelOrderResultV5` encode every authoritative quantity explicitly in hundredths of one contract. Public wire fields use `quantity_hundredths`, `requested_quantity_hundredths`, `filled_quantity_hundredths`, and `remaining_quantity_hundredths`; scale is never inferred from value shape.
 
-`decode_decision_context_v5` and `decode_decision_result_v5` also accept durable legacy `SDCTXV5\0` and `SDRESV5\0` payloads. Only those legacy magics interpret their old quantity fields as whole contracts. Decoding checked-multiplies each value by 100 into the explicit `u64` hundredths representation. A legacy value greater than `u64::MAX / 100` fails closed with `InvalidContract`; it is never wrapped, saturated, rounded, or reinterpreted. New contexts encode as E; decoded D and C contexts retain their private encoding selectors and re-encode through their frozen layouts. Results remain H. Context and result codec versions are independent.
+`decode_decision_context_v5` and `decode_decision_result_v5` also accept durable legacy `SDCTXV5\0` and `SDRESV5\0` payloads. Only those legacy magics interpret their old quantity fields as whole contracts. Decoding checked-multiplies each value by 100 into the explicit `u64` hundredths representation. A legacy value greater than `u64::MAX / 100` fails closed with `InvalidContract`; it is never wrapped, saturated, rounded, or reinterpreted. New contexts encode as F; decoded E, D and C contexts retain their private encoding selectors and re-encode through their frozen layouts. Results remain H. Context and result codec versions are independent.
 
 Durable continuation identities remain replayable. Originating-context validation accepts the exact legacy context digest when all reconstructed quantities are whole-contract multiples. `strategy_command_v5_digest_matches` similarly checks the current command encoding first and then the exact legacy whole-contract encoding, allowing a persisted pre-change command digest to be verified without changing it. New command and result digests intentionally bind the explicit-hundredths encoding.
 
 The shared kernel uses the single-authority `ContractQuantity` type for order requests, Broker positions/views, and order returns. `ContractQuantity::from_hundredths` supports exact fractional exits; `checked_from_whole_contracts` preserves whole-contract entry behavior through an explicit checked conversion. Strategies and Trader adapters must update their kernel implementations and call sites to construct/read this type before repinning this Strategy Core revision.
+
+### Exact native Market strikes
+
+F adds `market_strikes`, an optional complete collection in owner-Market order. Each entry
+binds its Market ID and optional `cap_strike_milli_f`. The existing V4 identity already carries
+an exact Fahrenheit floor; its frozen layout is unchanged. Kalshi temperature strikes remain
+native milli-Fahrenheit, never raw Fahrenheit labelled as Celsius or rounded through milli-C.
+A present native cap cannot coexist with a Celsius cap, and a native floor cannot exceed it.
+Missing, extra or out-of-order entries fail validation. The block participates in the decision
+fence and originating-context digest. Kernel snapshot and price-event conveniences prefer
+native Fahrenheit; historical contexts retain the Celsius fallback.
+
+E's layout is frozen in `wire_e`. Historical encodings cannot attest or silently discard native
+caps. New facts require F; existing continuation bytes and commitments must not be rewritten.
+The Strategy-owned bracket cache must compare current geometry, not only ticker membership,
+before reusing private checkpoint rows. This does not reset bought/pending state or relax gates.
 
 ## Supplied inputs and the current context encoding
 
@@ -66,7 +82,7 @@ Production D also carries one `forecast_issuance` set per delivered station. Eac
   block (empty version, no stations, no event) is the documented pre-supplied form and is what
   `SDCTXV5H` and `SDCTXV5\0` bytes decode to.
 
-`decode_decision_context_v5` accepts E, D, C, S, H and whole (`SDCTXV5\0`) contexts. Originating-context verification tries the context's current encoding first, then compatible historical shapes only when no newly attached fields would be omitted. Historical digests cannot attest new weather winners, forecast issuance sets, current-input records or new oracle fields; incompatible S/H/whole conversions and C encoding fail rather than discard them. The previously missing S-origin BrokerOutcome check has replay/chaining/tamper proof; the new layout also passes the existing durable ledger fixtures. New contexts encode as E; decoded D/C contexts re-encode as D/C. Replay-bearing contexts cannot downgrade to D or C. `OwnerTriggerV5::NewLow`, `WeatherEvent` and `CapturedWeather` are appended variants, preserving earlier indices.
+`decode_decision_context_v5` accepts F, E, D, C, S, H and whole (`SDCTXV5\0`) contexts. Originating-context verification tries the context's current encoding first, then compatible historical shapes only when no newly attached fields would be omitted. Historical digests cannot attest new weather winners, forecast issuance sets, current-input records or new oracle fields; incompatible S/H/whole conversions and C encoding fail rather than discard them. The previously missing S-origin BrokerOutcome check has replay/chaining/tamper proof; the new layout also passes the existing durable ledger fixtures. New contexts encode as F; decoded E/D/C contexts re-encode as E/D/C. Replay-bearing contexts cannot downgrade to D or C. `OwnerTriggerV5::NewLow`, `WeatherEvent` and `CapturedWeather` are appended variants, preserving earlier indices.
 
 ### Current query and event ownership
 
@@ -121,11 +137,11 @@ supply only kernel construction, restore and checkpoint codecs through
 decision clock. `PriceLevelView` carries whole-contract floors beside `exact` hundredths. Configured planners must preserve exact execution depth independently of their deliberate requested-order sizing policy; their migration remains under R3 qualification.
 
 The stable measurements for the V5 corpus are in `conformance/v5/decision-transactions.json`.
-Corpus schema 7 preserves all 14 earlier measurements and adds two E vectors (4743 and 5788
-bytes), with seven replay rejection cases: 16 valid and 36 invalid entries in total. Frozen D/C
-production is explicit; old rows are not relabelled or rewritten. The corpus gate and D/E
-roundtrips pass; a separate boundary test accepts 64 calls and rejects 65. Its measured local
-digest is `sha256:76122257431f2a3c657684dc8cf7a1c5289d86cac09d1edb4c4907f8b0dc7499`.
+Corpus schema 8 preserves all 16 earlier measurements, including the E vectors (4743 and 5788
+bytes), and adds two F vectors: 18 valid and 36 invalid entries in total. Frozen E/D/C
+production is explicit; old rows are not relabelled or rewritten. The corpus gate checks exact
+historical and current roundtrips; a separate boundary test accepts 64 calls and rejects 65.
+Its measured local digest is `sha256:5babcd8fd133e55ecd0b022ae07dda75015970ac0d4a19ff8c94ac43637b119a`.
 The local runtime, configured executable and owner-approved candidate registry use that same
 corpus fact. Commit/crate/executable release pins are unchanged. These checks do not attest a
 published immutable revision or replace the deferred broader consumer qualification.

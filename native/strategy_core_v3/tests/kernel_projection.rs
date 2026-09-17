@@ -2,6 +2,9 @@
 //! the supplied original-precision state reach a real `NativeKernel` through Core-owned views.
 #![cfg(feature = "kernel")]
 
+#[path = "kernel_projection/market_strikes.rs"]
+mod market_strikes;
+
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -163,6 +166,7 @@ fn base_context() -> DecisionContextV5 {
         ..Default::default()
     };
     DecisionContextV5 {
+        market_strikes: None,
         current_weather: None,
         forecast_issuance: None,
         current_inputs: None,
@@ -494,7 +498,7 @@ fn accepted_near_equal_extreme_does_not_select_the_older_rest_original() {
         facts,
     }]);
     let encoded = encode_decision_context_v5(&context).unwrap();
-    assert!(encoded.starts_with(b"SDCTXV5E"));
+    assert!(encoded.starts_with(b"SDCTXV5F"));
     assert_eq!(decode_decision_context_v5(&encoded).unwrap(), context);
     let snapshot =
         KernelSnapshot::from_context(&decode_decision_context_v5(&encoded).unwrap()).unwrap();
