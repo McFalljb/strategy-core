@@ -1,5 +1,5 @@
 {
-  "schema": "strategy-core-decision-v5-corpus/8",
+  "schema": "strategy-core-decision-v5-corpus/9",
   "valid": [
     {
       "byte_count": 1134,
@@ -108,6 +108,12 @@
       "id": "current-native-caps-broker-replay-f",
       "kind": "decision_context_v5_native_strikes_f",
       "sha256": "d8798a832bc2194e293684456d8132fc67f984c925fb96ca8104796941c23e67"
+    },
+    {
+      "byte_count": 1163,
+      "id": "partial-fill-retained-spending-budget-f",
+      "kind": "decision_context_v5_retained_budget_f",
+      "sha256": "0e0020e917ab5a9dfcb70c90fd1d9fe1a5fa9f57dbbfb57b4db32bab0e99ccae"
     }
   ],
   "invalid": [

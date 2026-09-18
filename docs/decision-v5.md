@@ -137,11 +137,12 @@ supply only kernel construction, restore and checkpoint codecs through
 decision clock. `PriceLevelView` carries whole-contract floors beside `exact` hundredths. Configured planners must preserve exact execution depth independently of their deliberate requested-order sizing policy; their migration remains under R3 qualification.
 
 The stable measurements for the V5 corpus are in `conformance/v5/decision-transactions.json`.
-Corpus schema 8 preserves all 16 earlier measurements, including the E vectors (4743 and 5788
-bytes), and adds two F vectors: 18 valid and 36 invalid entries in total. Frozen E/D/C
+Corpus schema 9 preserves all 18 earlier measurements, including the E vectors (4743 and 5788
+bytes) and native-strike F vectors, and adds the retained partial-fill spending-budget F vector:
+19 valid and 36 invalid entries in total. Frozen E/D/C
 production is explicit; old rows are not relabelled or rewritten. The corpus gate checks exact
 historical and current roundtrips; a separate boundary test accepts 64 calls and rejects 65.
-Its measured local digest is `sha256:5babcd8fd133e55ecd0b022ae07dda75015970ac0d4a19ff8c94ac43637b119a`.
+Its measured local digest is `sha256:7c9868e89fd631a1d6c81facec54097f29b8f3c3d3d1a634eb9d27f3e2617db8`.
 The local runtime, configured executable and owner-approved candidate registry use that same
 corpus fact. Commit/crate/executable release pins are unchanged. These checks do not attest a
 published immutable revision or replace the deferred broader consumer qualification.
@@ -187,7 +188,7 @@ Legacy typed owner triggers bind the V4 component revision and source cursor. Cu
 - YES and NO positions have distinct `(Market, side)` identities.
 - A Market buy may carry `market_price_cap_micros` as its authoritative maximum per-contract execution price. A present cap is positive and at most `1_000_000`; Market orders never carry a limit price. Limit orders carry a limit price and never a Market price cap. Market sells never carry a buy-side price cap.
 - The Market buy cap participates in canonical command encoding and the durable command commitment. A host must not execute any fill above a present cap; absence of the optional cap preserves the pre-extension Market-order contract.
-- Sell and terminal orders reserve no cash. Active limit-buy principal is exactly `remaining_quantity_hundredths * limit_price_micros / 100`; non-exact products are rejected rather than rounded. Fee reserve is separate and bounded by remaining notional.
+- Sell, terminal and zero-remaining orders reserve no cash. Active limit-buy principal is exactly `remaining_quantity_hundredths * limit_price_micros / 100`; non-exact products are rejected rather than rounded. `reserved_fee_micros` is the remaining admitted spending buffer above that principal, not charged fees. Broker may retain price-improvement savings in this buffer until completion to fund later fees; it can exceed the remaining contracts' payout value. Its bounds are the exact owner reservation and Sleeve commitment below, not remaining notional. This changes validation only: financial state, reservation policy, wire layouts and historical bytes remain unchanged.
 - Sleeve order reservations sum exactly to the V5 reserved-cash total, do not exceed the V4 account reservation, and combine with position cost and paid fees to equal the V4 Sleeve commitment.
 - Broker-state, command, outcome, and return hundredths values fit the frozen kernel's signed 64-bit `ContractQuantity` interface. Whole-contract entry policies convert once with `checked_from_whole_contracts`; fractional reduce-only exits use `from_hundredths`.
 - All identifiers, text, metadata, diagnostics, evidence, collections, and private kernel checkpoints have explicit bounds.

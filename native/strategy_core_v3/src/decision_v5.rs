@@ -196,6 +196,8 @@ pub struct BrokerOrderV5 {
     pub limit_price_micros: Option<u64>,
     pub average_fill_price_micros: Option<u64>,
     pub reserved_principal_micros: u64,
+    /// Unspent admitted budget above remaining principal, including retained price
+    /// improvement available for fees. This is reserved cash, not charged fees.
     pub reserved_fee_micros: u64,
     pub created_at_unix_ms: Option<i64>,
     pub updated_at_unix_ms: Option<i64>,
@@ -2207,7 +2209,10 @@ fn valid_order_reservation(order: &BrokerOrderV5) -> bool {
             .is_some_and(|principal| principal == u128::from(order.reserved_principal_micros)),
         None => u128::from(order.reserved_principal_micros) <= maximum_notional,
     };
-    principal_is_exact && u128::from(order.reserved_fee_micros) <= maximum_notional
+    // Price improvement may remain reserved until completion. Conservation is
+    // checked against the owner cash and commitment, not the unfilled payout.
+    principal_is_exact
+        && (order.remaining_quantity_hundredths != 0 || order.reserved_fee_micros == 0)
 }
 
 fn maximum_quantity_value(quantity_hundredths: u64) -> u128 {
@@ -4188,6 +4193,64 @@ mod tests {
         assert_eq!(context.broker.orders.len(), MAX_BROKER_ORDERS);
     }
 
+    fn retained_spending_budget_context() -> DecisionContextV5 {
+        let mut context = context();
+        let order = &mut context.broker.orders[0];
+        order.quantity_hundredths = 10_000;
+        order.filled_quantity_hundredths = 9_591;
+        order.remaining_quantity_hundredths = 409;
+        order.limit_price_micros = Some(990_000);
+        order.average_fill_price_micros = Some(853_161);
+        order.reserved_principal_micros = 4_049_100;
+        order.reserved_fee_micros = 13_194_300;
+        let position = &mut context.broker.positions[0];
+        position.quantity_hundredths = 9_591;
+        position.cost_basis_micros = 81_826_700;
+        context.broker.reserved_cash_micros = 17_243_400;
+        context.owner_state.broker.locally_reserved_cash = 17_243_400;
+        context.owner_state.broker.current_commitment = 99_070_100;
+        context
+    }
+
+    #[test]
+    fn v5_retained_spending_budget_preserves_exact_reservation_conservation() {
+        // A partial fill at improved prices retains the unused admitted budget.
+        // That buffer is not a fee charge or bounded by the unfilled payout.
+        let context = retained_spending_budget_context();
+        let bytes = encode_decision_context_v5(&context).unwrap();
+        assert_eq!(decode_decision_context_v5(&bytes).unwrap(), context);
+        for mutation in [
+            "order_buffer",
+            "cash_total",
+            "account_cash",
+            "commitment",
+            "terminal",
+            "empty",
+        ] {
+            let mut invalid = context.clone();
+            match mutation {
+                "order_buffer" => invalid.broker.orders[0].reserved_fee_micros += 1,
+                "cash_total" => invalid.broker.reserved_cash_micros += 1,
+                "account_cash" => invalid.owner_state.broker.locally_reserved_cash -= 1,
+                "commitment" => invalid.owner_state.broker.current_commitment -= 1,
+                "terminal" => invalid.broker.orders[0].status = BrokerOrderStatusV5::Cancelled,
+                "empty" => {
+                    let order = &mut invalid.broker.orders[0];
+                    order.filled_quantity_hundredths = order.quantity_hundredths;
+                    order.remaining_quantity_hundredths = 0;
+                    order.reserved_fee_micros += order.reserved_principal_micros;
+                    order.reserved_principal_micros = 0;
+                }
+                _ => unreachable!(),
+            }
+            assert_eq!(
+                invalid.validate(),
+                Err(DecisionV5Error::InvalidContract),
+                "{mutation}"
+            );
+        }
+    }
+
     #[test]
     fn v5_decoders_reject_trailing_bytes() {
         let mut context_bytes = encode_decision_context_v5(&context()).unwrap();
@@ -4879,7 +4942,7 @@ mod tests {
             .join("../../conformance/v5/decision-transactions.json");
         let corpus: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-        assert_eq!(corpus["schema"], "strategy-core-decision-v5-corpus/8");
+        assert_eq!(corpus["schema"], "strategy-core-decision-v5-corpus/9");
 
         let vectors = corpus["valid"].as_array().unwrap();
         let measured = corpus_measurements();
@@ -4974,6 +5037,7 @@ mod tests {
                 "decision_context_v5_current"
                     | "decision_context_v5_replay_e"
                     | "decision_context_v5_native_strikes_f"
+                    | "decision_context_v5_retained_budget_f"
             ) {
                 let restored = decode_decision_context_v5(bytes).unwrap();
                 assert_eq!(
@@ -5309,6 +5373,11 @@ mod tests {
             "current-native-caps-broker-replay-f",
             "decision_context_v5_native_strikes_f",
             encode_decision_context_v5(&replay_corpus_context(current_f, 2).unwrap()).unwrap(),
+        ));
+        measured.push((
+            "partial-fill-retained-spending-budget-f",
+            "decision_context_v5_retained_budget_f",
+            encode_decision_context_v5(&retained_spending_budget_context()).unwrap(),
         ));
         measured
     }
