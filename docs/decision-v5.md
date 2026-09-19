@@ -137,15 +137,16 @@ supply only kernel construction, restore and checkpoint codecs through
 decision clock. `PriceLevelView` carries whole-contract floors beside `exact` hundredths. Configured planners must preserve exact execution depth independently of their deliberate requested-order sizing policy; their migration remains under R3 qualification.
 
 The stable measurements for the V5 corpus are in `conformance/v5/decision-transactions.json`.
-Corpus schema 9 preserves all 18 earlier measurements, including the E vectors (4743 and 5788
-bytes) and native-strike F vectors, and adds the retained partial-fill spending-budget F vector:
-19 valid and 36 invalid entries in total. Frozen E/D/C
+Corpus schema 10 preserves all 19 earlier measurements, including the E vectors (4743 and 5788
+bytes), native-strike F vectors and retained partial-fill spending-budget F vector. It adds exact
+unfilled and partially filled cancelled-place returns, plus six invalid cancellation-return cases:
+21 valid and 42 invalid entries in total. Frozen E/D/C
 production is explicit; old rows are not relabelled or rewritten. The corpus gate checks exact
 historical and current roundtrips; a separate boundary test accepts 64 calls and rejects 65.
-Its measured local digest is `sha256:7c9868e89fd631a1d6c81facec54097f29b8f3c3d3d1a634eb9d27f3e2617db8`.
-The local runtime, configured executable and owner-approved candidate registry use that same
-corpus fact. Commit/crate/executable release pins are unchanged. These checks do not attest a
-published immutable revision or replace the deferred broader consumer qualification.
+Its measured local digest is `sha256:41918b28b1593593a764c5299be6110966839b1f3e9dd6ba670c377a81af06db`.
+Consumers must update their immutable Core, corpus and executable attestations together.
+Local codec checks do not attest a published release or replace the deferred broader consumer
+qualification.
 
 ## Durable kernel checkpoints
 
@@ -168,7 +169,7 @@ A continuation commitment contains the complete pre-event checkpoint, not only i
 
 `BrokerCommandReturnV5` represents the existing synchronous kernel capability without inference:
 
-- place order: exact `KernelOrderResultV5` or bounded Broker error;
+- place order: exact `KernelOrderResultV5` or bounded Broker error. If cancellation completes before the awaited place return, the return is `Cancelled`, with the original requested quantity, actual fills/price/fees and actual remaining open quantity. Cancellation does not become a fill, rejection, or renewed reservation. A cancelled E/F replay return must match the exact cancelled order in the returned Broker state; missing orders, changed quantities/prices and merely requested cancellations reject. Coherent historical exact-sum representations remain readable;
 - cancel order: exact Boolean or bounded Broker error. A confirmed cancelled order retains its original requested quantity and actual filled quantity even when remaining open quantity is zero. That cancelled residual is not a fill or an open reservation. E replay binds a successful cancel receipt's quantities and average fill price to the returned cancelled order; fabricated zero/reduced requests reject. Historical exact-sum representations remain readable;
 - cancel all: the canonical sorted set of affected order IDs or bounded Broker error. The frozen `usize` return is the set length.
 

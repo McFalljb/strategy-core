@@ -1,5 +1,5 @@
 {
-  "schema": "strategy-core-decision-v5-corpus/9",
+  "schema": "strategy-core-decision-v5-corpus/10",
   "valid": [
     {
       "byte_count": 1134,
@@ -114,6 +114,18 @@
       "id": "partial-fill-retained-spending-budget-f",
       "kind": "decision_context_v5_retained_budget_f",
       "sha256": "0e0020e917ab5a9dfcb70c90fd1d9fe1a5fa9f57dbbfb57b4db32bab0e99ccae"
+    },
+    {
+      "byte_count": 2162,
+      "id": "cancelled-place-unfilled-return-f",
+      "kind": "decision_context_v5_cancelled_place_f",
+      "sha256": "9c2048f84ebea27b95c88cc33e6f00bea5bf56b666f06ea4a44440ff1a10ade9"
+    },
+    {
+      "byte_count": 2211,
+      "id": "cancelled-place-partial-return-f",
+      "kind": "decision_context_v5_cancelled_place_f",
+      "sha256": "37fb8afec092758bc7d0ec95243268a29fc6e1297ca3cb6be0780724905fd54c"
     }
   ],
   "invalid": [
@@ -221,6 +233,12 @@
     { "id": "replay-incoherent-publication-revision", "category": "invalid_contract" },
     { "id": "replay-incoherent-returned-finances", "category": "invalid_contract" },
     { "id": "replay-cannot-downgrade-to-d", "category": "invalid_contract" },
-    { "id": "replay-call-bound-exceeded", "category": "bound_exceeded" }
+    { "id": "replay-call-bound-exceeded", "category": "bound_exceeded" },
+    { "id": "cancelled-place-changed-request", "category": "invalid_contract" },
+    { "id": "cancelled-place-fabricated-open-quantity", "category": "invalid_contract" },
+    { "id": "cancelled-place-changed-fill", "category": "invalid_contract" },
+    { "id": "cancelled-place-changed-price", "category": "invalid_contract" },
+    { "id": "cancelled-place-missing-order", "category": "invalid_contract" },
+    { "id": "cancelled-place-unconfirmed-cancellation", "category": "invalid_contract" }
   ]
 }

@@ -2684,13 +2684,23 @@ fn validate_broker_outcome(
 }
 
 pub(crate) fn cancelled_order_matches(broker: &BrokerDetailV5, outcome: &BrokerOutcomeV5) -> bool {
-    outcome.command_kind == BrokerCommandKindV5::CancelOrder
+    let confirms_cancellation = match (&outcome.command_kind, &outcome.return_value) {
+        (
+            BrokerCommandKindV5::CancelOrder,
+            BrokerCommandReturnV5::CancelOrder(CancelOrderReturnV5::Ok(true)),
+        ) => outcome.target_order_id == outcome.order_id,
+        (
+            BrokerCommandKindV5::PlaceOrder,
+            BrokerCommandReturnV5::PlaceOrder(PlaceOrderReturnV5::Ok(result)),
+        ) => {
+            outcome.target_order_id.is_none()
+                && result.status == KernelOrderStatusV5::Cancelled
+                && outcome.order_id.as_ref() == Some(&result.order_id)
+        }
+        _ => false,
+    };
+    confirms_cancellation
         && outcome.status == BrokerOutcomeStatusV5::Cancelled
-        && matches!(
-            &outcome.return_value,
-            BrokerCommandReturnV5::CancelOrder(CancelOrderReturnV5::Ok(true))
-        )
-        && outcome.target_order_id == outcome.order_id
         && broker.orders.iter().any(|order| {
             outcome.order_id.as_ref() == Some(&order.order_id)
                 && order.status == BrokerOrderStatusV5::Cancelled
@@ -4942,7 +4952,7 @@ mod tests {
             .join("../../conformance/v5/decision-transactions.json");
         let corpus: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-        assert_eq!(corpus["schema"], "strategy-core-decision-v5-corpus/9");
+        assert_eq!(corpus["schema"], "strategy-core-decision-v5-corpus/10");
 
         let vectors = corpus["valid"].as_array().unwrap();
         let measured = corpus_measurements();
@@ -4965,7 +4975,7 @@ mod tests {
         );
 
         let invalid = corpus["invalid"].as_array().unwrap();
-        assert_eq!(invalid.len(), 36);
+        assert_eq!(invalid.len(), 42);
         let invalid_inventory = invalid
             .iter()
             .map(|vector| {
@@ -5026,6 +5036,18 @@ mod tests {
                 ("replay-incoherent-returned-finances", "invalid_contract"),
                 ("replay-cannot-downgrade-to-d", "invalid_contract"),
                 ("replay-call-bound-exceeded", "bound_exceeded"),
+                ("cancelled-place-changed-request", "invalid_contract"),
+                (
+                    "cancelled-place-fabricated-open-quantity",
+                    "invalid_contract"
+                ),
+                ("cancelled-place-changed-fill", "invalid_contract"),
+                ("cancelled-place-changed-price", "invalid_contract"),
+                ("cancelled-place-missing-order", "invalid_contract"),
+                (
+                    "cancelled-place-unconfirmed-cancellation",
+                    "invalid_contract"
+                ),
             ])
         );
 
@@ -5038,6 +5060,7 @@ mod tests {
                     | "decision_context_v5_replay_e"
                     | "decision_context_v5_native_strikes_f"
                     | "decision_context_v5_retained_budget_f"
+                    | "decision_context_v5_cancelled_place_f"
             ) {
                 let restored = decode_decision_context_v5(bytes).unwrap();
                 assert_eq!(
@@ -5379,6 +5402,16 @@ mod tests {
             "decision_context_v5_retained_budget_f",
             encode_decision_context_v5(&retained_spending_budget_context()).unwrap(),
         ));
+        for (id, filled) in [
+            ("cancelled-place-unfilled-return-f", false),
+            ("cancelled-place-partial-return-f", true),
+        ] {
+            measured.push((
+                id,
+                "decision_context_v5_cancelled_place_f",
+                encode_decision_context_v5(&cancelled_place_corpus_context(filled)).unwrap(),
+            ));
+        }
         measured
     }
 

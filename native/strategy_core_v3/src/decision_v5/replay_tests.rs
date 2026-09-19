@@ -79,6 +79,60 @@ fn replay_corpus_context(
     Ok(context)
 }
 
+fn cancelled_place_corpus_context(filled: bool) -> DecisionContextV5 {
+    let mut context = replay_corpus_context(context(), 1).unwrap();
+    let TriggerV5::BrokerOutcome { outcome, .. } = &mut context.trigger else {
+        unreachable!()
+    };
+    let returned = &mut context.broker_replay.as_mut().unwrap().returned_state;
+    let mut order = returned.broker.orders[0].clone();
+    order.command_id = outcome.command_id.clone();
+    order.order_id = "order.replay.cancelled.place".to_owned();
+    order.intent_id = "intent.cancelled.place".to_owned();
+    order.provider_order_id = Some("paper-cancelled-place".to_owned());
+    order.provider_client_id = "client.replay.1".to_owned();
+    order.side = ContractSideV5::No;
+    order.limit_price_micros = Some(400_000);
+    order.filled_quantity_hundredths = if filled { 200 } else { 0 };
+    order.remaining_quantity_hundredths = 0;
+    order.average_fill_price_micros = filled.then_some(400_000);
+    order.reserved_principal_micros = 0;
+    order.status = BrokerOrderStatusV5::Cancelled;
+    let fees_micros = if filled { 33_600 } else { 0 };
+    if filled {
+        returned.broker.positions.push(BrokerPositionV5 {
+            market_id: order.market_id.clone(),
+            side: order.side,
+            quantity_hundredths: 200,
+            cost_basis_micros: 800_000,
+            fees_micros,
+        });
+        returned.finances.current_commitment_micros += 833_600;
+    }
+    outcome.order_id = Some(order.order_id.clone());
+    outcome.intent_id = Some(order.intent_id.clone());
+    outcome.provider_order_id = order.provider_order_id.clone();
+    outcome.provider_client_id = Some(order.provider_client_id.clone());
+    outcome.status = BrokerOutcomeStatusV5::Cancelled;
+    outcome.requested_quantity_hundredths = order.quantity_hundredths;
+    outcome.filled_quantity_hundredths = order.filled_quantity_hundredths;
+    outcome.remaining_quantity_hundredths = 0;
+    outcome.average_fill_price_micros = order.average_fill_price_micros;
+    outcome.reason = Some("confirmed cancellation before place return".to_owned());
+    outcome.return_value = BrokerCommandReturnV5::PlaceOrder(PlaceOrderReturnV5::Ok(
+        KernelOrderResultV5 {
+            order_id: order.order_id.clone(),
+            status: KernelOrderStatusV5::Cancelled,
+            filled_quantity_hundredths: order.filled_quantity_hundredths,
+            fill_price_micros: order.average_fill_price_micros.unwrap_or(0),
+            fee_cost_micros: fees_micros,
+            reason: "confirmed cancellation before place return".to_owned(),
+        },
+    ));
+    returned.broker.orders.push(order);
+    context
+}
+
 fn invalid_replay_cases() -> Vec<(&'static str, DecisionContextV5, DecisionV5Error)> {
     let context = replay_corpus_context(current_packet_corpus_context(), 2).unwrap();
     let mut missing = context.clone();
@@ -109,7 +163,7 @@ fn invalid_replay_cases() -> Vec<(&'static str, DecisionContextV5, DecisionV5Err
     history
         .preceding
         .resize(MAX_STRATEGY_COMMANDS, history.preceding[0].clone());
-    vec![
+    let mut cases = vec![
         (
             "replay-missing-predecessor",
             missing,
@@ -145,7 +199,57 @@ fn invalid_replay_cases() -> Vec<(&'static str, DecisionContextV5, DecisionV5Err
             overflow,
             DecisionV5Error::BoundExceeded,
         ),
-    ]
+    ];
+    for id in [
+        "cancelled-place-changed-request",
+        "cancelled-place-fabricated-open-quantity",
+        "cancelled-place-changed-fill",
+        "cancelled-place-changed-price",
+        "cancelled-place-missing-order",
+        "cancelled-place-unconfirmed-cancellation",
+    ] {
+        let mut invalid = cancelled_place_corpus_context(true);
+        let TriggerV5::BrokerOutcome { outcome, .. } = &mut invalid.trigger else {
+            unreachable!()
+        };
+        let BrokerCommandReturnV5::PlaceOrder(PlaceOrderReturnV5::Ok(result)) =
+            &mut outcome.return_value
+        else {
+            unreachable!()
+        };
+        let returned = &mut invalid.broker_replay.as_mut().unwrap().returned_state;
+        let order = returned.broker.orders.last_mut().unwrap();
+        match id {
+            "cancelled-place-changed-request" => {
+                outcome.requested_quantity_hundredths = 200;
+            }
+            "cancelled-place-fabricated-open-quantity" => {
+                outcome.remaining_quantity_hundredths = 100;
+            }
+            "cancelled-place-changed-fill" => {
+                outcome.filled_quantity_hundredths = 199;
+                result.filled_quantity_hundredths = 199;
+            }
+            "cancelled-place-changed-price" => {
+                outcome.average_fill_price_micros = Some(400_001);
+                result.fill_price_micros = 400_001;
+            }
+            "cancelled-place-missing-order" => {
+                returned.broker.orders.pop();
+            }
+            "cancelled-place-unconfirmed-cancellation" => {
+                order.status = BrokerOrderStatusV5::CancellationRequested;
+                order.remaining_quantity_hundredths = 100;
+                order.reserved_principal_micros = 400_000;
+                returned.broker.reserved_cash_micros += 400_000;
+                returned.finances.locally_reserved_cash_micros += 400_000;
+                returned.finances.current_commitment_micros += 400_000;
+            }
+            _ => unreachable!(),
+        }
+        cases.push((id, invalid, DecisionV5Error::InvalidContract));
+    }
+    cases
 }
 
 #[test]
@@ -188,6 +292,11 @@ fn v5_replay_encoding_preserves_d_origins_and_enforces_order_finances_and_bounds
             downgrade.retained_supplied_encoding.canonical_e = true;
             assert_eq!(encode_decision_context_v5(&downgrade), Err(DecisionV5Error::InvalidContract));
         }
+    }
+    for filled in [false, true] {
+        let cancelled = cancelled_place_corpus_context(filled);
+        let bytes = encode_decision_context_v5(&cancelled).unwrap();
+        assert_eq!(decode_decision_context_v5(&bytes).unwrap(), cancelled);
     }
     for (id, invalid, error) in invalid_replay_cases() {
         assert_eq!(encode_decision_context_v5(&invalid), Err(error), "{id}");

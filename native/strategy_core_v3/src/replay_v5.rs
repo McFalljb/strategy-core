@@ -63,11 +63,15 @@ impl BrokerExecutionStateV5 {
         if self.broker.revision != outcome.broker_revision {
             return Err(DecisionV5Error::InvalidContract);
         }
-        if matches!(
+        let confirms_cancellation = matches!(
             &outcome.return_value,
             BrokerCommandReturnV5::CancelOrder(wire::CancelOrderReturnV5::Ok(true))
-        ) && !wire::cancelled_order_matches(&self.broker, outcome)
-        {
+        ) || matches!(
+            &outcome.return_value,
+            BrokerCommandReturnV5::PlaceOrder(PlaceOrderReturnV5::Ok(result))
+                if result.status == wire::KernelOrderStatusV5::Cancelled
+        );
+        if confirms_cancellation && !wire::cancelled_order_matches(&self.broker, outcome) {
             return Err(DecisionV5Error::InvalidContract);
         }
         if let BrokerCommandReturnV5::PlaceOrder(PlaceOrderReturnV5::Ok(result)) =

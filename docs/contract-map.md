@@ -1495,8 +1495,11 @@ The kernel `OrderResult` fields are `order_id`, `sleeve_id`, `status`,
 `filled_quantity`, `fill_price`, `fee_cost`, and `reason`. `PlaceOrderRequest.quantity`, all pending/status quantities, `OrderResult.filled_quantity`, and `StrategyKernelBroker.position_quantity` use `ContractQuantity`; each value is authoritative hundredths.
 
 Kernel order enums are `Buy`/`Sell`, `Yes`/`No`, `Market`/`Limit`, and result
-statuses `Filled`, `Partial`, `Pending`, `Rejected`, `Cancelled`. The kernel
-order request intentionally omits broad-only immediate-execution fields such as
+statuses `Filled`, `Partial`, `Pending`, `Rejected`, `Cancelled`. A place call may return
+`Cancelled` if confirmed cancellation precedes its return. Native V5 replay preserves the
+original request and exact filled/open quantities against the returned cancelled Broker order;
+a pending cancellation is not completion. See [Decision V5](decision-v5.md).
+The kernel order request intentionally omits broad-only immediate-execution fields such as
 `max_price`, `max_cost`, `execution_style`, `time_policy`, and `post_only`.
 
 ## Adapter-only provider models
