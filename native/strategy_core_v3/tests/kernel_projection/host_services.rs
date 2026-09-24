@@ -2,7 +2,7 @@
 //! capabilities, gauge and annotation telemetry, and cancellable timers.
 
 use super::*;
-use strategy_core_kernel::{KernelCapabilities, ParameterValue};
+use strategy_core_kernel::{AnnotationValue, KernelCapabilities, ParameterValue};
 use strategy_core_v3::decision_v5::{DecisionResultV5, StrategyParameterValueV5};
 
 type Script = fn(&mut dyn StrategyKernelContext, &mut Vec<String>) -> KernelResult<()>;
@@ -164,4 +164,86 @@ fn kernels_read_exact_parameters_and_the_granted_capabilities() {
         "same f64 as the initializer"
     );
     assert_ne!(KernelCapabilities::default().timers, true);
+}
+
+#[test]
+fn gauges_and_annotations_are_recorded_in_order_beside_counters() {
+    let context = observation_context(Some("22.8"), Some("73"));
+    let (_, result) = run_script(&context, |context, _| {
+        assert!(context.capabilities().gauges);
+        assert!(context.capabilities().annotations);
+        let telemetry = context.telemetry();
+        telemetry.counter("orders_considered", 1.0, &[])?;
+        telemetry.gauge("buying_power", 12.5, &[("sleeve", "a")])?;
+        telemetry.annotate("gate", AnnotationValue::Text("price_moved"), &[])?;
+        telemetry.annotate("attempt", AnnotationValue::Integer(-2), &[])?;
+        telemetry.annotate("edge", AnnotationValue::Float(0.1), &[("unit", "dollars")])?;
+        telemetry.annotate("armed", AnnotationValue::Bool(false), &[])?;
+        telemetry.annotate("reason", AnnotationValue::Null, &[])?;
+        context.emit(KernelAction::Log(LogAction {
+            level: "info".to_owned(),
+            message: "after".to_owned(),
+        }))?;
+        Ok(())
+    });
+    assert_eq!(result.disposition, DecisionDispositionV5::Completed);
+    assert!(result.commands.is_empty());
+    let rows = result
+        .diagnostics
+        .iter()
+        .map(|diagnostic| (diagnostic.code.as_str(), diagnostic.message.as_str()))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        rows,
+        [
+            (
+                "kernel_telemetry",
+                r#"{"fields":[],"name":"orders_considered","value":1.0,"value_bits":"3ff0000000000000"}"#
+            ),
+            (
+                "kernel_gauge",
+                r#"{"fields":[["sleeve","a"]],"name":"buying_power","value":12.5,"value_bits":"4029000000000000"}"#
+            ),
+            (
+                "kernel_annotation",
+                r#"{"fields":[],"name":"gate","value":"price_moved"}"#
+            ),
+            (
+                "kernel_annotation",
+                r#"{"fields":[],"name":"attempt","value":-2}"#
+            ),
+            (
+                "kernel_annotation",
+                r#"{"fields":[["unit","dollars"]],"name":"edge","value":{"bits":"3fb999999999999a","float":0.1}}"#
+            ),
+            (
+                "kernel_annotation",
+                r#"{"fields":[],"name":"armed","value":false}"#
+            ),
+            (
+                "kernel_annotation",
+                r#"{"fields":[],"name":"reason","value":null}"#
+            ),
+            ("kernel_log", "after"),
+        ]
+    );
+}
+
+#[test]
+fn a_rejected_decision_keeps_its_gauges_and_annotations() {
+    let context = observation_context(Some("22.8"), Some("73"));
+    let (_, result) = run_script(&context, |context, _| {
+        context.telemetry().gauge("depth", 3.0, &[])?;
+        context
+            .telemetry()
+            .annotate("why", AnnotationValue::Text("no_edge"), &[])?;
+        Err(strategy_core_kernel::KernelError::new("fixture failure"))
+    });
+    assert_eq!(result.disposition, DecisionDispositionV5::Rejected);
+    let codes = result
+        .diagnostics
+        .iter()
+        .map(|diagnostic| diagnostic.code.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(codes, ["kernel_error", "kernel_gauge", "kernel_annotation"]);
 }

@@ -1,11 +1,11 @@
 use chrono::{TimeZone, Utc};
 use strategy_core_kernel::{
-    CancelAllOrdersRequest, CancelOrderRequest, ContractQuantity, ContractSide, KernelAction,
-    KernelCapabilities, KernelResult, MarketBracketView, NativeKernel, OrderAction, OrderResult,
-    OrderStatus, OrderStatusView, OrderType, ParameterValue, PlaceOrderRequest, PriceLevelView,
-    PriceUpdateView, StrategyEventView, StrategyKernelBroker, StrategyKernelContext,
-    StrategyKernelData, StrategyKernelRuntime, StrategyKernelState, StrategyKernelTelemetry,
-    StrategyParameters, TimerWakeView, WakeAtRequest,
+    AnnotationValue, CancelAllOrdersRequest, CancelOrderRequest, ContractQuantity, ContractSide,
+    KernelAction, KernelCapabilities, KernelResult, MarketBracketView, NativeKernel, OrderAction,
+    OrderResult, OrderStatus, OrderStatusView, OrderType, ParameterValue, PlaceOrderRequest,
+    PriceLevelView, PriceUpdateView, StrategyEventView, StrategyKernelBroker,
+    StrategyKernelContext, StrategyKernelData, StrategyKernelRuntime, StrategyKernelState,
+    StrategyKernelTelemetry, StrategyParameters, TimerWakeView, WakeAtRequest,
 };
 
 const YES_BID_LEVELS: [PriceLevelView; 1] = [PriceLevelView::whole(0.41, 12)];
@@ -331,6 +331,18 @@ fn hosts_without_parameters_or_capabilities_supply_none_by_default() {
     assert_eq!(ctx.capabilities(), KernelCapabilities::default());
     assert_eq!(ctx.capabilities().mode, None);
     assert!(!ctx.capabilities().timers);
+    assert!(!ctx.capabilities().gauges);
+    assert!(!ctx.capabilities().annotations);
+
+    let mut telemetry = FakeTelemetry::default();
+    telemetry.gauge("depth", 1.0, &[]).unwrap();
+    telemetry
+        .annotate("reason", AnnotationValue::Text("dropped"), &[])
+        .unwrap();
+    assert!(
+        telemetry.counters.is_empty(),
+        "a host without gauges drops them"
+    );
 
     let parameters: StrategyParameters = [
         ("b".to_owned(), ParameterValue::I64(1)),

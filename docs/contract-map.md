@@ -1457,8 +1457,9 @@ The native context exposes these exact trait surfaces:
   return an empty set.
 - `StrategyKernelContext::capabilities() -> KernelCapabilities`: what the host
   grants: `mode` (`Paper`, `Live`, `Replay`, or `None` when the host does not
-  state it) and `timers`. The default grants nothing. The Decision V5 host grants
-  timers and states no mode, because V5 contexts do not carry it.
+  state it), `timers`, `gauges` and `annotations`. The default grants nothing.
+  The Decision V5 host grants the others and states no mode, because V5 contexts
+  do not carry it.
 - `StrategyKernelContext::data() -> &dyn StrategyKernelData`: reserved narrow
   data trait; it has no methods today.
 - `StrategyKernelContext::broker() -> &mut dyn StrategyKernelBroker`:
@@ -1468,7 +1469,13 @@ The native context exposes these exact trait surfaces:
 - `StrategyKernelContext::runtime() -> &mut dyn StrategyKernelRuntime`:
   `wake_at(WakeAtRequest)`.
 - `StrategyKernelContext::telemetry() -> &mut dyn StrategyKernelTelemetry`:
-  `counter(name, value, fields)` where fields are `&[(&str, &str)]`.
+  `counter(name, value, fields)` where fields are `&[(&str, &str)]`;
+  `gauge(name, value, fields)`; and `annotate(name, value, fields)` with an
+  `AnnotationValue` (`Text`, `Integer`, `Float`, `Bool`, `Null`). Hosts that do
+  not record gauges or annotations (`capabilities().gauges` / `.annotations`
+  false) drop them. The Decision V5 host records them in result diagnostics
+  beside counters, in call order, with codes `kernel_gauge` and
+  `kernel_annotation` (a float annotation carries its value and bit pattern).
 - `StrategyKernelContext::emit(KernelAction)`: emit a
   place/cancel/cancel-all/wake/telemetry/log/stop action through the runtime.
 

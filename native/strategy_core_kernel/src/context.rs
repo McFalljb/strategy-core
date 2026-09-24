@@ -164,6 +164,33 @@ pub trait StrategyKernelRuntime {
 
 pub trait StrategyKernelTelemetry {
     fn counter(&mut self, name: &str, value: f64, fields: &[(&str, &str)]) -> KernelResult<()>;
+
+    /// Records the current level of `name`. Hosts that do not record gauges
+    /// (`KernelCapabilities::gauges` is false) drop it.
+    fn gauge(&mut self, _name: &str, _value: f64, _fields: &[(&str, &str)]) -> KernelResult<()> {
+        Ok(())
+    }
+
+    /// Records one typed fact about this decision. Hosts that do not record annotations
+    /// (`KernelCapabilities::annotations` is false) drop it.
+    fn annotate(
+        &mut self,
+        _name: &str,
+        _value: AnnotationValue<'_>,
+        _fields: &[(&str, &str)],
+    ) -> KernelResult<()> {
+        Ok(())
+    }
+}
+
+/// The value of one telemetry annotation.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum AnnotationValue<'a> {
+    Text(&'a str),
+    Integer(i64),
+    Float(f64),
+    Bool(bool),
+    Null,
 }
 
 /// One configured Strategy parameter value. Decimals keep the configured digits exactly.
@@ -292,4 +319,8 @@ pub struct KernelCapabilities {
     pub mode: Option<RuntimeMode>,
     /// `StrategyKernelRuntime::wake_at` schedules one-shot timers.
     pub timers: bool,
+    /// `StrategyKernelTelemetry::gauge` is recorded.
+    pub gauges: bool,
+    /// `StrategyKernelTelemetry::annotate` is recorded.
+    pub annotations: bool,
 }

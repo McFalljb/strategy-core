@@ -22,16 +22,17 @@ use std::collections::VecDeque;
 
 use chrono::{DateTime, TimeZone, Utc};
 use strategy_core_kernel::{
-    Book, BookLevel, CancelOrderRequest, ClimateDay, ComponentAuthority, ComponentMeta,
-    ContractQuantity, ContractSide, DailyExtremes, EventProvenance, Extreme, FinalFact, Forecast,
-    ForecastModel, ForecastPoint, ForecastUpdated, KernelAction, KernelCapabilities, KernelError,
-    KernelResult, LastTrade, MarketComponents, MarketLifecycle, MarketState, NativeKernel,
-    Observation, OracleScore, OracleScoresUpdated, OracleTable, OrderAction, OrderResult,
-    OrderStatus, OrderStatusView, ParameterValue, PendingOrderView, PlaceOrderRequest, PriceUpdate,
-    Report, StationComponents, StationIdentity, StationState, StationWeatherView, StrategyEvent,
-    StrategyEventView, StrategyKernelBroker, StrategyKernelContext, StrategyKernelData,
-    StrategyKernelRuntime, StrategyKernelState, StrategyKernelTelemetry, StrategyParameters,
-    TickerQuote, TimerWake, ValueOrigin, WakeAtRequest, WeatherEvent, WeatherEventSource,
+    AnnotationValue, Book, BookLevel, CancelOrderRequest, ClimateDay, ComponentAuthority,
+    ComponentMeta, ContractQuantity, ContractSide, DailyExtremes, EventProvenance, Extreme,
+    FinalFact, Forecast, ForecastModel, ForecastPoint, ForecastUpdated, KernelAction,
+    KernelCapabilities, KernelError, KernelResult, LastTrade, MarketComponents, MarketLifecycle,
+    MarketState, NativeKernel, Observation, OracleScore, OracleScoresUpdated, OracleTable,
+    OrderAction, OrderResult, OrderStatus, OrderStatusView, ParameterValue, PendingOrderView,
+    PlaceOrderRequest, PriceUpdate, Report, StationComponents, StationIdentity, StationState,
+    StationWeatherView, StrategyEvent, StrategyEventView, StrategyKernelBroker,
+    StrategyKernelContext, StrategyKernelData, StrategyKernelRuntime, StrategyKernelState,
+    StrategyKernelTelemetry, StrategyParameters, TickerQuote, TimerWake, ValueOrigin,
+    WakeAtRequest, WeatherEvent, WeatherEventSource,
 };
 
 use crate::decision_v4::{
@@ -172,6 +173,7 @@ pub fn run_transaction<F: TransactionKernelFactory>(
             // Work after the first suspended call is speculative, including any error branch
             // taken because the synchronous call has not returned yet.
             host.actions.truncate(host.deferred_action_count);
+            host.effects.truncate(host.deferred_effect_count);
             if matches!(context.trigger, TriggerV5::BrokerOutcome { .. })
                 && context.broker_replay.is_none()
             {
@@ -210,7 +212,12 @@ pub fn run_transaction<F: TransactionKernelFactory>(
             };
             result.kernel_checkpoint = Some(pre_event_checkpoint);
             result.commands = vec![command];
-            append_non_economic_actions(context, &host.actions, gate_code, &mut result)?;
+            append_host_outputs(
+                context,
+                &host_outputs(&host.actions, &host.effects),
+                gate_code,
+                &mut result,
+            )?;
             wire::validate_decision_result_v5(context, &result)?;
             return Ok(result);
         }
@@ -224,7 +231,7 @@ pub fn run_transaction<F: TransactionKernelFactory>(
                 code: "kernel_error".to_owned(),
                 message: error.to_string(),
             });
-            append_kernel_telemetry(&host.actions, &mut result);
+            append_output_telemetry(&host_outputs(&host.actions, &host.effects), &mut result);
             wire::validate_decision_result_v5(context, &result)?;
             return Ok(result);
         }
@@ -239,7 +246,12 @@ pub fn run_transaction<F: TransactionKernelFactory>(
             &candidate,
             next_sequence,
         )?);
-        append_non_economic_actions(context, &host.actions, gate_code, &mut result)?;
+        append_host_outputs(
+            context,
+            &host_outputs(&host.actions, &host.effects),
+            gate_code,
+            &mut result,
+        )?;
         wire::validate_decision_result_v5(context, &result)?;
         Ok(result)
     })();
@@ -247,17 +259,25 @@ pub fn run_transaction<F: TransactionKernelFactory>(
         // Keep the failing-process semantics: when no valid V5 result can be returned, prior
         // diagnostics follow the executable's stderr path and the host captures a bounded,
         // redacted snapshot with explicit dropped-byte accounting.
-        for action in &host.actions {
-            match action {
-                KernelAction::Log(log) => eprintln!(
+        for output in host_outputs(&host.actions, &host.effects) {
+            match output {
+                HostOutput::Action(KernelAction::Log(log)) => eprintln!(
                     "{}",
                     serde_json::json!({"code": "kernel_log", "level": log.level, "message": log.message})
                 ),
-                KernelAction::Telemetry(counter) => eprintln!(
+                HostOutput::Action(KernelAction::Telemetry(counter)) => eprintln!(
                     "{}",
                     serde_json::json!({"code": "kernel_telemetry", "name": counter.name, "value": counter.value, "value_bits": format!("{:016x}", counter.value.to_bits()), "fields": counter.fields})
                 ),
-                _ => {}
+                HostOutput::Effect(effect) => {
+                    if let Some((code, _, message)) = effect_telemetry(effect) {
+                        let mut line = serde_json::from_str::<serde_json::Value>(&message)
+                            .unwrap_or(serde_json::Value::Null);
+                        line["code"] = serde_json::Value::from(code);
+                        eprintln!("{line}");
+                    }
+                }
+                HostOutput::Action(_) => {}
             }
         }
     }
@@ -1407,7 +1427,51 @@ pub struct KernelHost {
     replay_failed: bool,
     pub deferred_command: Option<DeferredCommand>,
     deferred_action_count: usize,
+    deferred_effect_count: usize,
     pub actions: Vec<KernelAction>,
+    /// Requests with no `KernelAction` variant, each after the first `.0` entries of `actions`.
+    effects: Vec<(usize, HostEffect)>,
+}
+
+/// A kernel request that `KernelAction` cannot carry without breaking kernels that match it
+/// exhaustively.
+enum HostEffect {
+    Gauge(strategy_core_kernel::TelemetryAction),
+    Annotation {
+        name: String,
+        value: serde_json::Value,
+        fields: Vec<(String, String)>,
+    },
+}
+
+/// One entry of the kernel's non-economic output, in the order the kernel produced it.
+#[derive(Clone, Copy)]
+enum HostOutput<'a> {
+    Action(&'a KernelAction),
+    Effect(&'a HostEffect),
+}
+
+fn host_outputs<'a>(
+    actions: &'a [KernelAction],
+    effects: &'a [(usize, HostEffect)],
+) -> Vec<HostOutput<'a>> {
+    let mut outputs = Vec::with_capacity(actions.len() + effects.len());
+    let mut effects = effects.iter().peekable();
+    for (index, action) in actions.iter().enumerate() {
+        while let Some((_, effect)) = effects.next_if(|(position, _)| *position <= index) {
+            outputs.push(HostOutput::Effect(effect));
+        }
+        outputs.push(HostOutput::Action(action));
+    }
+    outputs.extend(effects.map(|(_, effect)| HostOutput::Effect(effect)));
+    outputs
+}
+
+fn owned_fields(fields: &[(&str, &str)]) -> Vec<(String, String)> {
+    fields
+        .iter()
+        .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+        .collect()
 }
 
 impl KernelHost {
@@ -1426,8 +1490,14 @@ impl KernelHost {
             replay_failed: false,
             deferred_command: None,
             deferred_action_count: 0,
+            deferred_effect_count: 0,
             actions: Vec::new(),
+            effects: Vec::new(),
         }
+    }
+
+    fn push_effect(&mut self, effect: HostEffect) {
+        self.effects.push((self.actions.len(), effect));
     }
 
     fn for_transaction(
@@ -1486,6 +1556,7 @@ impl KernelHost {
         }
         let Some(step) = self.replay.pop_front() else {
             self.deferred_action_count = self.actions.len();
+            self.deferred_effect_count = self.effects.len();
             self.deferred_command = Some(command);
             return Err(KernelError::new(DEFERRED_BROKER_CALL));
         };
@@ -1548,6 +1619,8 @@ impl StrategyKernelContext for KernelHost {
     fn capabilities(&self) -> KernelCapabilities {
         let mut capabilities = KernelCapabilities::default();
         capabilities.timers = true;
+        capabilities.gauges = true;
+        capabilities.annotations = true;
         capabilities
     }
     fn data(&self) -> &dyn StrategyKernelData {
@@ -1714,6 +1787,37 @@ impl StrategyKernelTelemetry for KernelHost {
         ));
         Ok(())
     }
+    fn gauge(&mut self, name: &str, value: f64, fields: &[(&str, &str)]) -> KernelResult<()> {
+        self.push_effect(HostEffect::Gauge(strategy_core_kernel::TelemetryAction {
+            name: name.to_owned(),
+            value,
+            fields: owned_fields(fields),
+        }));
+        Ok(())
+    }
+    fn annotate(
+        &mut self,
+        name: &str,
+        value: AnnotationValue<'_>,
+        fields: &[(&str, &str)],
+    ) -> KernelResult<()> {
+        let value = match value {
+            AnnotationValue::Text(value) => serde_json::Value::from(value),
+            AnnotationValue::Integer(value) => serde_json::Value::from(value),
+            AnnotationValue::Float(value) => serde_json::json!({
+                "float": value,
+                "bits": format!("{:016x}", value.to_bits()),
+            }),
+            AnnotationValue::Bool(value) => serde_json::Value::from(value),
+            AnnotationValue::Null => serde_json::Value::Null,
+        };
+        self.push_effect(HostEffect::Annotation {
+            name: name.to_owned(),
+            value,
+            fields: owned_fields(fields),
+        });
+        Ok(())
+    }
 }
 
 pub enum DeferredCommand {
@@ -1839,8 +1943,27 @@ pub fn append_non_economic_actions(
     gate_code: Option<&str>,
     result: &mut DecisionResultV5,
 ) -> Result<(), KernelTransactionError> {
+    append_host_outputs(
+        context,
+        &actions.iter().map(HostOutput::Action).collect::<Vec<_>>(),
+        gate_code,
+        result,
+    )
+}
+
+fn append_host_outputs(
+    context: &DecisionContextV5,
+    outputs: &[HostOutput<'_>],
+    gate_code: Option<&str>,
+    result: &mut DecisionResultV5,
+) -> Result<(), KernelTransactionError> {
     let mut index = 0;
-    for action in actions {
+    for output in outputs {
+        let HostOutput::Action(action) = output else {
+            // Effects take an ordinal like the telemetry actions they sit beside.
+            index += 1;
+            continue;
+        };
         let added_gate = match (action, gate_code) {
             (KernelAction::Telemetry(counter), Some(code)) => counter.name == code,
             (KernelAction::Log(log), Some(code)) => {
@@ -1859,7 +1982,7 @@ pub fn append_non_economic_actions(
             index + 100
         );
         index += 1;
-        match action {
+        match *action {
             KernelAction::WakeAt(request) => {
                 result.commands.push(StrategyCommandV5::ScheduleTimer {
                     command_id: id,
@@ -1890,18 +2013,50 @@ pub fn append_non_economic_actions(
             }
         }
     }
-    append_kernel_telemetry(actions, result);
+    append_output_telemetry(outputs, result);
     Ok(())
 }
 
 /// Preserves complete log/telemetry messages within the result bound and accounts overflow.
 /// Overflow is diagnostic-only: commands and checkpoints are never removed to fit telemetry.
 pub fn append_kernel_telemetry(actions: &[KernelAction], result: &mut DecisionResultV5) {
+    append_output_telemetry(
+        &actions.iter().map(HostOutput::Action).collect::<Vec<_>>(),
+        result,
+    );
+}
+
+/// Gauges and annotations use the counter channel with their own diagnostic codes.
+fn effect_telemetry(effect: &HostEffect) -> Option<(&'static str, &'static str, String)> {
+    Some(match effect {
+        HostEffect::Gauge(gauge) => (
+            "kernel_gauge",
+            "info",
+            serde_json::json!({
+                "name": gauge.name, "value": gauge.value,
+                "value_bits": format!("{:016x}", gauge.value.to_bits()),
+                "fields": gauge.fields,
+            })
+            .to_string(),
+        ),
+        HostEffect::Annotation {
+            name,
+            value,
+            fields,
+        } => (
+            "kernel_annotation",
+            "info",
+            serde_json::json!({"name": name, "value": value, "fields": fields}).to_string(),
+        ),
+    })
+}
+
+fn append_output_telemetry(outputs: &[HostOutput<'_>], result: &mut DecisionResultV5) {
     let mut lost = 0usize;
     let mut lost_bytes = 0usize;
-    for action in actions {
-        let (code, severity, message) = match action {
-            KernelAction::Log(log) => (
+    for output in outputs {
+        let (code, severity, message) = match output {
+            HostOutput::Action(KernelAction::Log(log)) => (
                 "kernel_log",
                 match log.level.as_str() {
                     "error" | "warn" | "info" | "debug" => log.level.as_str(),
@@ -1916,7 +2071,7 @@ pub fn append_kernel_telemetry(actions: &[KernelAction], result: &mut DecisionRe
                     serde_json::json!({"level": log.level, "message": log.message}).to_string()
                 },
             ),
-            KernelAction::Telemetry(counter) => (
+            HostOutput::Action(KernelAction::Telemetry(counter)) => (
                 "kernel_telemetry",
                 "info",
                 serde_json::json!({
@@ -1926,7 +2081,11 @@ pub fn append_kernel_telemetry(actions: &[KernelAction], result: &mut DecisionRe
                 })
                 .to_string(),
             ),
-            _ => continue,
+            HostOutput::Effect(effect) => match effect_telemetry(effect) {
+                Some(entry) => entry,
+                None => continue,
+            },
+            HostOutput::Action(_) => continue,
         };
         let length = message.len();
         let diagnostic = length <= wire::MAX_RESULT_DIAGNOSTIC_BYTES
