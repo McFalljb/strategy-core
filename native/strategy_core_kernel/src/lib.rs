@@ -2,11 +2,13 @@
 //!
 //! This crate defines the contract only: the traits a kernel is driven through, the owned
 //! canonical state and event model (`state`, `event`), the supplied originals those carry
-//! (`supplied`, `decimal`), the borrowed views kernels read (`events`), and pure execution
-//! fee calculations (`fees`). Trader and
+//! (`supplied`, `decimal`), the borrowed views kernels read (`events`), pure execution fee
+//! calculations (`fees`), and pure lookups: stations and series tickers (`stations`), station
+//! time zones and climate days (`climate_day`), and component age (`freshness`). Trader and
 //! Backtester own their runtime adapters, codecs and broker/risk/accounting implementations.
 
 pub mod actions;
+pub mod climate_day;
 pub mod context;
 pub mod decimal;
 pub mod errors;
@@ -14,7 +16,9 @@ pub mod event;
 pub mod events;
 pub mod fees;
 pub mod forecast;
+pub mod freshness;
 pub mod state;
+pub mod stations;
 pub mod supplied;
 pub mod weather;
 

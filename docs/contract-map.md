@@ -1245,6 +1245,15 @@ let timezone = station_timezone(Some("KMIA"), None)?;
 - NWS climate-day boundaries use local standard time, including during daylight
   saving time.
 
+Kernels get the same station and climate-day helpers, with the same names and
+behaviour, from `strategy_core_kernel::stations` and
+`strategy_core_kernel::climate_day`. Component age is computed from state, not
+queried: `ComponentMeta::age_at(now)` and
+`ComponentMeta::freshness_at(now, stale_after)` (`strategy_core_kernel::freshness`)
+return `Fresh`, `Stale` (older than `stale_after`) or `Missing` (no update time),
+with the host's authority and refresh error beside it; pass
+`ctx.runtime().now()` as `now`.
+
 ### Signal constants
 
 The package exports these stable audit/signal labels:
