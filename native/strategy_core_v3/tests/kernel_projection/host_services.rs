@@ -166,7 +166,7 @@ fn kernels_read_exact_parameters_and_the_granted_capabilities() {
         serde_json::json!(0.425),
         "same f64 as the initializer"
     );
-    assert_ne!(KernelCapabilities::default().timers, true);
+    assert!(!KernelCapabilities::default().timers);
 }
 
 #[test]
