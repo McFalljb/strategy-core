@@ -5,7 +5,7 @@ use strategy_core_kernel::{
     OrderResult, OrderStatus, OrderStatusView, OrderType, ParameterValue, PlaceOrderRequest,
     PriceLevelView, PriceUpdateView, StrategyEventView, StrategyKernelBroker,
     StrategyKernelContext, StrategyKernelData, StrategyKernelRuntime, StrategyKernelState,
-    StrategyKernelTelemetry, StrategyParameters, TimerWakeView, WakeAtRequest,
+    StrategyKernelTelemetry, StrategyParameters, TimerHandle, TimerWakeView, WakeAtRequest,
 };
 
 const YES_BID_LEVELS: [PriceLevelView; 1] = [PriceLevelView::whole(0.41, 12)];
@@ -343,6 +343,27 @@ fn hosts_without_parameters_or_capabilities_supply_none_by_default() {
         telemetry.counters.is_empty(),
         "a host without gauges drops them"
     );
+
+    assert!(!ctx.capabilities().timer_handles);
+    let mut runtime = FakeRuntime::default();
+    let request = WakeAtRequest {
+        when: Utc.with_ymd_and_hms(2026, 5, 30, 12, 0, 0).unwrap(),
+        name: Some("exit".to_owned()),
+    };
+    assert!(runtime.schedule_timer(request).is_err());
+    assert!(
+        runtime.wakes.is_empty(),
+        "a refused handle schedules nothing"
+    );
+    let handle = TimerHandle {
+        key: "exit".to_owned(),
+        generation: "timer.delivery.1".to_owned(),
+    };
+    assert!(runtime.cancel_timer(&handle).is_err());
+    assert!(runtime.pending_timers().is_empty());
+    let kept = serde_json::to_string(&handle).unwrap();
+    assert_eq!(kept, r#"{"key":"exit","generation":"timer.delivery.1"}"#);
+    assert_eq!(serde_json::from_str::<TimerHandle>(&kept).unwrap(), handle);
 
     let parameters: StrategyParameters = [
         ("b".to_owned(), ParameterValue::I64(1)),

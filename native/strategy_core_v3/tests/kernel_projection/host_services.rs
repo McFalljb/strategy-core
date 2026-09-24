@@ -2,7 +2,10 @@
 //! capabilities, gauge and annotation telemetry, and cancellable timers.
 
 use super::*;
-use strategy_core_kernel::{AnnotationValue, KernelCapabilities, ParameterValue};
+use strategy_core_kernel::{
+    AnnotationValue, KernelCapabilities, ParameterValue, TimerHandle, WakeAtRequest,
+};
+use strategy_core_v3::decision_v4::TimerRecoveryV4;
 use strategy_core_v3::decision_v5::{DecisionResultV5, StrategyParameterValueV5};
 
 type Script = fn(&mut dyn StrategyKernelContext, &mut Vec<String>) -> KernelResult<()>;
@@ -246,4 +249,186 @@ fn a_rejected_decision_keeps_its_gauges_and_annotations() {
         .map(|diagnostic| diagnostic.code.as_str())
         .collect::<Vec<_>>();
     assert_eq!(codes, ["kernel_error", "kernel_gauge", "kernel_annotation"]);
+}
+
+thread_local! {
+    /// Stands in for a kernel checkpoint carrying a handle between decisions.
+    static KEPT_HANDLE: RefCell<Option<TimerHandle>> = const { RefCell::new(None) };
+}
+
+fn wake(name: &str) -> WakeAtRequest {
+    WakeAtRequest {
+        when: ns(EMITTED_NS) + chrono::Duration::minutes(5),
+        name: Some(name.to_owned()),
+    }
+}
+
+fn timer_commands(result: &DecisionResultV5) -> Vec<(String, String, String, &'static str)> {
+    result
+        .commands
+        .iter()
+        .filter_map(|command| match command {
+            StrategyCommandV5::ScheduleTimer {
+                command_id,
+                key,
+                generation,
+                ..
+            } => Some((
+                command_id.clone(),
+                key.clone(),
+                generation.clone(),
+                "schedule",
+            )),
+            StrategyCommandV5::CancelTimer {
+                command_id,
+                key,
+                generation,
+            } => Some((
+                command_id.clone(),
+                key.clone(),
+                generation.clone(),
+                "cancel",
+            )),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn a_timer_handle_cancels_with_the_generation_the_timer_was_scheduled_under() {
+    // Decision 1 schedules and keeps the handle.
+    let first = observation_context(Some("22.8"), Some("73"));
+    let (_, scheduled) = run_script(&first, |context, _| {
+        assert!(context.capabilities().timer_handles);
+        let handle = context.runtime().schedule_timer(wake("exit.check"))?;
+        KEPT_HANDLE.with(|kept| *kept.borrow_mut() = Some(handle));
+        Ok(())
+    });
+    let handle = KEPT_HANDLE.with(|kept| kept.borrow_mut().take()).unwrap();
+    assert_eq!(
+        handle,
+        TimerHandle {
+            key: "exit.check".to_owned(),
+            generation: "timer.delivery.daily.1".to_owned(),
+        }
+    );
+    let [(_, key, generation, "schedule")] = &timer_commands(&scheduled)[..] else {
+        panic!("one schedule: {:?}", scheduled.commands);
+    };
+    assert_eq!((key, generation), (&handle.key, &handle.generation));
+
+    // Decision 2, a later delivery: the host reports the pending timer as traderv3 recorded
+    // it, and the kept handle cancels it under the scheduling decision's generation.
+    let mut second = observation_context(Some("22.8"), Some("73"));
+    second.owner_state.delivery_id = "delivery.daily.2".to_owned();
+    second.owner_state.timer_recovery = Some(vec![
+        TimerRecoveryV4 {
+            key: "exit.check".to_owned(),
+            scheduled_at: u64::try_from(EMITTED_NS).unwrap(),
+            generation: generation.clone(),
+            admission_state: 0,
+        },
+        TimerRecoveryV4 {
+            key: "old.fired".to_owned(),
+            scheduled_at: 1,
+            generation: "timer.delivery.daily.0".to_owned(),
+            admission_state: 2,
+        },
+    ]);
+    KEPT_HANDLE.with(|kept| *kept.borrow_mut() = Some(handle.clone()));
+    let (seen, cancelled) = run_script(&second, |context, seen| {
+        let pending = context.runtime().pending_timers();
+        seen.push(format!("{pending:?}"));
+        let kept = KEPT_HANDLE.with(|kept| kept.borrow_mut().take()).unwrap();
+        assert_eq!(pending.len(), 1, "only active timers are pending");
+        assert_eq!(pending[0].handle, kept);
+        assert_eq!(pending[0].scheduled_for, ns(EMITTED_NS));
+        context.runtime().cancel_timer(&kept)
+    });
+    assert_eq!(cancelled.disposition, DecisionDispositionV5::Completed);
+    assert_eq!(
+        timer_commands(&cancelled),
+        [(
+            "command.delivery.daily.2.100".to_owned(),
+            "exit.check".to_owned(),
+            "timer.delivery.daily.1".to_owned(),
+            "cancel"
+        )]
+    );
+    assert!(seen[0].contains("exit.check"), "{seen:?}");
+}
+
+#[test]
+fn a_decision_carries_at_most_one_timer_operation_per_key() {
+    let context = observation_context(Some("22.8"), Some("73"));
+    let (_, result) = run_script(&context, |context, seen| {
+        let runtime = context.runtime();
+        let handle = runtime.schedule_timer(wake("a"))?;
+        seen.push("scheduled".to_owned());
+        assert!(
+            runtime.cancel_timer(&handle).is_err(),
+            "schedule then cancel"
+        );
+        assert!(runtime.schedule_timer(wake("a")).is_err(), "two schedules");
+        runtime.wake_at(wake("b"))?;
+        assert!(
+            runtime.schedule_timer(wake("b")).is_err(),
+            "wake_at then schedule"
+        );
+        let other = TimerHandle {
+            key: "c".to_owned(),
+            generation: "timer.delivery.daily.0".to_owned(),
+        };
+        runtime.cancel_timer(&other)?;
+        assert!(runtime.cancel_timer(&other).is_err(), "two cancels");
+        assert!(
+            runtime.schedule_timer(wake("c")).is_err(),
+            "cancel then schedule"
+        );
+        assert!(
+            runtime
+                .cancel_timer(&TimerHandle {
+                    key: "bad key".to_owned(),
+                    generation: "timer.x".to_owned(),
+                })
+                .is_err()
+        );
+        assert!(runtime.schedule_timer(wake("")).is_err());
+        let unnamed = runtime.schedule_timer(WakeAtRequest {
+            when: ns(EMITTED_NS),
+            name: None,
+        })?;
+        assert_eq!(unnamed.key, "kernel.wake");
+        Ok(())
+    });
+    assert_eq!(result.disposition, DecisionDispositionV5::Completed);
+    assert_eq!(
+        timer_commands(&result),
+        [
+            (
+                "command.delivery.daily.1.100".to_owned(),
+                "a".to_owned(),
+                "timer.delivery.daily.1".to_owned(),
+                "schedule"
+            ),
+            (
+                "command.delivery.daily.1.101".to_owned(),
+                "b".to_owned(),
+                "timer.delivery.daily.1".to_owned(),
+                "schedule"
+            ),
+            (
+                "command.delivery.daily.1.102".to_owned(),
+                "c".to_owned(),
+                "timer.delivery.daily.0".to_owned(),
+                "cancel"
+            ),
+            (
+                "command.delivery.daily.1.103".to_owned(),
+                "kernel.wake".to_owned(),
+                "timer.delivery.daily.1".to_owned(),
+                "schedule"
+            ),
+        ]
+    );
 }

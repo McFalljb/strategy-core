@@ -28,10 +28,10 @@ use strategy_core_kernel::{
     KernelCapabilities, KernelError, KernelResult, LastTrade, MarketComponents, MarketLifecycle,
     MarketState, NativeKernel, Observation, OracleScore, OracleScoresUpdated, OracleTable,
     OrderAction, OrderResult, OrderStatus, OrderStatusView, ParameterValue, PendingOrderView,
-    PlaceOrderRequest, PriceUpdate, Report, StationComponents, StationIdentity, StationState,
-    StationWeatherView, StrategyEvent, StrategyEventView, StrategyKernelBroker,
+    PendingTimer, PlaceOrderRequest, PriceUpdate, Report, StationComponents, StationIdentity,
+    StationState, StationWeatherView, StrategyEvent, StrategyEventView, StrategyKernelBroker,
     StrategyKernelContext, StrategyKernelData, StrategyKernelRuntime, StrategyKernelState,
-    StrategyKernelTelemetry, StrategyParameters, TickerQuote, TimerWake, ValueOrigin,
+    StrategyKernelTelemetry, StrategyParameters, TickerQuote, TimerHandle, TimerWake, ValueOrigin,
     WakeAtRequest, WeatherEvent, WeatherEventSource,
 };
 
@@ -332,6 +332,15 @@ pub fn strategy_parameters_json(
     Ok(parameters)
 }
 
+/// `TimerRecoveryV4::admission_state` of a timer that is scheduled and not yet delivered.
+const TIMER_ACTIVE: u8 = 0;
+/// Key of a timer scheduled without a name.
+const DEFAULT_TIMER_KEY: &str = "kernel.wake";
+
+fn timer_generation(context: &DecisionContextV5) -> String {
+    format!("timer.{}", context.owner_state.delivery_id)
+}
+
 fn parameter_value(value: &StrategyParameterValueV5) -> ParameterValue {
     match value {
         StrategyParameterValueV5::Null => ParameterValue::Null,
@@ -415,6 +424,9 @@ pub struct KernelSnapshot {
     broker: wire::BrokerDetailV5,
     finances: strategy_core_kernel::BrokerFinancialState,
     parameters: StrategyParameters,
+    /// The generation every timer scheduled in this decision carries.
+    timer_generation: String,
+    pending_timers: Vec<PendingTimer>,
 }
 
 impl KernelSnapshot {
@@ -480,6 +492,23 @@ impl KernelSnapshot {
                 .parameters
                 .iter()
                 .map(|(key, value)| (key.clone(), parameter_value(value)))
+                .collect(),
+            timer_generation: timer_generation(context),
+            pending_timers: context
+                .owner_state
+                .timer_recovery
+                .iter()
+                .flatten()
+                .filter(|timer| timer.admission_state == TIMER_ACTIVE)
+                .filter_map(|timer| {
+                    Some(PendingTimer {
+                        handle: TimerHandle {
+                            key: timer.key.clone(),
+                            generation: timer.generation.clone(),
+                        },
+                        scheduled_for: Utc.timestamp_nanos(i64::try_from(timer.scheduled_at).ok()?),
+                    })
+                })
                 .collect(),
         })
     }
@@ -1436,6 +1465,7 @@ pub struct KernelHost {
 /// A kernel request that `KernelAction` cannot carry without breaking kernels that match it
 /// exhaustively.
 enum HostEffect {
+    CancelTimer(TimerHandle),
     Gauge(strategy_core_kernel::TelemetryAction),
     Annotation {
         name: String,
@@ -1498,6 +1528,26 @@ impl KernelHost {
 
     fn push_effect(&mut self, effect: HostEffect) {
         self.effects.push((self.actions.len(), effect));
+    }
+
+    /// A V5 result may carry one timer command per key.
+    fn check_timer_key(&self, key: &str) -> KernelResult<()> {
+        if !wire::valid_identifier(key) {
+            return Err(KernelError::new(format!("invalid timer key {key:?}")));
+        }
+        let scheduled = self.actions.iter().any(|action| {
+            matches!(action, KernelAction::WakeAt(request)
+                if request.name.as_deref().unwrap_or(DEFAULT_TIMER_KEY) == key)
+        });
+        let cancelled = self.effects.iter().any(
+            |(_, effect)| matches!(effect, HostEffect::CancelTimer(handle) if handle.key == key),
+        );
+        if scheduled || cancelled {
+            return Err(KernelError::new(format!(
+                "timer {key:?} is already scheduled or cancelled in this decision"
+            )));
+        }
+        Ok(())
     }
 
     fn for_transaction(
@@ -1619,6 +1669,7 @@ impl StrategyKernelContext for KernelHost {
     fn capabilities(&self) -> KernelCapabilities {
         let mut capabilities = KernelCapabilities::default();
         capabilities.timers = true;
+        capabilities.timer_handles = true;
         capabilities.gauges = true;
         capabilities.annotations = true;
         capabilities
@@ -1770,6 +1821,32 @@ impl StrategyKernelRuntime for KernelHost {
     fn wake_at(&mut self, request: WakeAtRequest) -> KernelResult<()> {
         self.actions.push(KernelAction::WakeAt(request));
         Ok(())
+    }
+    fn schedule_timer(&mut self, request: WakeAtRequest) -> KernelResult<TimerHandle> {
+        let key = request
+            .name
+            .clone()
+            .unwrap_or_else(|| DEFAULT_TIMER_KEY.to_owned());
+        self.check_timer_key(&key)?;
+        self.actions.push(KernelAction::WakeAt(request));
+        Ok(TimerHandle {
+            key,
+            generation: self.snapshot.timer_generation.clone(),
+        })
+    }
+    fn cancel_timer(&mut self, handle: &TimerHandle) -> KernelResult<()> {
+        self.check_timer_key(&handle.key)?;
+        if !wire::valid_identifier(&handle.generation) {
+            return Err(KernelError::new(format!(
+                "invalid timer generation {:?}",
+                handle.generation
+            )));
+        }
+        self.push_effect(HostEffect::CancelTimer(handle.clone()));
+        Ok(())
+    }
+    fn pending_timers(&self) -> Vec<PendingTimer> {
+        self.snapshot.pending_timers.clone()
     }
 }
 
@@ -1959,10 +2036,24 @@ fn append_host_outputs(
 ) -> Result<(), KernelTransactionError> {
     let mut index = 0;
     for output in outputs {
-        let HostOutput::Action(action) = output else {
-            // Effects take an ordinal like the telemetry actions they sit beside.
-            index += 1;
-            continue;
+        let action = match output {
+            HostOutput::Action(action) => action,
+            HostOutput::Effect(effect) => {
+                let id = format!(
+                    "command.{}.{}",
+                    context.owner_state.delivery_id,
+                    index + 100
+                );
+                index += 1;
+                if let HostEffect::CancelTimer(handle) = effect {
+                    result.commands.push(StrategyCommandV5::CancelTimer {
+                        command_id: id,
+                        key: handle.key.clone(),
+                        generation: handle.generation.clone(),
+                    });
+                }
+                continue;
+            }
         };
         let added_gate = match (action, gate_code) {
             (KernelAction::Telemetry(counter), Some(code)) => counter.name == code,
@@ -1989,7 +2080,7 @@ fn append_host_outputs(
                     key: request
                         .name
                         .clone()
-                        .unwrap_or_else(|| "kernel.wake".to_owned()),
+                        .unwrap_or_else(|| DEFAULT_TIMER_KEY.to_owned()),
                     scheduled_at_epoch_ns: u64::try_from(
                         request
                             .when
@@ -1997,7 +2088,7 @@ fn append_host_outputs(
                             .ok_or(KernelTransactionError::InvalidTime)?,
                     )
                     .map_err(|_| KernelTransactionError::InvalidTime)?,
-                    generation: format!("timer.{}", context.owner_state.delivery_id),
+                    generation: timer_generation(context),
                     semantics: Vec::new(),
                 })
             }
@@ -2029,6 +2120,7 @@ pub fn append_kernel_telemetry(actions: &[KernelAction], result: &mut DecisionRe
 /// Gauges and annotations use the counter channel with their own diagnostic codes.
 fn effect_telemetry(effect: &HostEffect) -> Option<(&'static str, &'static str, String)> {
     Some(match effect {
+        HostEffect::CancelTimer(_) => return None,
         HostEffect::Gauge(gauge) => (
             "kernel_gauge",
             "info",

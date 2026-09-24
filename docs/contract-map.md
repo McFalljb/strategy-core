@@ -1457,7 +1457,8 @@ The native context exposes these exact trait surfaces:
   return an empty set.
 - `StrategyKernelContext::capabilities() -> KernelCapabilities`: what the host
   grants: `mode` (`Paper`, `Live`, `Replay`, or `None` when the host does not
-  state it), `timers`, `gauges` and `annotations`. The default grants nothing.
+  state it), `timers`, `timer_handles`, `gauges` and `annotations`. The default
+  grants nothing.
   The Decision V5 host grants the others and states no mode, because V5 contexts
   do not carry it.
 - `StrategyKernelContext::data() -> &dyn StrategyKernelData`: reserved narrow
@@ -1467,7 +1468,19 @@ The native context exposes these exact trait surfaces:
   `position_avg_price(ticker, side)`, `pending_orders()`,
   `place_order(request)`, `cancel_order(request)`, and `cancel_all_orders()`.
 - `StrategyKernelContext::runtime() -> &mut dyn StrategyKernelRuntime`:
-  `wake_at(WakeAtRequest)`.
+  `now()`, `wake_at(WakeAtRequest)`, and, when `capabilities().timer_handles`:
+  `schedule_timer(WakeAtRequest) -> TimerHandle`, `cancel_timer(&TimerHandle)` and
+  `pending_timers() -> Vec<PendingTimer>`. A `TimerHandle` is the timer's key (the
+  request name, or `kernel.wake`) and the generation the host scheduled it under;
+  it serializes, so a kernel can keep it in its checkpoint and cancel in a later
+  decision. A cancel applies only while the pending timer still has that
+  generation, so a stale handle never cancels a newer schedule of the same key.
+  `pending_timers()` lists the Sleeve's pending timers as delivered with the
+  decision. Under Decision V5 the generation is `timer.<delivery_id>` of the
+  scheduling decision, a decision may carry one timer operation per key (a second
+  `schedule_timer`/`cancel_timer` for a key is refused; rescheduling a key in a
+  later decision replaces the timer), and a cancel is a `CancelTimer` command.
+  Hosts without handles refuse both calls. `wake_at` keeps returning `()`.
 - `StrategyKernelContext::telemetry() -> &mut dyn StrategyKernelTelemetry`:
   `counter(name, value, fields)` where fields are `&[(&str, &str)]`;
   `gauge(name, value, fields)`; and `annotate(name, value, fields)` with an

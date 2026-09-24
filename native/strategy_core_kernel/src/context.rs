@@ -2,13 +2,14 @@ use crate::actions::{
     CancelOrderRequest, ContractQuantity, ContractSide, KernelAction, OrderResult, OrderStatusView,
     PendingOrderView, PlaceOrderRequest, WakeAtRequest,
 };
-use crate::errors::KernelResult;
+use crate::errors::{KernelError, KernelResult};
 use crate::events::{
     ForecastInputSnapshot, OracleInputSnapshot, StationWeatherView, StrategyEventView,
     TickerPriceView,
 };
 use crate::state::{BrokerFinancialState, MarketState, StationState};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 pub trait NativeKernel {
@@ -160,6 +161,42 @@ pub trait StrategyKernelRuntime {
     }
 
     fn wake_at(&mut self, request: WakeAtRequest) -> KernelResult<()>;
+
+    /// Schedules a timer as [`Self::wake_at`] does and returns its handle, which
+    /// [`Self::cancel_timer`] accepts in this or a later decision; keep it in the checkpoint to
+    /// cancel later. Hosts without handles (`KernelCapabilities::timer_handles` false) refuse
+    /// and schedule nothing.
+    fn schedule_timer(&mut self, _request: WakeAtRequest) -> KernelResult<TimerHandle> {
+        Err(KernelError::new("this host does not issue timer handles"))
+    }
+
+    /// Cancels the timer the handle names if it is still pending with that generation; a
+    /// timer that already fired or was replaced is left alone. Hosts without handles refuse.
+    fn cancel_timer(&mut self, _handle: &TimerHandle) -> KernelResult<()> {
+        Err(KernelError::new("this host does not cancel timers"))
+    }
+
+    /// This Sleeve's pending timers as the host delivered them with this decision, before
+    /// anything the kernel schedules or cancels in it. Empty when the host does not report them.
+    fn pending_timers(&self) -> Vec<PendingTimer> {
+        Vec::new()
+    }
+}
+
+/// Names one scheduled timer: its key (the `WakeAtRequest` name, or the host's default key)
+/// and the generation the host scheduled it under. A later schedule with the same key
+/// replaces the timer under a new generation, so an old handle no longer cancels it.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+pub struct TimerHandle {
+    pub key: String,
+    pub generation: String,
+}
+
+/// A timer that has not fired or been cancelled.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PendingTimer {
+    pub handle: TimerHandle,
+    pub scheduled_for: DateTime<Utc>,
 }
 
 pub trait StrategyKernelTelemetry {
@@ -319,6 +356,9 @@ pub struct KernelCapabilities {
     pub mode: Option<RuntimeMode>,
     /// `StrategyKernelRuntime::wake_at` schedules one-shot timers.
     pub timers: bool,
+    /// `schedule_timer` returns handles that `cancel_timer` accepts, and `pending_timers`
+    /// reports the Sleeve's pending timers.
+    pub timer_handles: bool,
     /// `StrategyKernelTelemetry::gauge` is recorded.
     pub gauges: bool,
     /// `StrategyKernelTelemetry::annotate` is recorded.
