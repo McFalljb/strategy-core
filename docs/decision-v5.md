@@ -2,7 +2,7 @@
 
 Decision V5 is the bounded shared contract for stateful Trader V3 Strategies. A V5 context embeds the V4 owner projection and adds exact Strategy scope, side-aware Broker state, one typed trigger, an authoritative wall clock, supplied originals, and—only for a Broker outcome delivery—the durable continuation commitment created from the prior result. V4 wire layouts remain frozen even though active Rust weather fields no longer expose WU.
 
-**Local acceptance: scoped Trader/Core R1 and R2 pass their owning/application gates and bounded review disposition.** The owner approved a clean current packet with historical readers. D now carries explicit weather winners, accepted forecast issuance/current advertisements, host-query oracle records and captured queued weather inputs. Historical corpus hashes remain unchanged. See `/tmp/trader-contract-fix.OEJmyi/evidence/r2/current-status.md` for exact candidate evidence and qualification limits. This is not immutable release or production qualification.
+**Local acceptance: scoped Trader/Core R1 and R2 pass their owning/application gates and bounded review disposition.** The owner approved a clean current packet with historical readers. D now carries explicit weather winners, accepted forecast issuance/current advertisements, host-query oracle records and captured queued weather inputs. Historical corpus hashes remain unchanged. This is not immutable release or production qualification.
 
 **R3 candidate:** E adds bounded verified multi-call Broker replay. Codec and mixed place/cancel/refusal transaction contracts pass locally, but configured-consumer migration, full application/restart qualification and final review remain open. R2 evidence does not qualify this newer candidate.
 

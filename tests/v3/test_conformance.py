@@ -50,7 +50,14 @@ ALLOWED_PYTHON_IMPORTS = {
     "re",
     "unicodedata",
 }
-ALLOWED_RUST_DEPENDENCIES = {"sha2", "unicode-normalization"}
+ALLOWED_RUST_DEPENDENCIES = {
+    "bincode",
+    "chrono",
+    "serde_json",
+    "sha2",
+    "strategy-core-kernel",
+    "unicode-normalization",
+}
 ALLOWED_RUST_DEV_DEPENDENCIES = {"serde_json"}
 
 
