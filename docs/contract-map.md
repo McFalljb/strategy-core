@@ -1119,6 +1119,28 @@ Conservative reservations are separate from these actual execution charges.
 
 This is pure arithmetic, not proof of venue authority, liquidity role, admission,
 durable posting, or live execution parity. The host owns those obligations.
+
+#### Kernel fee helpers (what the Broker charges and reserves)
+
+Kernels use these instead of the legacy floating helpers. They take a
+`ContractQuantity` and the Market's `FeeTerms` (`MarketState::fee_terms()`, or
+`FeeTerms::from_market(fee_type, fee_multiplier_millionths)`, which refuses an
+unknown fee type or an absent/negative multiplier as the Broker does):
+
+| Helper | Result |
+|---|---|
+| `calculate_trade_fee_micros(price, quantity, role, terms)` | Trade fee rounded up to $0.000001. |
+| `calculate_fill_fee_micros(action, price, quantity, role, accumulator, terms)` | The Broker's charge for one fill (`calculate_direct_member_fill_fee_micros`). |
+| `apply_fee_rounding_micros(revenue, trade_fee, accumulator)` | Posting to the $0.0001 grid with the capped rebate. |
+| `buy_fee_reservation_micros(cap, quantity, terms)` | The fee reservation the Broker requires for a new buy. |
+| `buy_commitment_micros(cap, quantity, terms)` | Exact principal plus that reservation: the cash a buy commits at admission. |
+| `price_micros(price)` | The host's `f64` price to microdollars conversion. |
+
+The legacy `calculate_fill_fee`/`calculate_trade_fee`/`apply_fee_rounding` follow an
+older schedule: trade fees round up to $0.0001, posted cash rounds down to $0.01,
+the rebate is uncapped (a fill's net fee can be negative), and absent terms default
+to `quadratic_with_maker_fees` × 1. `native/strategy_core_kernel/tests/fees.rs`
+pins both schedules for the same inputs.
 The broad Rust crate re-exports the fee authority types and exposes a corresponding
 exact-unit helper for its retained `Action` type; its existing floating helpers
 remain available and must not be used as a financial integer round trip.
@@ -1222,6 +1244,15 @@ let timezone = station_timezone(Some("KMIA"), None)?;
 - Unknown or invalid timezones raise `ValueError`.
 - NWS climate-day boundaries use local standard time, including during daylight
   saving time.
+
+Kernels get the same station and climate-day helpers, with the same names and
+behaviour, from `strategy_core_kernel::stations` and
+`strategy_core_kernel::climate_day`. Component age is computed from state, not
+queried: `ComponentMeta::age_at(now)` and
+`ComponentMeta::freshness_at(now, stale_after)` (`strategy_core_kernel::freshness`)
+return `Fresh`, `Stale` (older than `stale_after`) or `Missing` (no update time),
+with the host's authority and refresh error beside it; pass
+`ctx.runtime().now()` as `now`.
 
 ### Signal constants
 
@@ -1389,6 +1420,12 @@ impl NativeKernel for MyKernel {
 
 Optional lifecycle hooks are `on_start`, `on_event`, and `on_finish`.
 
+Under Decision V5, `on_finish` is never called and the `ForecastVersions` and
+`Shutdown` events are never delivered; only the legacy v2 bot host (and, for
+`on_finish`, the backtester) uses them. `state_read_diagnostics()` is always empty
+there because all state arrives in the context. They stay while kernels still
+match or call them and are removed with the Decision V6 kernel API change.
+
 ### Kernel export inventory — migration in progress
 
 **2026-09-12:** the kernel crate owns canonical `StationState`, `MarketState`, `StrategyEvent`, `Decimal` and supplied-input types in addition to the legacy borrowed surfaces below. See `native/strategy_core_kernel/src/lib.rs` for the current exports and [Decision V5](decision-v5.md) for codec/transaction details. Mandatory borrowed canonical access is implemented for the Trader/Core slice; legacy/Backtester host migration and full application qualification remain unfinished. This section does not claim final cross-consumer qualification. Broader Python/legacy models documented elsewhere may retain WU for separate compatibility/research uses; WU is excluded from Trader's active canonical kernel input path.
@@ -1418,6 +1455,18 @@ The native context exposes these exact trait surfaces:
   `latest_oracle_scores(station_id, mode, rank_by, days)` derive from those models.
   `state_read_diagnostics()` remains a host diagnostic hook. Getters do not fetch
   provider data.
+- `StrategyKernelContext::parameters() -> &StrategyParameters`: the Strategy's
+  configured parameters, read-only, by key (`get`, `iter`); each is a
+  `ParameterValue` (`Null`, `Bool`, `I64`, `U64`, exact `Decimal { coefficient,
+  scale }`, `String`) with `as_bool`/`as_i64`/`as_u64`/`as_f64`/`as_str`. The
+  Decision V5 host supplies `StrategyScopeV5.parameters`; hosts without them
+  return an empty set.
+- `StrategyKernelContext::capabilities() -> KernelCapabilities`: what the host
+  grants: `mode` (`Paper`, `Live`, `Replay`, or `None` when the host does not
+  state it), `timers`, `timer_handles`, `gauges` and `annotations`. The default
+  grants nothing.
+  The Decision V5 host grants the others and states no mode, because V5 contexts
+  do not carry it.
 - `StrategyKernelContext::data() -> &dyn StrategyKernelData`: reserved narrow
   data trait; it has no methods today.
 - `StrategyKernelContext::broker() -> &mut dyn StrategyKernelBroker`:
@@ -1425,9 +1474,27 @@ The native context exposes these exact trait surfaces:
   `position_avg_price(ticker, side)`, `pending_orders()`,
   `place_order(request)`, `cancel_order(request)`, and `cancel_all_orders()`.
 - `StrategyKernelContext::runtime() -> &mut dyn StrategyKernelRuntime`:
-  `wake_at(WakeAtRequest)`.
+  `now()`, `wake_at(WakeAtRequest)`, and, when `capabilities().timer_handles`:
+  `schedule_timer(WakeAtRequest) -> TimerHandle`, `cancel_timer(&TimerHandle)` and
+  `pending_timers() -> Vec<PendingTimer>`. A `TimerHandle` is the timer's key (the
+  request name, or `kernel.wake`) and the generation the host scheduled it under;
+  it serializes, so a kernel can keep it in its checkpoint and cancel in a later
+  decision. A cancel applies only while the pending timer still has that
+  generation, so a stale handle never cancels a newer schedule of the same key.
+  `pending_timers()` lists the Sleeve's pending timers as delivered with the
+  decision. Under Decision V5 the generation is `timer.<delivery_id>` of the
+  scheduling decision, a decision may carry one timer operation per key (a second
+  `schedule_timer`/`cancel_timer` for a key is refused; rescheduling a key in a
+  later decision replaces the timer), and a cancel is a `CancelTimer` command.
+  Hosts without handles refuse both calls. `wake_at` keeps returning `()`.
 - `StrategyKernelContext::telemetry() -> &mut dyn StrategyKernelTelemetry`:
-  `counter(name, value, fields)` where fields are `&[(&str, &str)]`.
+  `counter(name, value, fields)` where fields are `&[(&str, &str)]`;
+  `gauge(name, value, fields)`; and `annotate(name, value, fields)` with an
+  `AnnotationValue` (`Text`, `Integer`, `Float`, `Bool`, `Null`). Hosts that do
+  not record gauges or annotations (`capabilities().gauges` / `.annotations`
+  false) drop them. The Decision V5 host records them in result diagnostics
+  beside counters, in call order, with codes `kernel_gauge` and
+  `kernel_annotation` (a float annotation carries its value and bit pattern).
 - `StrategyKernelContext::emit(KernelAction)`: emit a
   place/cancel/cancel-all/wake/telemetry/log/stop action through the runtime.
 

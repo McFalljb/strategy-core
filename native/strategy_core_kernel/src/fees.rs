@@ -1,10 +1,33 @@
 //! Exact direct-member execution fees and order-wide rounding credits.
+//!
+//! Every helper computes what the Broker charges and reserves: traderv3 binds its
+//! `ExecutionFeeCalculator` to [`calculate_direct_member_fill_fee_micros`] and
+//! [`reserve_direct_member_buy_fee_micros`], and a buy's commitment is its exact principal plus
+//! that reservation ([`buy_commitment_micros`]). Amounts are microdollars, prices are
+//! microdollars per contract, and quantities are [`ContractQuantity`] hundredths; no monetary
+//! value passes through `f64`.
+//!
+//! These replace the legacy general helpers (`calculate_fill_fee`, `calculate_trade_fee`,
+//! `apply_fee_rounding`), which follow an older schedule the Broker does not use:
+//!
+//! | | Legacy helpers | These helpers (the Broker) |
+//! |---|---|---|
+//! | Trade fee rounding | up to $0.0001 | up to $0.000001 |
+//! | Posted cash rounding | down to $0.01 | down to $0.0001 |
+//! | Rebate | uncapped, so a fill's net fee can be negative | capped at the fill's own fee |
+//! | Fee type / multiplier absent | `quadratic_with_maker_fees` / 1.0 | refused ([`FeeTerms::from_market`]) |
+//! | Negative quantity or multiplier | computed | refused |
 
 use std::{error::Error, fmt, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 
-use crate::actions::OrderAction;
+use crate::actions::{ContractQuantity, OrderAction};
+use crate::state::MarketState;
+
+const MICROS_PER_DOLLAR: u64 = 1_000_000;
+/// Signed cash postings and rebates align to $0.0001.
+const POSTING_GRID_MICROS: i128 = 100;
 
 pub type FeeResult<T> = Result<T, FeeError>;
 
@@ -66,6 +89,181 @@ impl FeeType {
     }
 }
 
+/// A Market's execution fee authority: its fee curve and multiplier in millionths.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct FeeTerms {
+    pub fee_type: FeeType,
+    pub multiplier_millionths: u64,
+}
+
+impl FeeTerms {
+    pub const fn new(fee_type: FeeType, multiplier_millionths: u64) -> Self {
+        Self {
+            fee_type,
+            multiplier_millionths,
+        }
+    }
+
+    /// Parses a Market's fee authority as the Broker admits it: an unknown fee type, or an
+    /// absent or negative multiplier, is refused rather than defaulted.
+    pub fn from_market(fee_type: &str, multiplier_millionths: Option<i64>) -> FeeResult<Self> {
+        let fee_type = fee_type.parse::<FeeType>()?;
+        let multiplier_millionths = multiplier_millionths
+            .and_then(|value| u64::try_from(value).ok())
+            .ok_or(FeeError::InvalidInput(
+                "fee multiplier is absent or negative",
+            ))?;
+        Ok(Self::new(fee_type, multiplier_millionths))
+    }
+}
+
+impl MarketState {
+    /// This Market's fee authority; see [`FeeTerms::from_market`].
+    pub fn fee_terms(&self) -> FeeResult<FeeTerms> {
+        FeeTerms::from_market(&self.fee_type, self.fee_multiplier_millionths)
+    }
+}
+
+/// A price in dollars as microdollars, rounded to the nearest microdollar. Prices outside
+/// `[0, 1]` and non-finite values are refused. This is the conversion the Decision host applies
+/// to a kernel's `limit_price`.
+pub fn price_micros(price: f64) -> FeeResult<u64> {
+    if !price.is_finite() || !(0.0..=1.0).contains(&price) {
+        return Err(FeeError::InvalidInput("price is not within [0, 1]"));
+    }
+    Ok((price * MICROS_PER_DOLLAR as f64).round() as u64)
+}
+
+fn quantity_hundredths(quantity: ContractQuantity) -> FeeResult<u64> {
+    u64::try_from(quantity.hundredths()).map_err(|_| FeeError::InvalidInput("quantity is negative"))
+}
+
+/// The trade fee of one fill, rounded up to the microdollar. It excludes the posting
+/// rounding fee and any rebate; see [`calculate_fill_fee_micros`] for the charged amount.
+pub fn calculate_trade_fee_micros(
+    price_micros: u64,
+    quantity: ContractQuantity,
+    liquidity_role: LiquidityRole,
+    terms: FeeTerms,
+) -> FeeResult<u64> {
+    if price_micros > MICROS_PER_DOLLAR {
+        return Err(FeeError::InvalidInput("fill price exceeds one dollar"));
+    }
+    trade_fee_micros(
+        price_micros,
+        quantity_hundredths(quantity)?,
+        terms.fee_type.base_rate_millionths(liquidity_role),
+        terms.multiplier_millionths,
+    )
+}
+
+/// What the Broker charges for one fill: [`calculate_direct_member_fill_fee_micros`] over an
+/// exact quantity and the Market's fee terms. Keep the returned accumulator across the same
+/// order's fills.
+pub fn calculate_fill_fee_micros(
+    action: OrderAction,
+    price_micros: u64,
+    quantity: ContractQuantity,
+    liquidity_role: LiquidityRole,
+    fee_accumulator_micros: u64,
+    terms: FeeTerms,
+) -> FeeResult<FeeCalculationMicros> {
+    calculate_direct_member_fill_fee_micros(
+        action,
+        price_micros,
+        quantity_hundredths(quantity)?,
+        liquidity_role,
+        fee_accumulator_micros,
+        terms.fee_type,
+        terms.multiplier_millionths,
+    )
+}
+
+/// Posts one fill's signed revenue (negative for a buy) less its trade fee: floors the cash
+/// change to $0.0001, adds the floored remainder to the order's accumulator, and rebates the
+/// accumulator's whole $0.0001 units up to this fill's own fee.
+pub fn apply_fee_rounding_micros(
+    revenue_micros: i128,
+    trade_fee_micros: u64,
+    fee_accumulator_micros: u64,
+) -> FeeResult<FeeCalculationMicros> {
+    let unposted = revenue_micros
+        .checked_sub(i128::from(trade_fee_micros))
+        .ok_or(FeeError::InvalidInput(
+            "fee amount exceeds microdollar range",
+        ))?;
+    let posted = unposted.div_euclid(POSTING_GRID_MICROS) * POSTING_GRID_MICROS;
+    let rounding_fee = (unposted - posted) as u64;
+    let accumulated = u128::from(fee_accumulator_micros) + u128::from(rounding_fee);
+    let before_rebate = u128::from(trade_fee_micros) + u128::from(rounding_fee);
+    let rebate = (accumulated / 100 * 100).min(before_rebate / 100 * 100);
+    let net_fee = u64::try_from(before_rebate - rebate)
+        .map_err(|_| FeeError::InvalidInput("fee amount exceeds microdollar range"))?;
+    let accumulator = u64::try_from(accumulated - rebate)
+        .map_err(|_| FeeError::InvalidInput("fee accumulator exceeds microdollar range"))?;
+    Ok(FeeCalculationMicros {
+        trade_fee_micros,
+        rounding_fee_micros: rounding_fee,
+        rebate_micros: u64::try_from(rebate)
+            .map_err(|_| FeeError::InvalidInput("fee rebate exceeds microdollar range"))?,
+        net_fee_micros: net_fee,
+        posted_balance_change_micros: revenue_micros.checked_sub(i128::from(net_fee)).ok_or(
+            FeeError::InvalidInput("fee amount exceeds microdollar range"),
+        )?,
+        fee_accumulator_micros: accumulator,
+    })
+}
+
+/// The fee reservation the Broker requires for a new buy at `price_cap_micros` (the limit
+/// price, or a Market buy's price cap): [`reserve_direct_member_buy_fee_micros`].
+pub fn buy_fee_reservation_micros(
+    price_cap_micros: u64,
+    quantity: ContractQuantity,
+    terms: FeeTerms,
+) -> FeeResult<u64> {
+    reserve_direct_member_buy_fee_micros(
+        price_cap_micros,
+        quantity_hundredths(quantity)?,
+        terms.fee_type,
+        terms.multiplier_millionths,
+    )
+}
+
+/// The cash a new buy commits at admission: its exact principal at `price_cap_micros` plus
+/// [`buy_fee_reservation_micros`]. This is what the Broker checks against the Sleeve allowance
+/// and the account balance and holds until the order completes or is cancelled. A zero quantity
+/// or price, or a principal that is not a whole number of microdollars, is refused as the
+/// Broker refuses it. Reduce-only sells commit inventory, not cash.
+pub fn buy_commitment_micros(
+    price_cap_micros: u64,
+    quantity: ContractQuantity,
+    terms: FeeTerms,
+) -> FeeResult<u64> {
+    let hundredths = quantity_hundredths(quantity)?;
+    if hundredths == 0 || price_cap_micros == 0 {
+        return Err(FeeError::InvalidInput(
+            "buy order needs a positive quantity and price",
+        ));
+    }
+    let product = u128::from(hundredths) * u128::from(price_cap_micros);
+    if product % 100 != 0 {
+        return Err(FeeError::InvalidInput(
+            "order principal is not exact in microdollars",
+        ));
+    }
+    let principal = u64::try_from(product / 100)
+        .map_err(|_| FeeError::InvalidInput("order principal exceeds microdollar range"))?;
+    principal
+        .checked_add(buy_fee_reservation_micros(
+            price_cap_micros,
+            quantity,
+            terms,
+        )?)
+        .ok_or(FeeError::InvalidInput(
+            "order commitment exceeds microdollar range",
+        ))
+}
+
 /// Exact execution amounts. Principal is not a fee; the posted cash change includes both.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FeeCalculationMicros {
@@ -112,25 +310,7 @@ pub fn calculate_direct_member_fill_fee_micros(
         OrderAction::Buy => -i128::from(principal),
         OrderAction::Sell => i128::from(principal),
     };
-    let unposted = revenue - i128::from(trade_fee);
-    let posted = unposted.div_euclid(100) * 100;
-    let rounding_fee = (unposted - posted) as u64;
-    let accumulated = u128::from(fee_accumulator_micros) + u128::from(rounding_fee);
-    let before_rebate = u128::from(trade_fee) + u128::from(rounding_fee);
-    let rebate = (accumulated / 100 * 100).min(before_rebate / 100 * 100);
-    let net_fee = u64::try_from(before_rebate - rebate)
-        .map_err(|_| FeeError::InvalidInput("fee amount exceeds microdollar range"))?;
-    let accumulator = u64::try_from(accumulated - rebate)
-        .map_err(|_| FeeError::InvalidInput("fee accumulator exceeds microdollar range"))?;
-    Ok(FeeCalculationMicros {
-        trade_fee_micros: trade_fee,
-        rounding_fee_micros: rounding_fee,
-        rebate_micros: u64::try_from(rebate)
-            .map_err(|_| FeeError::InvalidInput("fee rebate exceeds microdollar range"))?,
-        net_fee_micros: net_fee,
-        posted_balance_change_micros: revenue - i128::from(net_fee),
-        fee_accumulator_micros: accumulator,
-    })
+    apply_fee_rounding_micros(revenue, trade_fee, fee_accumulator_micros)
 }
 
 /// Additional cash above cap principal for a new buy order's total spending bound.

@@ -3150,7 +3150,7 @@ fn hex_digest(bytes: &[u8]) -> String {
     output
 }
 
-fn valid_identifier(value: &str) -> bool {
+pub(crate) fn valid_identifier(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= MAX_IDENTIFIER_BYTES
         && value

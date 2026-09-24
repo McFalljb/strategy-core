@@ -483,6 +483,9 @@ pub enum StrategyEventView<'a> {
     PriceUpdate(PriceUpdateView<'a>),
     Observation(ObservationView<'a>),
     ForecastUpdated(ForecastUpdatedView<'a>),
+    /// Not delivered by the Decision V5 host, which presents forecasts as `ForecastUpdated`
+    /// and in state; only the legacy v2 bot host delivers it. Every kernel still matches it,
+    /// so it goes with the Decision V6 kernel API change rather than now.
     ForecastVersions(ForecastVersionsView<'a>),
     OracleScoresUpdated(OracleScoresUpdatedView<'a>),
     StationReport(StationReportView<'a>),
@@ -490,6 +493,9 @@ pub enum StrategyEventView<'a> {
     NewHigh(HighLowView<'a>),
     NewLow(HighLowView<'a>),
     TimerWake(TimerWakeView<'a>),
+    /// Not delivered by the Decision V5 host (a Sleeve stops between decisions, with no
+    /// final invocation); only the legacy v2 bot host delivers it. Every kernel still matches
+    /// it, so it goes with the Decision V6 kernel API change rather than now.
     Shutdown(ShutdownView<'a>),
     Unknown {
         event_type: &'a str,

@@ -38,6 +38,8 @@ use strategy_core_v3::supplied_v5::{
     SuppliedWeatherEventV5,
 };
 
+#[path = "kernel_projection/host_services.rs"]
+mod host_services;
 #[path = "kernel_projection/replay.rs"]
 mod replay;
 
