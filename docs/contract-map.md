@@ -1119,6 +1119,28 @@ Conservative reservations are separate from these actual execution charges.
 
 This is pure arithmetic, not proof of venue authority, liquidity role, admission,
 durable posting, or live execution parity. The host owns those obligations.
+
+#### Kernel fee helpers (what the Broker charges and reserves)
+
+Kernels use these instead of the legacy floating helpers. They take a
+`ContractQuantity` and the Market's `FeeTerms` (`MarketState::fee_terms()`, or
+`FeeTerms::from_market(fee_type, fee_multiplier_millionths)`, which refuses an
+unknown fee type or an absent/negative multiplier as the Broker does):
+
+| Helper | Result |
+|---|---|
+| `calculate_trade_fee_micros(price, quantity, role, terms)` | Trade fee rounded up to $0.000001. |
+| `calculate_fill_fee_micros(action, price, quantity, role, accumulator, terms)` | The Broker's charge for one fill (`calculate_direct_member_fill_fee_micros`). |
+| `apply_fee_rounding_micros(revenue, trade_fee, accumulator)` | Posting to the $0.0001 grid with the capped rebate. |
+| `buy_fee_reservation_micros(cap, quantity, terms)` | The fee reservation the Broker requires for a new buy. |
+| `buy_commitment_micros(cap, quantity, terms)` | Exact principal plus that reservation: the cash a buy commits at admission. |
+| `price_micros(price)` | The host's `f64` price to microdollars conversion. |
+
+The legacy `calculate_fill_fee`/`calculate_trade_fee`/`apply_fee_rounding` follow an
+older schedule: trade fees round up to $0.0001, posted cash rounds down to $0.01,
+the rebate is uncapped (a fill's net fee can be negative), and absent terms default
+to `quadratic_with_maker_fees` × 1. `native/strategy_core_kernel/tests/fees.rs`
+pins both schedules for the same inputs.
 The broad Rust crate re-exports the fee authority types and exposes a corresponding
 exact-unit helper for its retained `Action` type; its existing floating helpers
 remain available and must not be used as a financial integer round trip.
