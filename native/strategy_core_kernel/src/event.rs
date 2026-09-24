@@ -60,6 +60,8 @@ pub enum StrategyEvent {
     PriceUpdate(Box<PriceUpdate>),
     Observation(Box<Observation>),
     ForecastUpdated(Box<ForecastUpdated>),
+    /// Not produced by the Decision V5 host; only the legacy v2 bot host produces it. Kept
+    /// while kernels match it; see `StrategyEventView::ForecastVersions`.
     ForecastVersions(Box<ForecastVersions>),
     OracleScoresUpdated(Box<OracleScoresUpdated>),
     StationReport(Box<Report>),
@@ -67,6 +69,8 @@ pub enum StrategyEvent {
     NewHigh(Box<Extreme>),
     NewLow(Box<Extreme>),
     TimerWake(TimerWake),
+    /// Not produced by the Decision V5 host; only the legacy v2 bot host produces it. Kept
+    /// while kernels match it; see `StrategyEventView::Shutdown`.
     Shutdown {
         reason: String,
     },

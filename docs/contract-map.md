@@ -1420,6 +1420,12 @@ impl NativeKernel for MyKernel {
 
 Optional lifecycle hooks are `on_start`, `on_event`, and `on_finish`.
 
+Under Decision V5, `on_finish` is never called and the `ForecastVersions` and
+`Shutdown` events are never delivered; only the legacy v2 bot host (and, for
+`on_finish`, the backtester) uses them. `state_read_diagnostics()` is always empty
+there because all state arrives in the context. They stay while kernels still
+match or call them and are removed with the Decision V6 kernel API change.
+
 ### Kernel export inventory — migration in progress
 
 **2026-09-12:** the kernel crate owns canonical `StationState`, `MarketState`, `StrategyEvent`, `Decimal` and supplied-input types in addition to the legacy borrowed surfaces below. See `native/strategy_core_kernel/src/lib.rs` for the current exports and [Decision V5](decision-v5.md) for codec/transaction details. Mandatory borrowed canonical access is implemented for the Trader/Core slice; legacy/Backtester host migration and full application qualification remain unfinished. This section does not claim final cross-consumer qualification. Broader Python/legacy models documented elsewhere may retain WU for separate compatibility/research uses; WU is excluded from Trader's active canonical kernel input path.

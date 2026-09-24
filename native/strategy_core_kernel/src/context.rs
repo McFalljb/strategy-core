@@ -25,6 +25,8 @@ pub trait NativeKernel {
         ctx: &mut dyn StrategyKernelContext,
     ) -> KernelResult<()>;
 
+    /// Not called by the Decision V5 host, which has no final invocation for a Sleeve. The
+    /// legacy v2 bot host and the backtester's kernel runner call it.
     fn on_finish(&mut self, _ctx: &mut dyn StrategyKernelContext) -> KernelResult<()> {
         Ok(())
     }
@@ -68,6 +70,9 @@ pub trait StrategyKernelState {
 
     fn market(&self, ticker: &str) -> Option<&MarketState>;
 
+    /// Diagnostics of host state reads made for this invocation. The Decision V5 host reads
+    /// nothing at decision time (all state arrives in the context), so it returns none;
+    /// `dsm_reaction_v10` and the champion kernels still record the (empty) list.
     fn state_read_diagnostics(&self) -> Vec<StateReadDiagnostic> {
         Vec::new()
     }
