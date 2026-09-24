@@ -72,3 +72,6 @@ jobs:
 
       - name: Cargo test
         run: cargo test --manifest-path native/Cargo.toml
+
+      - name: Cargo test (strategy-core-v3 kernel host)
+        run: cargo test --manifest-path native/Cargo.toml -p strategy-core-v3 --all-features
