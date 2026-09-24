@@ -24,14 +24,14 @@ use chrono::{DateTime, TimeZone, Utc};
 use strategy_core_kernel::{
     Book, BookLevel, CancelOrderRequest, ClimateDay, ComponentAuthority, ComponentMeta,
     ContractQuantity, ContractSide, DailyExtremes, EventProvenance, Extreme, FinalFact, Forecast,
-    ForecastModel, ForecastPoint, ForecastUpdated, KernelAction, KernelError, KernelResult,
-    LastTrade, MarketComponents, MarketLifecycle, MarketState, NativeKernel, Observation,
-    OracleScore, OracleScoresUpdated, OracleTable, OrderAction, OrderResult, OrderStatus,
-    OrderStatusView, PendingOrderView, PlaceOrderRequest, PriceUpdate, Report, StationComponents,
-    StationIdentity, StationState, StationWeatherView, StrategyEvent, StrategyEventView,
-    StrategyKernelBroker, StrategyKernelContext, StrategyKernelData, StrategyKernelRuntime,
-    StrategyKernelState, StrategyKernelTelemetry, TickerQuote, TimerWake, ValueOrigin,
-    WakeAtRequest, WeatherEvent, WeatherEventSource,
+    ForecastModel, ForecastPoint, ForecastUpdated, KernelAction, KernelCapabilities, KernelError,
+    KernelResult, LastTrade, MarketComponents, MarketLifecycle, MarketState, NativeKernel,
+    Observation, OracleScore, OracleScoresUpdated, OracleTable, OrderAction, OrderResult,
+    OrderStatus, OrderStatusView, ParameterValue, PendingOrderView, PlaceOrderRequest, PriceUpdate,
+    Report, StationComponents, StationIdentity, StationState, StationWeatherView, StrategyEvent,
+    StrategyEventView, StrategyKernelBroker, StrategyKernelContext, StrategyKernelData,
+    StrategyKernelRuntime, StrategyKernelState, StrategyKernelTelemetry, StrategyParameters,
+    TickerQuote, TimerWake, ValueOrigin, WakeAtRequest, WeatherEvent, WeatherEventSource,
 };
 
 use crate::decision_v4::{
@@ -312,6 +312,20 @@ pub fn strategy_parameters_json(
     Ok(parameters)
 }
 
+fn parameter_value(value: &StrategyParameterValueV5) -> ParameterValue {
+    match value {
+        StrategyParameterValueV5::Null => ParameterValue::Null,
+        StrategyParameterValueV5::Bool(value) => ParameterValue::Bool(*value),
+        StrategyParameterValueV5::I64(value) => ParameterValue::I64(*value),
+        StrategyParameterValueV5::U64(value) => ParameterValue::U64(*value),
+        StrategyParameterValueV5::Decimal { coefficient, scale } => ParameterValue::Decimal {
+            coefficient: *coefficient,
+            scale: *scale,
+        },
+        StrategyParameterValueV5::String(value) => ParameterValue::String(value.clone()),
+    }
+}
+
 fn parameter_json(
     value: &StrategyParameterValueV5,
 ) -> Result<serde_json::Value, KernelTransactionError> {
@@ -380,6 +394,7 @@ pub struct KernelSnapshot {
     markets: Vec<MarketState>,
     broker: wire::BrokerDetailV5,
     finances: strategy_core_kernel::BrokerFinancialState,
+    parameters: StrategyParameters,
 }
 
 impl KernelSnapshot {
@@ -440,6 +455,12 @@ impl KernelSnapshot {
             markets,
             broker: context.broker.clone(),
             finances,
+            parameters: context
+                .strategy
+                .parameters
+                .iter()
+                .map(|(key, value)| (key.clone(), parameter_value(value)))
+                .collect(),
         })
     }
 
@@ -1519,6 +1540,15 @@ impl KernelHost {
 impl StrategyKernelContext for KernelHost {
     fn state(&self) -> &dyn StrategyKernelState {
         &self.snapshot
+    }
+    fn parameters(&self) -> &StrategyParameters {
+        &self.snapshot.parameters
+    }
+    /// V5 contexts do not carry the deployment mode, so none is stated.
+    fn capabilities(&self) -> KernelCapabilities {
+        let mut capabilities = KernelCapabilities::default();
+        capabilities.timers = true;
+        capabilities
     }
     fn data(&self) -> &dyn StrategyKernelData {
         &self.snapshot

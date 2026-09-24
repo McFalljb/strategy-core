@@ -9,6 +9,7 @@ use crate::events::{
 };
 use crate::state::{BrokerFinancialState, MarketState, StationState};
 use chrono::{DateTime, Utc};
+use std::collections::BTreeMap;
 
 pub trait NativeKernel {
     fn name(&self) -> &str;
@@ -30,6 +31,18 @@ pub trait NativeKernel {
 
 pub trait StrategyKernelContext {
     fn state(&self) -> &dyn StrategyKernelState;
+
+    /// The Strategy's configured parameters, read-only and exact. Hosts that do not supply
+    /// them return an empty set.
+    fn parameters(&self) -> &StrategyParameters {
+        StrategyParameters::empty()
+    }
+
+    /// What this host grants the kernel for this invocation. The default grants nothing and
+    /// states no mode.
+    fn capabilities(&self) -> KernelCapabilities {
+        KernelCapabilities::default()
+    }
 
     fn data(&self) -> &dyn StrategyKernelData;
 
@@ -151,4 +164,132 @@ pub trait StrategyKernelRuntime {
 
 pub trait StrategyKernelTelemetry {
     fn counter(&mut self, name: &str, value: f64, fields: &[(&str, &str)]) -> KernelResult<()>;
+}
+
+/// One configured Strategy parameter value. Decimals keep the configured digits exactly.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ParameterValue {
+    Null,
+    Bool(bool),
+    I64(i64),
+    U64(u64),
+    /// `coefficient * 10^-scale`, as configured (trailing zeros are kept).
+    Decimal {
+        coefficient: i64,
+        scale: u8,
+    },
+    String(String),
+}
+
+impl ParameterValue {
+    pub const fn as_bool(&self) -> Option<bool> {
+        match self {
+            Self::Bool(value) => Some(*value),
+            _ => None,
+        }
+    }
+
+    /// An integer parameter that fits `i64`.
+    pub fn as_i64(&self) -> Option<i64> {
+        match self {
+            Self::I64(value) => Some(*value),
+            Self::U64(value) => i64::try_from(*value).ok(),
+            _ => None,
+        }
+    }
+
+    /// An integer parameter that fits `u64`.
+    pub fn as_u64(&self) -> Option<u64> {
+        match self {
+            Self::I64(value) => u64::try_from(*value).ok(),
+            Self::U64(value) => Some(*value),
+            _ => None,
+        }
+    }
+
+    /// A numeric parameter as `f64`, computed as the kernel initializer's JSON projection
+    /// computes it (`coefficient / 10^scale` for a decimal).
+    pub fn as_f64(&self) -> Option<f64> {
+        match self {
+            Self::I64(value) => Some(*value as f64),
+            Self::U64(value) => Some(*value as f64),
+            Self::Decimal { coefficient, scale } => {
+                Some(*coefficient as f64 / 10_f64.powi(i32::from(*scale)))
+            }
+            _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            Self::String(value) => Some(value),
+            _ => None,
+        }
+    }
+
+    pub const fn is_null(&self) -> bool {
+        matches!(self, Self::Null)
+    }
+}
+
+/// The Strategy's configured parameters by key.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct StrategyParameters {
+    values: BTreeMap<String, ParameterValue>,
+}
+
+impl StrategyParameters {
+    /// An empty set with a `'static` lifetime, for hosts without parameters.
+    pub fn empty() -> &'static Self {
+        static EMPTY: StrategyParameters = StrategyParameters {
+            values: BTreeMap::new(),
+        };
+        &EMPTY
+    }
+
+    pub fn get(&self, key: &str) -> Option<&ParameterValue> {
+        self.values.get(key)
+    }
+
+    /// Parameters in key order.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &ParameterValue)> {
+        self.values.iter().map(|(key, value)| (key.as_str(), value))
+    }
+
+    pub fn len(&self) -> usize {
+        self.values.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+}
+
+/// A later value for the same key replaces an earlier one.
+impl FromIterator<(String, ParameterValue)> for StrategyParameters {
+    fn from_iter<I: IntoIterator<Item = (String, ParameterValue)>>(values: I) -> Self {
+        Self {
+            values: values.into_iter().collect(),
+        }
+    }
+}
+
+/// The deployment a host runs the kernel in.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RuntimeMode {
+    Paper,
+    Live,
+    /// A backtest or an audit re-run of recorded decisions.
+    Replay,
+}
+
+/// What a host grants the kernel. Fields are added as hosts gain capabilities, so hosts
+/// construct it from [`Default`] (nothing granted) and set what they support.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[non_exhaustive]
+pub struct KernelCapabilities {
+    /// The deployment mode, when the host states it.
+    pub mode: Option<RuntimeMode>,
+    /// `StrategyKernelRuntime::wake_at` schedules one-shot timers.
+    pub timers: bool,
 }

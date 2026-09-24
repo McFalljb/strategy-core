@@ -30,8 +30,9 @@ pub use actions::{
     PlaceOrderRequest, StopAction, TelemetryAction, WakeAtRequest,
 };
 pub use context::{
-    NativeKernel, StateReadDiagnostic, StrategyKernelBroker, StrategyKernelContext,
-    StrategyKernelData, StrategyKernelRuntime, StrategyKernelState, StrategyKernelTelemetry,
+    KernelCapabilities, NativeKernel, ParameterValue, RuntimeMode, StateReadDiagnostic,
+    StrategyKernelBroker, StrategyKernelContext, StrategyKernelData, StrategyKernelRuntime,
+    StrategyKernelState, StrategyKernelTelemetry, StrategyParameters,
 };
 pub use decimal::{Decimal, DecimalError, MAX_DECIMAL_SCALE};
 pub use errors::{KernelError, KernelResult};

@@ -1449,6 +1449,16 @@ The native context exposes these exact trait surfaces:
   `latest_oracle_scores(station_id, mode, rank_by, days)` derive from those models.
   `state_read_diagnostics()` remains a host diagnostic hook. Getters do not fetch
   provider data.
+- `StrategyKernelContext::parameters() -> &StrategyParameters`: the Strategy's
+  configured parameters, read-only, by key (`get`, `iter`); each is a
+  `ParameterValue` (`Null`, `Bool`, `I64`, `U64`, exact `Decimal { coefficient,
+  scale }`, `String`) with `as_bool`/`as_i64`/`as_u64`/`as_f64`/`as_str`. The
+  Decision V5 host supplies `StrategyScopeV5.parameters`; hosts without them
+  return an empty set.
+- `StrategyKernelContext::capabilities() -> KernelCapabilities`: what the host
+  grants: `mode` (`Paper`, `Live`, `Replay`, or `None` when the host does not
+  state it) and `timers`. The default grants nothing. The Decision V5 host grants
+  timers and states no mode, because V5 contexts do not carry it.
 - `StrategyKernelContext::data() -> &dyn StrategyKernelData`: reserved narrow
   data trait; it has no methods today.
 - `StrategyKernelContext::broker() -> &mut dyn StrategyKernelBroker`:

@@ -1,11 +1,11 @@
 use chrono::{TimeZone, Utc};
 use strategy_core_kernel::{
     CancelAllOrdersRequest, CancelOrderRequest, ContractQuantity, ContractSide, KernelAction,
-    KernelResult, MarketBracketView, NativeKernel, OrderAction, OrderResult, OrderStatus,
-    OrderStatusView, OrderType, PlaceOrderRequest, PriceLevelView, PriceUpdateView,
-    StrategyEventView, StrategyKernelBroker, StrategyKernelContext, StrategyKernelData,
-    StrategyKernelRuntime, StrategyKernelState, StrategyKernelTelemetry, TimerWakeView,
-    WakeAtRequest,
+    KernelCapabilities, KernelResult, MarketBracketView, NativeKernel, OrderAction, OrderResult,
+    OrderStatus, OrderStatusView, OrderType, ParameterValue, PlaceOrderRequest, PriceLevelView,
+    PriceUpdateView, StrategyEventView, StrategyKernelBroker, StrategyKernelContext,
+    StrategyKernelData, StrategyKernelRuntime, StrategyKernelState, StrategyKernelTelemetry,
+    StrategyParameters, TimerWakeView, WakeAtRequest,
 };
 
 const YES_BID_LEVELS: [PriceLevelView; 1] = [PriceLevelView::whole(0.41, 12)];
@@ -320,6 +320,34 @@ fn runtime_timer_requests_stay_engine_owned() {
     ctx.runtime().wake_at(wake.clone()).unwrap();
 
     assert_eq!(ctx.runtime.wakes, vec![wake]);
+}
+
+#[test]
+fn hosts_without_parameters_or_capabilities_supply_none_by_default() {
+    let ctx = FakeContext::default();
+
+    assert!(ctx.parameters().is_empty());
+    assert_eq!(ctx.parameters().get("any"), None);
+    assert_eq!(ctx.capabilities(), KernelCapabilities::default());
+    assert_eq!(ctx.capabilities().mode, None);
+    assert!(!ctx.capabilities().timers);
+
+    let parameters: StrategyParameters = [
+        ("b".to_owned(), ParameterValue::I64(1)),
+        ("a".to_owned(), ParameterValue::U64(u64::MAX)),
+        ("b".to_owned(), ParameterValue::I64(2)),
+    ]
+    .into_iter()
+    .collect();
+    assert_eq!(
+        parameters.iter().collect::<Vec<_>>(),
+        [
+            ("a", &ParameterValue::U64(u64::MAX)),
+            ("b", &ParameterValue::I64(2))
+        ]
+    );
+    assert_eq!(parameters.get("a").unwrap().as_i64(), None);
+    assert_eq!(parameters.get("a").unwrap().as_f64(), Some(u64::MAX as f64));
 }
 
 #[test]
