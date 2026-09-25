@@ -183,10 +183,12 @@ traderv3 and strategies must build to these choices or change them here first.
     pulled forward to just before it; for a cancel-all, those of every order placed before
     it). The pulled updates and the cancel's are one delivery unit: when deciding whether a
     refusal defers, the unit's commands are the update's own, so a moving target cannot
-    keep its deferred cancel deferred until it is abandoned. The unit is all or nothing for
-    the cancel: if an update of a target fails, the cancel's is held that decision without
-    counting anything (`order_update_rolled_back`) and follows the target's later. A unit
-    that never fits is abandoned by design after three counted failures of the cancel. A refusal at a
+    keep its deferred cancel deferred until it is abandoned. A cancel's update is held when
+    an update of any of its targets failed anywhere in the decision (`order_update_held`),
+    and follows the target's later; each hold counts as a deferral, and at the bound the
+    cancel's update is delivered anyway, out of order (`order_update_out_of_order`), never
+    abandoned for its targets' failures. A unit that never fits is abandoned by design after
+    three counted failures of the cancel. A refusal at a
     Sleeve-wide bound (open-order cap, 256 live entries), or one an update hits on its own,
     counts: waiting would never make room. A snapshot the kernel's codec cannot take before
     an update is a counted failure of that update, which is not delivered. A snapshot the

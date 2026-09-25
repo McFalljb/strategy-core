@@ -258,7 +258,8 @@ enum OnRefusal {
 }
 
 /// On an update of `client`, issues commands with `issue` (at most `count`) and handles the
-/// refusal that ends the run as `on_refusal`; counts every fill it handles.
+/// refusal that ends the run as `on_refusal`; counts every fill it handles. A `client`
+/// written `!name` acts on updates of the order `name` itself only (not on its cancels').
 #[derive(Clone, Copy)]
 struct Act {
     client: &'static str,
@@ -287,10 +288,14 @@ impl NativeKernel for Scripted {
         };
         self.counted += update.newly_filled.hundredths();
         let tag = format!("{}-{}", update.client_order_id, update.filled.hundredths());
+        let own = update.command_kind == strategy_core_kernel::BrokerCommandKind::PlaceOrder;
         for act in self
             .acts
             .iter()
-            .filter(|act| act.client == update.client_order_id)
+            .filter(|act| match act.client.strip_prefix('!') {
+                Some(client) => own && client == update.client_order_id,
+                None => act.client == update.client_order_id,
+            })
         {
             for index in 0..act.count {
                 if let Err(error) = (act.issue)(context, &tag, index) {
@@ -1460,6 +1465,8 @@ struct Seen {
     pending: Vec<(u8, u8)>,
     /// It was abandoned rather than delivered.
     abandoned: bool,
+    /// It was delivered before an update of its target that failed.
+    out_of_order: bool,
 }
 
 /// Runs decisions 2.. over `view(delivery)` with the cancel's refusal receipt until the
@@ -1485,7 +1492,7 @@ fn run_until_cancel_is_seen(
     next.kernel_checkpoint = Some(checkpoint);
     next.validate().unwrap();
     let mut history = Vec::new();
-    for delivery in 2..=20_u32 {
+    for delivery in 2..=30_u32 {
         if delivery > 2 {
             let previous = history_result(&history);
             next = follow_up(
@@ -1511,11 +1518,16 @@ fn run_until_cancel_is_seen(
                 diagnostic.code == "order_update_abandoned"
                     && diagnostic.message.contains("command.cancel")
             });
+            let out_of_order = last
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "order_update_out_of_order");
             let pending = history.iter().filter_map(|(_, cancel)| *cancel).collect();
             return Seen {
                 delivery,
                 pending,
                 abandoned,
+                out_of_order,
             };
         }
     }
@@ -1713,9 +1725,98 @@ fn a_deferred_cancel_all_waits_for_a_target_whose_update_failed() {
         BrokerCommandKindV6::CancelAllOrders,
         view,
     );
-    // Decision 2: held, as it was (no failure, no further deferral).
-    assert_eq!(seen.pending, [(0, 1)]);
+    // Decision 2: held, as it was (no failure; the hold counts as a deferral).
+    assert_eq!(seen.pending, [(0, 2)]);
     // Decision 3: c's update, then the cancel-all's.
     assert_eq!(seen.delivery, 3);
     assert!(!seen.abandoned);
+}
+
+#[test]
+fn a_cancel_held_behind_a_target_that_keeps_failing_is_delivered_at_the_bound() {
+    use BrokerOrderStatusV6::*;
+    // Every update of `t` itself places 70 orders and fails; each move gives it a new
+    // update, so its failures never end. The cancel is held behind it up to the deferral
+    // bound, then delivered anyway, out of order.
+    const SEVENTY_T: &[Act] = &[Act {
+        client: "!t",
+        issue: place_unique,
+        count: 70,
+        on_refusal: OnRefusal::Return,
+    }];
+    let factory = ScriptedFactory(SEVENTY_T);
+    let view = |delivery: u32| {
+        let filled = u64::from(delivery);
+        vec![order("command.t", "t", PartiallyFilled, filled, filled + 1)]
+    };
+    let checkpoint = with_deferred_cancel(&factory, view(1), Some("t"));
+    let seen =
+        run_until_cancel_is_seen(&factory, checkpoint, BrokerCommandKindV6::CancelOrder, view);
+    assert!(!seen.abandoned, "delivered, never abandoned for holds");
+    assert!(seen.out_of_order, "out of order, with a warning");
+    // Held with deferrals 2..=7, delivered in the decision after.
+    assert_eq!(
+        seen.pending,
+        (2..=7).map(|deferrals| (0, deferrals)).collect::<Vec<_>>()
+    );
+    assert_eq!(seen.delivery, 8);
+}
+
+#[test]
+fn a_cancel_is_held_when_its_target_failed_in_an_earlier_unit_of_the_decision() {
+    use BrokerOrderStatusV6::*;
+    // The target is more deferred than its cancel, so it is delivered first in a unit of
+    // its own; it fails there, and the cancel, later in the decision, is held.
+    const SEVENTY_T: &[Act] = &[Act {
+        client: "!t",
+        issue: place_unique,
+        count: 70,
+        on_refusal: OnRefusal::Return,
+    }];
+    let factory = ScriptedFactory(SEVENTY_T);
+    let view = |delivery: u32| {
+        let filled = u64::from(delivery);
+        vec![order("command.t", "t", PartiallyFilled, filled, filled + 1)]
+    };
+    let mut checkpoint = with_deferred_cancel(&factory, view(1), Some("t"));
+    for entry in &mut checkpoint.runner.entries {
+        if entry.command_id == "command.t" {
+            entry.delivery_deferrals = 2;
+        }
+    }
+    let context = priced_context();
+    let mut next = follow_up(
+        &context,
+        None,
+        2,
+        view(2),
+        vec![CommandReceiptV6 {
+            command_id: "command.cancel".to_owned(),
+            kind: BrokerCommandKindV6::CancelOrder,
+            outcome: CommandOutcomeV6::Refused {
+                code: "rate_limited".to_owned(),
+                reason: "busy".to_owned(),
+            },
+        }],
+    );
+    next.kernel_checkpoint = Some(checkpoint.seal());
+    next.validate().unwrap();
+    let result = run_transaction(&factory, &next).unwrap();
+    validate_decision_result_v6(&next, &result).unwrap();
+    assert_eq!(
+        update_codes(&result),
+        [("error", "kernel_error"), ("warn", "order_update_held")]
+    );
+    let target = entry(&result, "command.t").unwrap();
+    assert_eq!(target.delivery_failures, 1);
+    let cancel = entry(&result, "command.cancel").unwrap();
+    assert_eq!(
+        (cancel.delivery_failures, cancel.delivery_deferrals),
+        (0, 2)
+    );
+    assert!(
+        !result
+            .acknowledged_command_ids
+            .contains(&"command.cancel".to_owned())
+    );
 }

@@ -54,6 +54,10 @@ pub(super) enum Failure {
     /// Undone with every other update of the decision (the kernel could not be restored
     /// after another one): it stays pending as it was.
     RolledBack,
+    /// A cancel's update held because an update of its target failed in the decision: it
+    /// stays pending, one more deferral counted (the runner delivers it anyway rather than
+    /// reach `MAX_DELIVERY_DEFERRALS`).
+    Held,
 }
 
 /// One runner entry's comparison: the entry before, the entry after (none once its outcome
@@ -142,7 +146,7 @@ impl Derived {
 
     /// The steps with an update of the orders the cancel at `index` targets (none for a
     /// place).
-    fn targets(&self, index: usize) -> Vec<usize> {
+    pub fn targets(&self, index: usize) -> Vec<usize> {
         let Some(cancel) = self.steps[index].previous.as_ref() else {
             return Vec::new();
         };
@@ -208,7 +212,7 @@ impl Derived {
                 let previous = step.previous.expect("an update comes from an entry");
                 let (attempts, deferrals) = match failure {
                     Failure::Counted => (previous.delivery_failures + 1, 0),
-                    Failure::Deferred => {
+                    Failure::Deferred | Failure::Held => {
                         (previous.delivery_failures, previous.delivery_deferrals + 1)
                     }
                     Failure::RolledBack => {

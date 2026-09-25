@@ -191,38 +191,53 @@ pub fn run_transaction<F: TransactionKernelFactory>(
     // still delivered.
     let mut failed = BTreeMap::new();
     let mut start = Some(host.save());
-    // (first of its unit, the cancel closing a unit of pulled targets, step index)
     let units = delivery_order.iter().flat_map(|unit| {
-        let len = unit.len();
         unit.iter()
             .enumerate()
-            .map(move |(position, index)| (position == 0, len > 1 && position + 1 == len, *index))
+            .map(move |(position, index)| (position == 0, *index))
     });
-    // What the decision had issued when the current delivery unit began, and whether an
-    // update of the unit failed.
+    // What the decision had issued when the current delivery unit began.
     let mut unit_start = None;
-    let mut unit_failed = false;
-    for (first_of_unit, closes_unit, index) in units {
+    for (first_of_unit, index) in units {
         if first_of_unit {
             unit_start = None;
-            unit_failed = false;
         }
         let step = &derived.steps[index];
         let Some(record) = &step.update else {
             continue;
         };
-        // A unit is all or nothing for its cancel: when an update of a target failed, the
-        // cancel's waits, as it was, to follow the target's in a later decision.
-        if closes_unit && unit_failed {
-            failed.insert(index, Failure::RolledBack);
-            host.outputs.push(HostOutput::UpdateError(
+        // A cancel's update never goes before its target's: when an update of one of its
+        // targets failed anywhere in this decision, the cancel's waits, as it was, to follow
+        // it in a later decision. Holds are counted as deferrals; at the bound the cancel's
+        // update is delivered anyway, out of order, never abandoned for it.
+        if derived
+            .targets(index)
+            .iter()
+            .any(|target| failed.contains_key(target))
+        {
+            if step.deferral() < wire::MAX_DELIVERY_DEFERRALS {
+                failed.insert(index, Failure::Held);
+                host.outputs.push(HostOutput::UpdateError(
+                    format!(
+                        "order update of {} held ({} of {}): an update of its target failed \
+                         in this decision",
+                        record.command_id,
+                        step.deferral(),
+                        wire::MAX_DELIVERY_DEFERRALS - 1
+                    ),
+                    Failure::Held,
+                ));
+                continue;
+            }
+            host.outputs.push(HostOutput::UpdateWarning(
+                "order_update_out_of_order",
                 format!(
-                    "order update of {} held: an update of its target failed in this decision",
-                    record.command_id
+                    "order update of {} delivered before an update of its target, which \
+                     failed in this decision: it was held {} times",
+                    record.command_id,
+                    wire::MAX_DELIVERY_DEFERRALS - 1
                 ),
-                Failure::RolledBack,
             ));
-            continue;
         }
         let describe = |failure: Failure, error: &dyn std::fmt::Display| {
             let attempt = match failure {
@@ -247,7 +262,6 @@ pub fn run_transaction<F: TransactionKernelFactory>(
         let snapshot = match kernel.encode_checkpoint_state() {
             Ok(state) => snapshot_checkpoint(context, &codec, state),
             Err(error) => {
-                unit_failed = true;
                 failed.insert(index, Failure::Counted);
                 host.outputs.push(describe(
                     Failure::Counted,
@@ -264,7 +278,6 @@ pub fn run_transaction<F: TransactionKernelFactory>(
         let Err(error) = delivered else {
             continue;
         };
-        unit_failed = true;
         host.restore(saved);
         match factory.restore(context, &snapshot) {
             Ok(restored) => {
@@ -633,8 +646,10 @@ enum HostOutput {
     Log(LogAction),
     Telemetry(TelemetryEntryV6),
     /// A failed order update: a deferred one is a `warn` `order_update_deferred` diagnostic,
-    /// any other a `kernel_error`.
+    /// a held one `order_update_held`, any other a `kernel_error`.
     UpdateError(String, Failure),
+    /// A `warn` diagnostic about the delivery of order updates.
+    UpdateWarning(&'static str, String),
 }
 
 /// What the decision had issued when an order update began.
@@ -758,11 +773,12 @@ impl<'a> KernelHost<'a> {
         let tail = self
             .outputs
             .split_off(saved.outputs_len.min(self.outputs.len()));
-        self.outputs.extend(
-            tail.into_iter().filter(|output| {
-                matches!(output, HostOutput::Log(_) | HostOutput::UpdateError(..))
-            }),
-        );
+        self.outputs.extend(tail.into_iter().filter(|output| {
+            matches!(
+                output,
+                HostOutput::Log(_) | HostOutput::UpdateError(..) | HostOutput::UpdateWarning(..)
+            )
+        }));
     }
 
     fn broker_detail(&self) -> &BrokerDetailV6 {
@@ -1642,14 +1658,22 @@ fn append_outputs(
                     lost_bytes += message.len();
                 }
             }
-            HostOutput::UpdateError(message, failure) => {
+            HostOutput::UpdateError(..) | HostOutput::UpdateWarning(..) => {
+                let (severity, code, message) = match output {
+                    HostOutput::UpdateError(message, failure) => {
+                        let (severity, code) = match failure {
+                            Failure::Counted => ("error", "kernel_error"),
+                            Failure::Deferred => ("warn", "order_update_deferred"),
+                            Failure::Held => ("warn", "order_update_held"),
+                            Failure::RolledBack => ("warn", "order_update_rolled_back"),
+                        };
+                        (severity, code, message)
+                    }
+                    HostOutput::UpdateWarning(code, message) => ("warn", *code, message),
+                    _ => unreachable!("matched above"),
+                };
                 let mut message = message.clone();
                 truncate_utf8(&mut message, wire::MAX_RESULT_DIAGNOSTIC_BYTES);
-                let (severity, code) = match failure {
-                    Failure::Counted => ("error", "kernel_error"),
-                    Failure::Deferred => ("warn", "order_update_deferred"),
-                    Failure::RolledBack => ("warn", "order_update_rolled_back"),
-                };
                 if result.diagnostics.len() < diagnostic_room && take(message.len() + 32) {
                     result.diagnostics.push(ResultDiagnosticV6 {
                         severity: severity.to_owned(),

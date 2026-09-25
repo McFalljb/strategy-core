@@ -48,12 +48,14 @@ V6 context (owner projection, scope, Broker state, command receipts, checkpoint,
   precedes an update of its target: the target's is delivered just before it (for a
   cancel-all, the updates of every order placed before it), and the pulled updates and the
   cancel's form one delivery unit whose commands count as the cancel's own, so a refusal
-  for room inside the unit counts rather than defers. The unit is all or nothing for the
-  cancel: when an update of a target fails (for any reason), the cancel's is not delivered
-  in that decision and waits as it was, with no failure or deferral counted
-  (`order_update_rolled_back`, a warning), to follow its target's. A unit that can never fit
-  (targets and cancel together over a limit every decision) ends with the cancel abandoned
-  after three counted failures. The order is deterministic, and the evidence follows it. A refusal
+  for room inside the unit counts rather than defers. A cancel's update is held when an
+  update of any of its targets failed anywhere in the decision (in its unit or an earlier
+  one, for any reason): it waits as it was, to follow its target's (`order_update_held`, a
+  warning). A hold counts as a deferral; rather than reach `MAX_DELIVERY_DEFERRALS`, the
+  runner delivers the cancel's update anyway, out of order (`order_update_out_of_order`, a
+  warning), so a cancel is never abandoned for its targets' failures. A unit that can never
+  fit (targets and cancel together over a limit every decision) ends with the cancel
+  abandoned after three counted failures of its own. The order is deterministic, and the evidence follows it. A refusal
   at a Sleeve-wide bound (the open-order cap, 256 live runner entries), or at a decision
   limit the update exceeds on its own, is an ordinary counted failure.
 - A snapshot the kernel's codec cannot take before an update is a counted failure of that
