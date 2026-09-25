@@ -1287,7 +1287,8 @@ impl<'a> KernelHost<'a> {
         {
             return invalid(format!(
                 "the path must start with one \"/\", have no \".\" or \"..\" segment, \
-                 no \"\\\" or \"#\", and be at most {} visible ASCII bytes",
+                 no \"%2e\" before its query, no \"\\\" or \"#\", and be at most {} visible \
+                 ASCII bytes",
                 wire::MAX_HTTP_PATH_BYTES
             ));
         }

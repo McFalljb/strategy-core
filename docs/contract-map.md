@@ -1528,7 +1528,7 @@ The native context exposes these exact trait surfaces:
   `Timeout`, `Transport`, `Status(code)` for a non-2xx status, `TooLarge`,
   `Malformed`, `Exit(code)`, `Abandoned` after a host restart). `Err` from the call
   itself means only a local problem: not granted, outside the bounds (a path from one
-  `/` without `.`/`..` segments, a timeout of 1 ms to 120 s, at most 64 KiB of path or
+  `/` without `.`/`..` segments or `%2e`, a timeout of 1 ms to 120 s, at most 64 KiB of path or
   arguments plus payload), or more than 8 requests in one decision. Hosts without
   requests refuse both calls.
 - `StrategyKernelContext::telemetry() -> &mut dyn StrategyKernelTelemetry`:

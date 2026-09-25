@@ -898,6 +898,21 @@ fn external_requests_need_a_grant_of_their_kind_and_stay_within_bounds() {
             DecisionV6Error::InvalidContract,
         ),
         ("jev", http_post("/a/./b"), DecisionV6Error::InvalidContract),
+        (
+            "jev",
+            http_post("/a/%2e%2e/b"),
+            DecisionV6Error::InvalidContract,
+        ),
+        (
+            "jev",
+            http_post("/a/.%2E/b"),
+            DecisionV6Error::InvalidContract,
+        ),
+        (
+            "jev",
+            http_post("/a/%2E./b"),
+            DecisionV6Error::InvalidContract,
+        ),
         ("jev", http_post("/a b"), DecisionV6Error::InvalidContract),
         ("jev", http_post("/a#b"), DecisionV6Error::InvalidContract),
         ("jev", http_post("/a\\b"), DecisionV6Error::InvalidContract),

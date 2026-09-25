@@ -201,7 +201,7 @@ answer); the host only does the I/O.
   same result.
 - **Ids.** A request's id is its command id (`command.` + 32 hex digits of its IntentId),
   like every other command of the decision.
-- **Bounds.** A path starts with one `/`, has no `.` or `..` segment, no `\` or `#`, and is at
+- **Bounds.** A path starts with one `/`, has no `.` or `..` segment (nor `%2e` in the route), no `\` or `#`, and is at
   most 2 KiB of visible ASCII (a query is allowed); at most 64 arguments without NUL; the path
   or arguments plus the payload at most 64 KiB (`MAX_EXTERNAL_REQUEST_BYTES`); a timeout of
   1 ms to 120 s; at most 8 requests per decision (`MAX_OUTSTANDING_EXTERNAL_REQUESTS`). A

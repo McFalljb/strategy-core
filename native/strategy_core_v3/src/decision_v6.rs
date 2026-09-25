@@ -2271,7 +2271,8 @@ pub fn valid_external_request_target(name: &str) -> bool {
 }
 
 /// A path the host can only append to an endpoint's base URL: it starts with a single `/`,
-/// has no `.` or `..` segment, no `\` and no fragment, and is visible ASCII of at most
+/// has no `.` or `..` segment and no percent-encoded dot in its route (URL parsers read
+/// `%2e%2e` as `..`), no `\` and no fragment, and is visible ASCII of at most
 /// `MAX_HTTP_PATH_BYTES` (a query is allowed).
 pub fn valid_http_path(path: &str) -> bool {
     let route = path.split('?').next().unwrap_or_default();
@@ -2281,6 +2282,7 @@ pub fn valid_http_path(path: &str) -> bool {
         && path
             .bytes()
             .all(|byte| byte.is_ascii_graphic() && !matches!(byte, b'\\' | b'#'))
+        && !route.to_ascii_lowercase().contains("%2e")
         && route
             .split('/')
             .skip(1)

@@ -290,7 +290,7 @@ requests (HTTP and CLI) design").
     executable that stated `external-requests`.
 40. **The 64 KiB request bound** covers the HTTP path or the command arguments plus the
     payload (the design says "request payload"). Paths are relative to the endpoint's base
-    URL and cannot climb out of it: one leading `/`, no `.`/`..` segment, no `\`, no `#`.
+    URL and cannot climb out of it: one leading `/`, no `.`/`..` segment nor `%2e` in the route, no `\`, no `#`.
 41. **Outstanding bound.** The context does not list outstanding requests (a new context
     field would break stored contexts), so the runner bounds requests per decision at 8
     and the host enforces 8 outstanding per Sleeve, answering a request past it `Refused`.
