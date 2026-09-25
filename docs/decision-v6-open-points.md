@@ -187,9 +187,9 @@ traderv3 and strategies must build to these choices or change them here first.
     an update of any of its targets failed anywhere in the decision (`order_update_held`),
     and follows the target's later; each hold counts as a deferral, and at the bound the
     cancel's update is delivered anyway, out of order (`order_update_out_of_order`, emitted
-    once the delivery succeeds), never abandoned for its targets' failures: a room refusal on
-    that delivery counts as a failure and resets the deferrals instead of deferring past the
-    bound. A unit that never fits is abandoned by design after
+    once the delivery succeeds), never abandoned for its targets' failures: a cancel's or
+    cancel-all's room refusal whose deferral would reach the bound counts as a failure and
+    resets the deferrals instead (in order or out of order). A unit that never fits is abandoned by design after
     three counted failures of the cancel. A refusal at a
     Sleeve-wide bound (open-order cap, 256 live entries), or one an update hits on its own,
     counts: waiting would never make room. A snapshot the kernel's codec cannot take before

@@ -282,9 +282,14 @@ pub fn run_transaction<F: TransactionKernelFactory>(
         match factory.restore(context, &snapshot) {
             Ok(restored) => {
                 kernel = restored;
-                // Deferred only when the kernel returned the refusal itself, and never on a
-                // cancel's out-of-order delivery at the deferral bound: a refusal there counts.
-                let failure = if !out_of_order && deferrable.as_deref() == Some(error.message()) {
+                // Deferred only when the kernel returned the refusal itself. A cancel's or
+                // cancel-all's refusal that would reach the deferral bound counts instead (its
+                // deferrals may come from holds behind its targets, in order or not), so a
+                // cancel is never abandoned through the deferral bound.
+                let cancel_at_bound = record.kind != BrokerCommandKindV6::PlaceOrder
+                    && step.deferral() >= wire::MAX_DELIVERY_DEFERRALS;
+                let failure = if !cancel_at_bound && deferrable.as_deref() == Some(error.message())
+                {
                     Failure::Deferred
                 } else {
                     Failure::Counted

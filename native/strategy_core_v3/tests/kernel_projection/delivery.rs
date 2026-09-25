@@ -1939,3 +1939,88 @@ fn a_room_refusal_on_an_out_of_order_delivery_counts_and_never_abandons() {
     }
     panic!("the second cancel was never delivered");
 }
+
+#[test]
+fn a_room_refusal_of_a_cancel_at_the_bound_counts_in_order_too() {
+    use BrokerOrderStatusV6::*;
+    // Two cancels of `t`, held to the bound before; this decision `t` has no update, so both
+    // are delivered in order. The second's places are refused for the room the first took:
+    // at the bound, that counts instead of deferring into abandonment.
+    const ACTS: &[Act] = &[
+        Act {
+            client: "!t",
+            issue: place_unique,
+            count: 70,
+            on_refusal: OnRefusal::Return,
+        },
+        Act {
+            client: "~t",
+            issue: place_unique,
+            count: 40,
+            on_refusal: OnRefusal::Return,
+        },
+    ];
+    let factory = ScriptedFactory(ACTS);
+    let view = |delivery: u32| {
+        let filled = u64::from(delivery);
+        vec![order("command.t", "t", PartiallyFilled, filled, filled + 1)]
+    };
+    let mut checkpoint = with_deferred_cancel(&factory, view(1), Some("t"));
+    let mut second = checkpoint
+        .runner
+        .entries
+        .iter()
+        .find(|entry| entry.command_id == "command.cancel")
+        .unwrap()
+        .clone();
+    second.command_id = "command.cancel2".to_owned();
+    checkpoint.runner.entries.push(second);
+    for entry in &mut checkpoint.runner.entries {
+        if entry.command_id.starts_with("command.cancel") {
+            entry.delivery_deferrals = strategy_core_v3::decision_v6::MAX_DELIVERY_DEFERRALS - 1;
+        }
+    }
+    let context = priced_context();
+    let receipts = || {
+        ["command.cancel", "command.cancel2"]
+            .map(|command_id| CommandReceiptV6 {
+                command_id: command_id.to_owned(),
+                kind: BrokerCommandKindV6::CancelOrder,
+                outcome: CommandOutcomeV6::Refused {
+                    code: "rate_limited".to_owned(),
+                    reason: "busy".to_owned(),
+                },
+            })
+            .to_vec()
+    };
+    // The target's fill is unchanged: no update of it.
+    let mut next = follow_up(&context, None, 2, view(1), receipts());
+    next.kernel_checkpoint = Some(checkpoint.seal());
+    next.validate().unwrap();
+    let first = run_transaction(&factory, &next).unwrap();
+    validate_decision_result_v6(&next, &first).unwrap();
+    assert!(
+        entry(&first, "command.cancel").is_none(),
+        "the first is delivered"
+    );
+    let second = entry(&first, "command.cancel2").expect("the second is refused, counted");
+    assert_eq!(
+        (second.delivery_failures, second.delivery_deferrals),
+        (1, 0)
+    );
+    assert_eq!(
+        update_codes(&first),
+        [("error", "kernel_error")],
+        "counted, not deferred or abandoned"
+    );
+    // Next decision, alone: delivered.
+    let next = follow_up(&context, Some(&first), 3, view(1), receipts());
+    let result = run_transaction(&factory, &next).unwrap();
+    validate_decision_result_v6(&next, &result).unwrap();
+    assert!(entry(&result, "command.cancel2").is_none());
+    assert!(
+        result
+            .acknowledged_command_ids
+            .contains(&"command.cancel2".to_owned())
+    );
+}
