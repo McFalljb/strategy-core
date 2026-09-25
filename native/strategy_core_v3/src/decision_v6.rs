@@ -65,7 +65,7 @@ pub const MAX_IDENTIFIER_BYTES: usize = 160;
 pub const MAX_PROVIDER_CLIENT_ID_BYTES: usize = 128;
 pub const MAX_SHORT_TEXT_BYTES: usize = 512;
 pub const MAX_REASON_BYTES: usize = 4 * 1024;
-/// Bound of a provider's rejection text on a Broker order.
+/// The most of a provider's rejection text the runner hands a kernel.
 pub const MAX_REJECTION_REASON_BYTES: usize = 512;
 pub const MAX_PRICE_MICROS: u64 = 1_000_000;
 /// Request names the host may allow a Strategy (Phase 4); bounded now so the wire need not
@@ -284,7 +284,9 @@ pub struct BrokerOrderV6 {
     /// Execution fees charged for this order's fills so far.
     pub fees_micros: u64,
     /// The provider's rejection text of a `Rejected` order, when it gave one (at most
-    /// `MAX_REJECTION_REASON_BYTES`). Kernels classify transient rejections by it.
+    /// `MAX_REASON_BYTES`; empty is the same as none, and it is ignored on other statuses).
+    /// The host writes it with the order's status, atomically. The runner hands kernels at
+    /// most `MAX_REJECTION_REASON_BYTES` of it; they classify transient rejections by it.
     pub rejection_reason: Option<String>,
     pub created_at_unix_ms: Option<i64>,
     pub updated_at_unix_ms: Option<i64>,
@@ -1248,8 +1250,10 @@ pub fn validate_broker_order_v6(
         || !valid_order_reservation(order)
         || !valid_optional_text(&order.signal_type, MAX_SHORT_TEXT_BYTES)
         || !valid_optional_text(&order.signal_metadata, MAX_COMMAND_METADATA_BYTES)
-        || !valid_optional_text(&order.rejection_reason, MAX_REJECTION_REASON_BYTES)
-        || (order.rejection_reason.is_some() && order.status != BrokerOrderStatusV6::Rejected)
+        || order
+            .rejection_reason
+            .as_ref()
+            .is_some_and(|reason| reason.len() > MAX_REASON_BYTES)
     {
         return Err(DecisionV6Error::InvalidContract);
     }

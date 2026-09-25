@@ -1034,38 +1034,38 @@ fn a_cancel_all_counts_the_orders_open_when_it_is_issued() {
 }
 
 #[test]
-fn a_rejection_reason_belongs_to_a_rejected_order_within_its_bound() {
+fn a_rejection_reason_is_accepted_up_to_4_kib() {
     let markets = [MARKET.to_owned()];
     let rejected = BrokerOrderV6 {
         status: BrokerOrderStatusV6::Rejected,
         filled_quantity_hundredths: 0,
         remaining_quantity_hundredths: 300,
         reserved_principal_micros: 0,
-        rejection_reason: Some("r".repeat(MAX_REJECTION_REASON_BYTES)),
+        rejection_reason: Some("r".repeat(MAX_REASON_BYTES)),
         ..resting_order()
     };
-    validate_broker_order_v6(&rejected, &markets).unwrap();
-    for invalid in [
-        BrokerOrderV6 {
-            rejection_reason: Some("r".repeat(MAX_REJECTION_REASON_BYTES + 1)),
-            ..rejected.clone()
-        },
+    for valid in [
+        rejected.clone(),
         BrokerOrderV6 {
             rejection_reason: Some(String::new()),
             ..rejected.clone()
         },
         BrokerOrderV6 {
-            rejection_reason: Some("rejected".to_owned()),
+            rejection_reason: Some("ignored on an open order".to_owned()),
             ..resting_order()
         },
     ] {
-        assert_eq!(
-            validate_broker_order_v6(&invalid, &markets),
-            Err(DecisionV6Error::InvalidContract)
-        );
+        validate_broker_order_v6(&valid, &markets).unwrap();
     }
+    let over = BrokerOrderV6 {
+        rejection_reason: Some("r".repeat(MAX_REASON_BYTES + 1)),
+        ..rejected
+    };
+    assert_eq!(
+        validate_broker_order_v6(&over, &markets),
+        Err(DecisionV6Error::InvalidContract)
+    );
 }
-
 #[test]
 fn a_live_cancel_all_counts_a_cancel_per_open_order() {
     let mut context = context();

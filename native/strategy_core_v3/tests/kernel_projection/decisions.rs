@@ -1787,9 +1787,19 @@ fn a_provider_rejection_carries_the_provider_text() {
     let context = priced_context();
     let placed = decide(&context, place_yes);
     let command_id = cid(1, 0);
+    let long = format!("{}é{}", "x".repeat(511), "y".repeat(3000));
     for (reason, expected) in [
-        (Some("market paused"), "market paused"),
-        (None, strategy_core_v3::kernel_v6::PROVIDER_REJECTED_REASON),
+        (Some("market paused"), "market paused".to_owned()),
+        (
+            None,
+            strategy_core_v3::kernel_v6::PROVIDER_REJECTED_REASON.to_owned(),
+        ),
+        (
+            Some(""),
+            strategy_core_v3::kernel_v6::PROVIDER_REJECTED_REASON.to_owned(),
+        ),
+        // Cut to 512 bytes on a character boundary.
+        (Some(long.as_str()), "x".repeat(511)),
     ] {
         let mut rejected = order(&command_id, "yes-1", BrokerOrderStatusV6::Rejected, 0, 2);
         rejected.rejection_reason = reason.map(str::to_owned);
@@ -1800,7 +1810,7 @@ fn a_provider_rejection_carries_the_provider_text() {
             [(
                 OrderUpdateStatus::Refused {
                     code: strategy_core_v3::kernel_v6::PROVIDER_REJECTED_CODE.to_owned(),
-                    reason: expected.to_owned(),
+                    reason: expected.clone(),
                 },
                 0,
                 300,

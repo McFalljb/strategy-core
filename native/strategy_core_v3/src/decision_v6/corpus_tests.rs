@@ -416,18 +416,11 @@ fn invalid_contexts() -> Vec<(&'static str, DecisionV6Error, ContextMutation)> {
             },
         ),
         (
-            "rejection-reason-on-an-open-order",
-            DecisionV6Error::InvalidContract,
-            |context| {
-                context.broker.orders[0].rejection_reason = Some("rejected".to_owned());
-            },
-        ),
-        (
-            "rejection-reason-over-512-bytes",
+            "rejection-reason-over-4-kib",
             DecisionV6Error::InvalidContract,
             |context| {
                 *context = provider_rejection_context();
-                context.broker.orders[1].rejection_reason = Some("r".repeat(513));
+                context.broker.orders[1].rejection_reason = Some("r".repeat(MAX_REASON_BYTES + 1));
             },
         ),
         (
@@ -960,7 +953,7 @@ fn v6_corpus_is_current_and_every_vector_decodes_to_its_verdict() {
         }
     }
     let invalid = recorded["invalid"].as_array().unwrap();
-    assert_eq!(invalid.len(), 35);
+    assert_eq!(invalid.len(), 34);
     for entry in invalid {
         let id = entry["id"].as_str().unwrap();
         let bytes = bytes(entry);
