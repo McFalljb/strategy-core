@@ -46,8 +46,10 @@ V6 context (owner projection, scope, Broker state, command receipts, checkpoint,
   before the others (in issue order), so the update closest to the bound runs without
   earlier commands: it then succeeds, or its refusal counts. A cancel's update never
   precedes an update of its target: the target's is delivered just before it (for a
-  cancel-all, the updates of every order placed before it). The order is deterministic,
-  and the evidence follows it. A refusal
+  cancel-all, the updates of every order placed before it), and the pulled updates and the
+  cancel's form one delivery unit whose commands count as the cancel's own, so a refusal
+  for room inside the unit counts rather than defers. The order is deterministic, and the
+  evidence follows it. A refusal
   at a Sleeve-wide bound (the open-order cap, 256 live runner entries), or at a decision
   limit the update exceeds on its own, is an ordinary counted failure.
 - A snapshot the kernel's codec cannot take before an update is a counted failure of that

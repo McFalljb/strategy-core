@@ -163,6 +163,7 @@ pub fn run_transaction<F: TransactionKernelFactory>(
     let evidence = wire::order_update_evidence(
         &delivery_order
             .iter()
+            .flatten()
             .filter_map(|index| derived.steps[*index].update.as_ref())
             .map(evidence_record)
             .collect::<Vec<_>>(),
@@ -190,7 +191,17 @@ pub fn run_transaction<F: TransactionKernelFactory>(
     // still delivered.
     let mut failed = BTreeMap::new();
     let mut start = Some(host.save());
-    for &index in &delivery_order {
+    let units = delivery_order.iter().flat_map(|unit| {
+        unit.iter()
+            .enumerate()
+            .map(move |(position, index)| (position == 0, *index))
+    });
+    // What the decision had issued when the current delivery unit began.
+    let mut unit_start = None;
+    for (first_of_unit, index) in units {
+        if first_of_unit {
+            unit_start = None;
+        }
         let step = &derived.steps[index];
         let Some(record) = &step.update else {
             continue;
@@ -227,7 +238,7 @@ pub fn run_transaction<F: TransactionKernelFactory>(
             }
         };
         let saved = host.save();
-        host.begin_update();
+        host.begin_update(&mut unit_start);
         let delivered = StrategyEvent::OrderUpdate(order_update(record))
             .with_view(|view| kernel.on_event(view, &mut host));
         let deferrable = host.end_update();
@@ -738,11 +749,15 @@ impl<'a> KernelHost<'a> {
         &self.context.broker
     }
 
-    fn begin_update(&mut self) {
-        self.update_start = Some(UpdateStart {
+    /// Starts an order update in a delivery unit that began at `unit` (now, if not yet):
+    /// commands the unit's updates issue are the update's own, when deciding whether a
+    /// refusal defers it.
+    fn begin_update(&mut self, unit: &mut Option<UpdateStart>) {
+        let start = *unit.get_or_insert(UpdateStart {
             commands: self.commands.len(),
             entries: self.runner.len(),
         });
+        self.update_start = Some(start);
         self.deferrable.replace(None);
     }
 
@@ -752,8 +767,8 @@ impl<'a> KernelHost<'a> {
         self.deferrable.take()
     }
 
-    /// The commands and runner entries issued before the current update, if earlier updates
-    /// of this decision issued any.
+    /// The commands and runner entries issued before the current update's delivery unit, if
+    /// earlier updates of this decision issued any.
     fn issued_before(&self) -> Option<(&[StrategyCommandV6], &[RunnerEntryV6])> {
         let start = self.update_start?;
         (start.commands > 0).then(|| {
@@ -765,8 +780,9 @@ impl<'a> KernelHost<'a> {
     }
 
     /// A call refused for room in the decision. `alone` tells whether the call would fit
-    /// if the decision held only the current update's commands: then earlier updates took
-    /// the room, and the kernel returning this refusal defers the update.
+    /// if the decision held only the commands of the current update's delivery unit: then
+    /// earlier updates took the room, and the kernel returning this refusal defers the
+    /// update.
     fn capacity_error(&self, message: String, alone: impl FnOnce(&Self) -> bool) -> KernelError {
         let deferrable = self.issued_before().is_some() && alone(self);
         self.deferrable.replace(deferrable.then(|| message.clone()));

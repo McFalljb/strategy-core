@@ -181,7 +181,9 @@ traderv3 and strategies must build to these choices or change them here first.
     others in issue order, so contenders for the same room take turns and none starves. A
     cancel's update is never delivered before an update of its target (the target's is
     pulled forward to just before it; for a cancel-all, those of every order placed before
-    it). A refusal at a
+    it). The pulled updates and the cancel's are one delivery unit: when deciding whether a
+    refusal defers, the unit's commands are the update's own, so a moving target cannot
+    keep its deferred cancel deferred until it is abandoned. A refusal at a
     Sleeve-wide bound (open-order cap, 256 live entries), or one an update hits on its own,
     counts: waiting would never make room. A snapshot the kernel's codec cannot take before
     an update is a counted failure of that update, which is not delivered. A snapshot the

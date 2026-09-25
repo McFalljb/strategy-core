@@ -106,13 +106,14 @@ impl Step {
 }
 
 impl Derived {
-    /// The indexes of the steps with an update, in delivery order. Updates the previous
-    /// decision deferred come first, the most deferred first (then in issue order), so the
-    /// one closest to `MAX_DELIVERY_DEFERRALS` runs without earlier commands; the others
-    /// follow in issue order. A cancel's update never precedes an update of its target: the
-    /// target's is pulled forward to just before it (for a cancel-all, every order placed
-    /// before it).
-    pub fn delivery_order(&self) -> Vec<usize> {
+    /// The indexes of the steps with an update, in delivery order, grouped in delivery
+    /// units. Updates the previous decision deferred come first, the most deferred first
+    /// (then in issue order), so the one closest to `MAX_DELIVERY_DEFERRALS` runs without
+    /// earlier commands; the others follow in issue order. A cancel's update never precedes
+    /// an update of its target: the target's is pulled forward to just before it (for a
+    /// cancel-all, every order placed before it), in one unit with the cancel, whose room in
+    /// the decision the unit shares. Every other update is a unit of its own.
+    pub fn delivery_order(&self) -> Vec<Vec<usize>> {
         let with_update = |index: &usize| self.steps[*index].update.is_some();
         let mut deferred = (0..self.steps.len())
             .filter(|index| self.steps[*index].deferred())
@@ -127,13 +128,14 @@ impl Derived {
             if placed.contains(&index) {
                 continue;
             }
-            for target in self.targets(index) {
-                if placed.insert(target) {
-                    order.push(target);
-                }
-            }
+            let mut unit = self
+                .targets(index)
+                .into_iter()
+                .filter(|target| placed.insert(*target))
+                .collect::<Vec<_>>();
             placed.insert(index);
-            order.push(index);
+            unit.push(index);
+            order.push(unit);
         }
         order
     }

@@ -1390,3 +1390,209 @@ fn a_deferred_cancel_is_never_delivered_before_its_target() {
     );
     assert_eq!(state(&result), "300");
 }
+
+static UNIQUE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// A small place under a client id no other place in the process uses.
+fn place_unique(context: &mut dyn StrategyKernelContext, _: &str, _: usize) -> KernelResult<()> {
+    let unique = UNIQUE.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    context
+        .broker()
+        .place_order(limit_buy(
+            &format!("u-{unique}"),
+            ContractSide::No,
+            100,
+            0.01,
+        ))
+        .map(drop)
+}
+
+/// A checkpoint of the seeded `orders` plus a cancel of `target` (a cancel-all when none)
+/// whose refused update the previous decision deferred.
+fn with_deferred_cancel(
+    factory: &ScriptedFactory,
+    orders: Vec<BrokerOrderV6>,
+    target: Option<&str>,
+) -> KernelCheckpointV6 {
+    let context = priced_context();
+    let mut first = follow_up(&context, None, 1, orders, vec![]);
+    first.trigger = TriggerV6::Owner(OwnerTriggerV6::Recovery);
+    let seeded = run_transaction(factory, &first).unwrap();
+    let mut checkpoint = seeded.kernel_checkpoint.unwrap();
+    let template = checkpoint.runner.entries[0].clone();
+    let cancel = match target {
+        Some(client) => strategy_core_v3::decision_v6::RunnerEntryV6 {
+            command_id: "command.cancel".to_owned(),
+            kind: BrokerCommandKindV6::CancelOrder,
+            client_order_id: Some(client.to_owned()),
+            order_id: Some(format!("order.{client}")),
+            last_status: None,
+            issued_broker_revision: 15,
+            delivery_deferrals: 1,
+            ..template
+        },
+        None => strategy_core_v3::decision_v6::RunnerEntryV6 {
+            command_id: "command.cancel".to_owned(),
+            kind: BrokerCommandKindV6::CancelAllOrders,
+            client_order_id: None,
+            order_id: None,
+            market_id: None,
+            action: None,
+            side: None,
+            requested_quantity_hundredths: 0,
+            last_status: None,
+            filled_quantity_hundredths: 0,
+            order_revision: 0,
+            issued_broker_revision: 15,
+            delivery_deferrals: 1,
+            ..template
+        },
+    };
+    checkpoint.runner.entries.push(cancel);
+    checkpoint.seal()
+}
+
+/// Runs decisions 2.. over `view(delivery)` with the cancel's refusal receipt until the
+/// cancel's entry is gone; returns the decision it went in and its failures on the way.
+fn run_until_cancel_is_seen(
+    factory: &ScriptedFactory,
+    checkpoint: KernelCheckpointV6,
+    kind: BrokerCommandKindV6,
+    view: impl Fn(u32) -> Vec<BrokerOrderV6>,
+) -> (u32, Vec<(u8, u8)>) {
+    let context = priced_context();
+    let receipt = || {
+        vec![CommandReceiptV6 {
+            command_id: "command.cancel".to_owned(),
+            kind,
+            outcome: CommandOutcomeV6::Refused {
+                code: "rate_limited".to_owned(),
+                reason: "busy".to_owned(),
+            },
+        }]
+    };
+    let mut next = follow_up(&context, None, 2, view(2), receipt());
+    next.kernel_checkpoint = Some(checkpoint);
+    next.validate().unwrap();
+    let mut history = Vec::new();
+    for delivery in 2..=20_u32 {
+        if delivery > 2 {
+            let previous = history_result(&history);
+            next = follow_up(
+                &context,
+                Some(previous),
+                delivery,
+                view(delivery),
+                receipt(),
+            );
+        }
+        let result = run_transaction(factory, &next).unwrap();
+        validate_decision_result_v6(&next, &result).unwrap();
+        let cancel = entry(&result, "command.cancel")
+            .map(|cancel| (cancel.delivery_failures, cancel.delivery_deferrals));
+        let seen = result
+            .acknowledged_command_ids
+            .contains(&"command.cancel".to_owned());
+        history.push((result, cancel));
+        if cancel.is_none() {
+            assert!(seen, "the refusal's receipt is acknowledged once seen");
+            let failures = history.iter().filter_map(|(_, cancel)| *cancel).collect();
+            return (delivery, failures);
+        }
+    }
+    panic!("the cancel's refusal never counted as seen");
+}
+
+fn history_result(history: &[(DecisionResultV6, Option<(u8, u8)>)]) -> &DecisionResultV6 {
+    &history.last().unwrap().0
+}
+
+#[test]
+fn a_deferred_cancel_shares_its_room_with_the_target_pulled_before_it() {
+    use BrokerOrderStatusV6::*;
+    // Every update of `t` (the cancel's refusal names `t` too) places 40 orders: its fill
+    // pulled before the deferred cancel takes 40 of the 64 commands. They are one delivery
+    // unit, so the cancel's refusal for the room counts and it is seen within three
+    // counted failures, not deferred until abandoned.
+    const FORTY_T: &[Act] = &[Act {
+        client: "t",
+        issue: place_unique,
+        count: 40,
+        on_refusal: OnRefusal::Return,
+    }];
+    let factory = ScriptedFactory(FORTY_T);
+    let view = |delivery: u32| {
+        let filled = u64::from(delivery);
+        vec![order("command.t", "t", PartiallyFilled, filled, filled + 1)]
+    };
+    let checkpoint = with_deferred_cancel(&factory, view(1), Some("t"));
+    let (seen_in, failures) =
+        run_until_cancel_is_seen(&factory, checkpoint, BrokerCommandKindV6::CancelOrder, view);
+    assert!(seen_in <= 7, "seen in decision {seen_in}: {failures:?}");
+    assert!(
+        failures.iter().all(|(_, deferrals)| *deferrals <= 1),
+        "never deferred twice in a row: {failures:?}"
+    );
+}
+
+#[test]
+fn a_deferred_cancel_all_shares_its_room_with_every_earlier_order_pulled_before_it() {
+    use BrokerOrderStatusV6::*;
+    // Three orders move every decision and each update places 20 orders; a deferred
+    // cancel-all pulls all three before it (60 commands), then its own refusal update tries
+    // 20 more.
+    const TWENTY: &[Act] = &[
+        Act {
+            client: "a",
+            issue: place_unique,
+            count: 20,
+            on_refusal: OnRefusal::Return,
+        },
+        Act {
+            client: "b",
+            issue: place_unique,
+            count: 20,
+            on_refusal: OnRefusal::Return,
+        },
+        Act {
+            client: "c",
+            issue: place_unique,
+            count: 20,
+            on_refusal: OnRefusal::Return,
+        },
+        Act {
+            client: "",
+            issue: place_unique,
+            count: 20,
+            on_refusal: OnRefusal::Return,
+        },
+    ];
+    let factory = ScriptedFactory(TWENTY);
+    let view = |delivery: u32| {
+        let filled = u64::from(delivery);
+        ["a", "b", "c"]
+            .into_iter()
+            .map(|client| {
+                order(
+                    &format!("command.{client}"),
+                    client,
+                    PartiallyFilled,
+                    filled,
+                    filled + 1,
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let checkpoint = with_deferred_cancel(&factory, view(1), None);
+    let (seen_in, failures) = run_until_cancel_is_seen(
+        &factory,
+        checkpoint,
+        BrokerCommandKindV6::CancelAllOrders,
+        view,
+    );
+    assert!(seen_in <= 7, "seen in decision {seen_in}: {failures:?}");
+    assert!(
+        failures.iter().all(|(_, deferrals)| *deferrals <= 1),
+        "never deferred twice in a row: {failures:?}"
+    );
+}
