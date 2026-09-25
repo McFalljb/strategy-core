@@ -6,7 +6,7 @@ pub mod decision_v4;
 pub mod decision_v5;
 pub mod decision_v6;
 #[cfg(feature = "kernel")]
-pub mod kernel_v5;
+pub mod kernel_v6;
 mod supplied_s;
 pub mod supplied_v5;
 pub mod supplied_v6;

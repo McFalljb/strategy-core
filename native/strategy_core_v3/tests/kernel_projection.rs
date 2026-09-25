@@ -2,6 +2,8 @@
 //! the supplied original-precision state reach a real `NativeKernel` through Core-owned views.
 #![cfg(feature = "kernel")]
 
+#[path = "kernel_projection/decisions.rs"]
+mod decisions;
 #[path = "kernel_projection/market_strikes.rs"]
 mod market_strikes;
 
@@ -12,36 +14,32 @@ use chrono::{DateTime, TimeZone, Utc};
 use strategy_core_kernel::{
     ContractQuantity, ContractSide, KernelAction, KernelResult, LogAction, NativeKernel,
     OrderAction, OrderType, PlaceOrderRequest, StrategyEventView, StrategyKernelContext,
-    StrategyKernelState, TelemetryAction, ValueOrigin,
+    StrategyKernelState, ValueOrigin,
 };
 use strategy_core_v3::decision_v4::{
     BrokerV4, ConfigV4, DecisionContextV4, ExtremeV4, FenceV4, MarketComparisonV4,
     MarketIdentityV4, MarketV4, OpportunityV4, ProvenanceV4, ReportV4, StationIdentityV4,
     StationV4, SupervisorV4, TickerV4, TriggerV4, WeatherEventV4,
 };
-use strategy_core_v3::decision_v5::{
-    BrokerCommandKindV5, BrokerCommandReturnV5, BrokerDetailV5, BrokerOutcomeStatusV5,
-    BrokerOutcomeV5, DecisionContextV5, DecisionDispositionV5, KernelOrderResultV5,
-    KernelOrderStatusV5, OriginatingTriggerV5, OwnerTriggerV5, PlaceOrderReturnV5,
-    StrategyCommandV5, StrategyScopeV5, TriggerV5, continuation_commitment_v5,
-    decode_decision_context_v5, derive_sleeve_identity_v5, encode_decision_context_v5,
+use strategy_core_v3::decision_v6::{
+    BrokerDetailV6, CapabilityGrantV6, DecisionContextV6, DecisionDispositionV6, DeploymentModeV6,
+    OwnerTriggerV6, StrategyCommandV6, StrategyScopeV6, TelemetryEntryV6, TriggerV6,
+    decode_decision_context_v6, derive_sleeve_identity_v6, encode_decision_context_v6,
 };
-use strategy_core_v3::kernel_v5::{
+use strategy_core_v3::kernel_v6::{
     KernelCheckpointCodec, KernelEvent, KernelSnapshot, KernelTransactionError, TransactionKernel,
     TransactionKernelFactory, run_transaction,
 };
-use strategy_core_v3::supplied_v5::{
-    DecimalV5, EventEnvelopeV5, ExtremeKindV5, SUPPLIED_INPUTS_CONTRACT_VERSION,
-    SuppliedDailyExtremesV5, SuppliedEventV5, SuppliedExtremeV5, SuppliedForecastModelV5,
-    SuppliedForecastPointV5, SuppliedForecastV5, SuppliedInputsV5, SuppliedObservationV5,
-    SuppliedOracleScoreV5, SuppliedOracleTableV5, SuppliedReportV5, SuppliedStationV5,
-    SuppliedWeatherEventV5,
+use strategy_core_v3::supplied_v6::{
+    DecimalV6, EventEnvelopeV6, ExtremeKindV6, SUPPLIED_INPUTS_CONTRACT_VERSION,
+    SuppliedDailyExtremesV6, SuppliedEventV6, SuppliedExtremeV6, SuppliedForecastModelV6,
+    SuppliedForecastPointV6, SuppliedForecastV6, SuppliedInputsV6, SuppliedObservationV6,
+    SuppliedOracleScoreV6, SuppliedOracleTableV6, SuppliedReportV6, SuppliedStationV6,
+    SuppliedWeatherEventV6,
 };
 
 #[path = "kernel_projection/host_services.rs"]
 mod host_services;
-#[path = "kernel_projection/replay.rs"]
-mod replay;
 
 const STATION: &str = "KSEA";
 const MARKET: &str = "KXHIGHTSEA-26AUG30-T80";
@@ -52,16 +50,16 @@ const OBSERVED_NS: i64 = 1_788_062_340_000_000_000;
 const RECEIVED_NS: i64 = 1_788_062_345_200_000_000;
 const DECISION_MS: i64 = 1_788_062_400_000;
 
-fn decimal(text: &str) -> Option<DecimalV5> {
-    Some(DecimalV5::parse(text).unwrap())
+fn decimal(text: &str) -> Option<DecimalV6> {
+    Some(DecimalV6::parse(text).unwrap())
 }
 
 fn ns(value: i64) -> DateTime<Utc> {
     Utc.timestamp_nanos(value)
 }
 
-fn envelope(event_id: &str, sequence: u64) -> EventEnvelopeV5 {
-    EventEnvelopeV5 {
+fn envelope(event_id: &str, sequence: u64) -> EventEnvelopeV6 {
+    EventEnvelopeV6 {
         event_id: event_id.to_owned(),
         sequence,
         city_sequence: Some(9),
@@ -93,11 +91,11 @@ fn provenance(event_id: &str, sequence: u64) -> ProvenanceV4 {
     }
 }
 
-fn base_context() -> DecisionContextV5 {
+fn base_context() -> DecisionContextV6 {
     let owner_state = DecisionContextV4 {
         delivery_id: "delivery.daily.1".to_owned(),
         sleeve: SupervisorV4 {
-            sleeve_id: derive_sleeve_identity_v5("fixture", "binding.daily", "kalshi", OPPORTUNITY),
+            sleeve_id: derive_sleeve_identity_v6("fixture", "binding.daily", "kalshi", OPPORTUNITY),
             incarnation: 1,
             process_attempt: 1,
             route_epoch: 1,
@@ -137,6 +135,8 @@ fn base_context() -> DecisionContextV5 {
                 market_id: MARKET.to_owned(),
                 opportunity_id: OPPORTUNITY.to_owned(),
                 event_ticker: OPPORTUNITY.to_owned(),
+                fee_type: "quadratic".to_owned(),
+                fee_multiplier_millionths: Some(1_000_000),
                 floor_strike_milli_f: Some(79_500),
                 ..Default::default()
             },
@@ -167,15 +167,19 @@ fn base_context() -> DecisionContextV5 {
         hard_expires_at_monotonic_ns: 2,
         ..Default::default()
     };
-    DecisionContextV5 {
+    DecisionContextV6 {
         market_strikes: None,
         current_weather: None,
         forecast_issuance: None,
         current_inputs: None,
-        retained_supplied_encoding: Default::default(),
-        broker_replay: None,
+        deployment_mode: DeploymentModeV6::Paper,
+        capabilities: CapabilityGrantV6 {
+            timers: true,
+            external_requests: Vec::new(),
+        },
+        command_receipts: Vec::new(),
         owner_state,
-        strategy: StrategyScopeV5 {
+        strategy: StrategyScopeV6 {
             strategy_id: "fixture".to_owned(),
             binding_id: "binding.daily".to_owned(),
             profile: "daily-high".to_owned(),
@@ -186,22 +190,21 @@ fn base_context() -> DecisionContextV5 {
             market_ids: vec![MARKET.to_owned()],
             profile_and_calculator_digest: DIGEST.to_owned(),
         },
-        broker: BrokerDetailV5 {
+        broker: BrokerDetailV6 {
             revision: 0,
             reserved_cash_micros: 0,
             positions: Vec::new(),
             orders: Vec::new(),
         },
-        trigger: TriggerV5::Owner(OwnerTriggerV5::Recovery),
+        trigger: TriggerV6::Owner(OwnerTriggerV6::Recovery),
         kernel_checkpoint: None,
-        continuation: None,
         decision_time_unix_ms: DECISION_MS,
-        supplied: SuppliedInputsV5::default(),
+        supplied: SuppliedInputsV6::default(),
     }
 }
 
-fn observation(temperature_c: Option<&str>, temperature_f: Option<&str>) -> SuppliedObservationV5 {
-    SuppliedObservationV5 {
+fn observation(temperature_c: Option<&str>, temperature_f: Option<&str>) -> SuppliedObservationV6 {
+    SuppliedObservationV6 {
         envelope: Some(envelope("evt-obs-44", 44)),
         source: "minutetemp.websocket.v1".to_owned(),
         station_id: STATION.to_owned(),
@@ -228,8 +231,8 @@ fn observation(temperature_c: Option<&str>, temperature_f: Option<&str>) -> Supp
     }
 }
 
-fn report(revision: u64, max_temp_f: &str) -> SuppliedReportV5 {
-    SuppliedReportV5 {
+fn report(revision: u64, max_temp_f: &str) -> SuppliedReportV6 {
+    SuppliedReportV6 {
         envelope: Some(envelope(&format!("evt-dsm-{revision}"), 40 + revision)),
         source: "minutetemp.websocket.v1".to_owned(),
         station_id: STATION.to_owned(),
@@ -254,8 +257,8 @@ fn report(revision: u64, max_temp_f: &str) -> SuppliedReportV5 {
     }
 }
 
-fn episode(state: &str, sequence: u64) -> SuppliedWeatherEventV5 {
-    SuppliedWeatherEventV5 {
+fn episode(state: &str, sequence: u64) -> SuppliedWeatherEventV6 {
+    SuppliedWeatherEventV6 {
         envelope: Some(envelope(&format!("evt-wx-{sequence}"), sequence)),
         source: "minutetemp.websocket.v1".to_owned(),
         station_id: STATION.to_owned(),
@@ -274,11 +277,11 @@ fn episode(state: &str, sequence: u64) -> SuppliedWeatherEventV5 {
     }
 }
 
-fn supplied_station(observation: SuppliedObservationV5) -> SuppliedStationV5 {
-    SuppliedStationV5 {
+fn supplied_station(observation: SuppliedObservationV6) -> SuppliedStationV6 {
+    SuppliedStationV6 {
         station_id: STATION.to_owned(),
         observation: Some(observation),
-        daily_extremes: Some(SuppliedDailyExtremesV5 {
+        daily_extremes: Some(SuppliedDailyExtremesV6 {
             source: "minutetemp.rest.latest".to_owned(),
             received_at_unix_ns: 1_788_000_000_000_000_000,
             daily_high_f: decimal("80.1"),
@@ -290,15 +293,15 @@ fn supplied_station(observation: SuppliedObservationV5) -> SuppliedStationV5 {
         extreme_high: None,
         extreme_low: None,
         weather_events: vec![episode("active", 42)],
-        forecast: Some(SuppliedForecastV5 {
+        forecast: Some(SuppliedForecastV6 {
             source: "minutetemp.rest.forecast".to_owned(),
             received_at_unix_ns: 1_788_000_000_000_000_000,
             advertised_versions: vec![("hrrr".to_owned(), "2026-08-30T18:00:00Z".to_owned())],
-            models: vec![SuppliedForecastModelV5 {
+            models: vec![SuppliedForecastModelV6 {
                 model_id: "hrrr".to_owned(),
                 fetched_at: Some("2026-08-30T18:00:00Z".to_owned()),
                 fetched_at_unix_ns: Some(1_788_055_200_000_000_000),
-                hourly: vec![SuppliedForecastPointV5 {
+                hourly: vec![SuppliedForecastPointV6 {
                     time: "2026-08-30T19:00:00Z".to_owned(),
                     time_unix_ns: 1_788_058_800_000_000_000,
                     temperature_2m_f: decimal("78.6"),
@@ -309,7 +312,7 @@ fn supplied_station(observation: SuppliedObservationV5) -> SuppliedStationV5 {
                 ..Default::default()
             }],
         }),
-        oracle_tables: vec![SuppliedOracleTableV5 {
+        oracle_tables: vec![SuppliedOracleTableV6 {
             updated_at_unix_ns: Some(1_788_000_000_000_000_123),
             notification_updated_at_unix_ns: Some(1_788_000_000_000_000_987),
             source: "minutetemp.rest.oracle".to_owned(),
@@ -320,7 +323,7 @@ fn supplied_station(observation: SuppliedObservationV5) -> SuppliedStationV5 {
             days_requested: Some(7),
             score_mode: Some("day_of".to_owned()),
             rank_by: Some("high".to_owned()),
-            scores: vec![SuppliedOracleScoreV5 {
+            scores: vec![SuppliedOracleScoreV6 {
                 rank: Some(1),
                 model_id: "hrrr".to_owned(),
                 model_name: "HRRR".to_owned(),
@@ -334,11 +337,11 @@ fn supplied_station(observation: SuppliedObservationV5) -> SuppliedStationV5 {
 }
 
 fn with_supplied(
-    mut context: DecisionContextV5,
-    station: SuppliedStationV5,
-    event: SuppliedEventV5,
-) -> DecisionContextV5 {
-    context.supplied = SuppliedInputsV5 {
+    mut context: DecisionContextV6,
+    station: SuppliedStationV6,
+    event: SuppliedEventV6,
+) -> DecisionContextV6 {
+    context.supplied = SuppliedInputsV6 {
         contract_version: SUPPLIED_INPUTS_CONTRACT_VERSION.to_owned(),
         stations: vec![station],
         originating_event: Some(event),
@@ -349,7 +352,7 @@ fn with_supplied(
 fn observation_context(
     temperature_c: Option<&str>,
     temperature_f: Option<&str>,
-) -> DecisionContextV5 {
+) -> DecisionContextV6 {
     let mut context = base_context();
     context.owner_state.trigger = TriggerV4::Weather {
         station_id: STATION.to_owned(),
@@ -370,7 +373,7 @@ fn observation_context(
         state: "active".to_owned(),
         ..Default::default()
     });
-    context.trigger = TriggerV5::Owner(OwnerTriggerV5::Observation {
+    context.trigger = TriggerV6::Owner(OwnerTriggerV6::Observation {
         station_id: STATION.to_owned(),
         observed_at_unix_ms: OBSERVED_NS / 1_000_000,
         component_revision: 7,
@@ -381,11 +384,11 @@ fn observation_context(
     with_supplied(
         context,
         supplied_station(observation.clone()),
-        SuppliedEventV5::Observation(observation),
+        SuppliedEventV6::Observation(observation),
     )
 }
 
-fn report_context() -> DecisionContextV5 {
+fn report_context() -> DecisionContextV6 {
     let mut context = base_context();
     context.owner_state.trigger = TriggerV4::StationReport {
         station_id: STATION.to_owned(),
@@ -406,7 +409,7 @@ fn report_context() -> DecisionContextV5 {
         provenance: provenance("evt-dsm-2", 42),
         ..Default::default()
     });
-    context.trigger = TriggerV5::Owner(OwnerTriggerV5::StationReport {
+    context.trigger = TriggerV6::Owner(OwnerTriggerV6::StationReport {
         station_id: STATION.to_owned(),
         report_id: "report.dsm.1".to_owned(),
         report_type: "dsm".to_owned(),
@@ -418,11 +421,11 @@ fn report_context() -> DecisionContextV5 {
     with_supplied(
         context,
         supplied_station(observation(Some("22.8"), Some("73"))),
-        SuppliedEventV5::Report(report(2, "80")),
+        SuppliedEventV6::Report(report(2, "80")),
     )
 }
 
-fn new_low_context() -> DecisionContextV5 {
+fn new_low_context() -> DecisionContextV6 {
     let mut context = base_context();
     context.owner_state.trigger = TriggerV4::Weather {
         station_id: STATION.to_owned(),
@@ -436,7 +439,7 @@ fn new_low_context() -> DecisionContextV5 {
         observed_at_unix_ms: Some(1_788_020_000_000),
         ..Default::default()
     });
-    context.trigger = TriggerV5::Owner(OwnerTriggerV5::NewLow {
+    context.trigger = TriggerV6::Owner(OwnerTriggerV6::NewLow {
         station_id: STATION.to_owned(),
         event_date: Some("2026-08-30".to_owned()),
         temperature_milli_c: Some(14_444),
@@ -445,10 +448,10 @@ fn new_low_context() -> DecisionContextV5 {
         source_generation: 3,
         source_sequence: 50,
     });
-    let extreme = SuppliedExtremeV5 {
+    let extreme = SuppliedExtremeV6 {
         envelope: Some(envelope("evt-low-50", 50)),
         source: "minutetemp.websocket.v1".to_owned(),
-        kind: ExtremeKindV5::Low,
+        kind: ExtremeKindV6::Low,
         station_id: STATION.to_owned(),
         value_f: decimal("58"),
         value_c: decimal("14.44444444444444"),
@@ -462,7 +465,7 @@ fn new_low_context() -> DecisionContextV5 {
     };
     let mut station = supplied_station(observation(Some("22.8"), Some("73")));
     station.extreme_low = Some(extreme.clone());
-    with_supplied(context, station, SuppliedEventV5::Extreme(extreme))
+    with_supplied(context, station, SuppliedEventV6::Extreme(extreme))
 }
 
 #[test]
@@ -471,7 +474,7 @@ fn accepted_near_equal_extreme_does_not_select_the_older_rest_original() {
     let station = &mut context.supplied.stations[0];
     station.extreme_low.as_mut().unwrap().value_f = decimal("57.999999999");
     station.extreme_low.as_mut().unwrap().value_c = decimal("14.44444444388889");
-    context.supplied.originating_event = Some(SuppliedEventV5::Extreme(
+    context.supplied.originating_event = Some(SuppliedEventV6::Extreme(
         station.extreme_low.clone().unwrap(),
     ));
     context.owner_state.stations[0].weather.running_low_milli_c = Some(14_444);
@@ -495,15 +498,15 @@ fn accepted_near_equal_extreme_does_not_select_the_older_rest_original() {
             ..Default::default()
         },
     );
-    context.current_weather = Some(vec![strategy_core_v3::decision_v5::StationWeatherV5 {
+    context.current_weather = Some(vec![strategy_core_v3::decision_v6::StationWeatherV6 {
         station_id: STATION.to_owned(),
         facts,
     }]);
-    let encoded = encode_decision_context_v5(&context).unwrap();
-    assert!(encoded.starts_with(b"SDCTXV5F"));
-    assert_eq!(decode_decision_context_v5(&encoded).unwrap(), context);
+    let encoded = encode_decision_context_v6(&context).unwrap();
+    assert!(encoded.starts_with(b"SDCTXV6A"));
+    assert_eq!(decode_decision_context_v6(&encoded).unwrap(), context);
     let snapshot =
-        KernelSnapshot::from_context(&decode_decision_context_v5(&encoded).unwrap()).unwrap();
+        KernelSnapshot::from_context(&decode_decision_context_v6(&encoded).unwrap()).unwrap();
     let current = snapshot.station(STATION).unwrap();
     assert_eq!(
         current.daily_extremes.as_ref().unwrap().daily_low_f,
@@ -517,7 +520,7 @@ fn accepted_near_equal_extreme_does_not_select_the_older_rest_original() {
     );
 }
 
-fn ended_episode_context() -> DecisionContextV5 {
+fn ended_episode_context() -> DecisionContextV6 {
     let mut context = base_context();
     context.owner_state.trigger = TriggerV4::Weather {
         station_id: STATION.to_owned(),
@@ -525,7 +528,7 @@ fn ended_episode_context() -> DecisionContextV5 {
         source_sequence: 45,
     };
     context.owner_state.stations[0].weather_events_meta.revision = 6;
-    context.trigger = TriggerV5::Owner(OwnerTriggerV5::WeatherEvent {
+    context.trigger = TriggerV6::Owner(OwnerTriggerV6::WeatherEvent {
         station_id: STATION.to_owned(),
         episode_id: "01a03d6a-f462-7153-9133-dbd2a26af5b4".to_owned(),
         state: "ended".to_owned(),
@@ -538,7 +541,7 @@ fn ended_episode_context() -> DecisionContextV5 {
     with_supplied(
         context,
         station,
-        SuppliedEventV5::WeatherEvent(episode("ended", 45)),
+        SuppliedEventV6::WeatherEvent(episode("ended", 45)),
     )
 }
 
@@ -691,7 +694,7 @@ impl TransactionKernelFactory for Factory {
             })
             .ok_or_else(|| KernelTransactionError::UnsupportedStrategy(strategy_id.to_owned()))
     }
-    fn create(&self, _context: &DecisionContextV5) -> Result<Self::Kernel, KernelTransactionError> {
+    fn create(&self, _context: &DecisionContextV6) -> Result<Self::Kernel, KernelTransactionError> {
         Ok(RecordingKernel {
             seen: Rc::clone(&self.seen),
             place: self.place,
@@ -699,20 +702,17 @@ impl TransactionKernelFactory for Factory {
     }
     fn restore(
         &self,
-        context: &DecisionContextV5,
-        _checkpoint: &strategy_core_v3::decision_v5::KernelCheckpointV5,
+        context: &DecisionContextV6,
+        _checkpoint: &strategy_core_v3::decision_v6::KernelCheckpointV6,
     ) -> Result<Self::Kernel, KernelTransactionError> {
         self.create(context)
-    }
-    fn gate_telemetry_code(&self) -> Option<&str> {
-        Some("gate")
     }
 }
 
 fn run(
-    context: &DecisionContextV5,
+    context: &DecisionContextV6,
     place: bool,
-) -> (Vec<String>, strategy_core_v3::decision_v5::DecisionResultV5) {
+) -> (Vec<String>, strategy_core_v3::decision_v6::DecisionResultV6) {
     let seen = Rc::new(RefCell::new(Vec::new()));
     let factory = Factory {
         seen: Rc::clone(&seen),
@@ -723,7 +723,7 @@ fn run(
     (seen, result)
 }
 
-fn view_of(context: &DecisionContextV5) -> String {
+fn view_of(context: &DecisionContextV6) -> String {
     let event = KernelEvent::from_context(context).unwrap();
     format!("{:?}", event.view().unwrap())
 }
@@ -790,7 +790,7 @@ fn supplied_temperatures_reach_views_per_unit_without_conversion() {
             .supplied
             .originating_event
             .as_ref()
-            .and_then(SuppliedEventV5::envelope)
+            .and_then(SuppliedEventV6::envelope)
             .unwrap()
             .received_at_unix_ns;
         assert!(received > EMITTED_NS, "{name}");
@@ -854,7 +854,7 @@ fn supplied_report_view_carries_originals_publication_time_and_correction_identi
         source_generation: 3,
         source_sequence: 43,
     };
-    corrected.trigger = TriggerV5::Owner(OwnerTriggerV5::StationReport {
+    corrected.trigger = TriggerV6::Owner(OwnerTriggerV6::StationReport {
         station_id: STATION.to_owned(),
         report_id: "report.dsm.1".to_owned(),
         report_type: "dsm".to_owned(),
@@ -867,7 +867,7 @@ fn supplied_report_view_carries_originals_publication_time_and_correction_identi
         corrected.validate().is_err(),
         "an originating revision 2 event cannot accompany a revision 3 trigger"
     );
-    corrected.supplied.originating_event = Some(SuppliedEventV5::Report(report(3, "81")));
+    corrected.supplied.originating_event = Some(SuppliedEventV6::Report(report(3, "81")));
     corrected.validate().unwrap();
     assert!(view_of(&corrected).contains("max_temp_f: Some(81.0)"));
 }
@@ -875,7 +875,7 @@ fn supplied_report_view_carries_originals_publication_time_and_correction_identi
 #[test]
 fn derived_fallback_projects_the_v4_projection_when_nothing_was_supplied() {
     let mut context = report_context();
-    context.supplied = SuppliedInputsV5::default();
+    context.supplied = SuppliedInputsV6::default();
     context.owner_state.stations[0].reports[0].temperature_milli_f = Some(73_400);
     context.validate().unwrap();
     let event = KernelEvent::from_context(&context).unwrap();
@@ -900,7 +900,7 @@ fn derived_fallback_projects_the_v4_projection_when_nothing_was_supplied() {
     assert_eq!(view.source_url, "");
 
     let mut observation = observation_context(Some("22.8"), Some("73"));
-    observation.supplied = SuppliedInputsV5::default();
+    observation.supplied = SuppliedInputsV6::default();
     observation.validate().unwrap();
     let event = KernelEvent::from_context(&observation).unwrap();
     let StrategyEventView::Observation(view) = event.view().unwrap() else {
@@ -978,7 +978,7 @@ fn new_low_and_episode_events_are_typed_with_their_own_identities() {
 
     // An ended episode without its supplied event cannot be reconstructed from state.
     let mut unsupplied = ended_episode_context();
-    unsupplied.supplied = SuppliedInputsV5::default();
+    unsupplied.supplied = SuppliedInputsV6::default();
     let event = KernelEvent::from_context(&unsupplied).unwrap();
     assert!(matches!(
         event.view().unwrap(),
@@ -1010,9 +1010,9 @@ fn transaction_runner_presents_the_event_over_supplied_state_and_bridges_the_bro
         climate_day_end_utc_unix_ms: primary.climate_day_end_utc_unix_ms,
         ..Default::default()
     });
-    context.supplied.stations.push(SuppliedStationV5 {
+    context.supplied.stations.push(SuppliedStationV6 {
         station_id: "KSFO".to_owned(),
-        observation: Some(SuppliedObservationV5 {
+        observation: Some(SuppliedObservationV6 {
             source: "minutetemp.rest.latest".to_owned(),
             station_id: "KSFO".to_owned(),
             observed_at_unix_ns: OBSERVED_NS,
@@ -1028,7 +1028,7 @@ fn transaction_runner_presents_the_event_over_supplied_state_and_bridges_the_bro
             .any(|row| row == "secondary=KSFO temperature_f=Some(62.6)"),
         "the invocation must expose every delivered contributor, not only the primary station"
     );
-    assert_eq!(result.disposition, DecisionDispositionV5::Completed);
+    assert_eq!(result.disposition, DecisionDispositionV6::Completed);
     assert_eq!(result.kernel_checkpoint.as_ref().unwrap().sequence, 1);
     assert!(seen[0].starts_with("Observation("), "{}", seen[0]);
     assert!(seen[0].contains("temperature_f: Some(73.0)"), "{}", seen[0]);
@@ -1064,125 +1064,48 @@ fn transaction_runner_presents_the_event_over_supplied_state_and_bridges_the_bro
     );
     assert!(
         result
-            .diagnostics
+            .telemetry
             .iter()
-            .any(|d| d.code == "kernel_telemetry"),
-        "counters survive"
+            .any(|entry| matches!(entry, TelemetryEntryV6::Counter { name, .. } if name == "fixture_counter")),
+        "counters survive as typed telemetry"
+    );
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "kernel_log"),
+        "logs are diagnostics"
     );
     assert!(
         result.commands.is_empty(),
-        "gate logs consume no command ordinal"
+        "logs and telemetry are not commands"
     );
 
-    // Economic call: deferred into an awaiting result, then replayed with the exact return.
-    let (seen, awaiting) = run(&context, true);
-    assert!(seen.iter().all(|line| !line.starts_with("placed=")));
-    let DecisionDispositionV5::AwaitingBrokerOutcome {
-        awaited_command_id, ..
-    } = &awaiting.disposition
-    else {
-        panic!("expected awaiting disposition");
-    };
-    let StrategyCommandV5::PlaceOrder(command) = &awaiting.commands[0] else {
+    // A Broker call returns its ticket at once; the run completes with the command.
+    let (seen, placed) = run(&context, true);
+    assert_eq!(placed.disposition, DecisionDispositionV6::Completed);
+    assert_eq!(placed.kernel_checkpoint.as_ref().unwrap().sequence, 1);
+    let StrategyCommandV6::PlaceOrder(command) = &placed.commands[0] else {
         panic!("expected place order");
     };
-    assert_eq!(command.command_id, *awaited_command_id);
+    assert_eq!(command.command_id, "command.delivery.daily.1.0");
+    assert_eq!(command.provider_client_id, "client.fixture.1");
     assert_eq!(command.quantity_hundredths, 300);
     assert_eq!(command.limit_price_micros, Some(400_000));
-    let commitment = continuation_commitment_v5(&context, &awaiting)
-        .unwrap()
-        .unwrap();
-
+    assert!(
+        seen.iter().any(|line| line
+            == r#"placed=OrderTicket { command_id: "command.delivery.daily.1.0", client_order_id: "client.fixture.1" }"#),
+        "{seen:?}"
+    );
+    let runner = &placed.kernel_checkpoint.as_ref().unwrap().runner;
+    assert_eq!(
+        runner.entries.len(),
+        1,
+        "the place is tracked until its outcome is seen"
+    );
+    assert_eq!(runner.entries[0].command_id, command.command_id);
     let stored =
-        decode_decision_context_v5(&encode_decision_context_v5(&context).unwrap()).unwrap();
-    let mut replay = stored;
-    replay.kernel_checkpoint = awaiting.kernel_checkpoint.clone();
-    replay.continuation = Some(commitment);
-    let originating = match &context.trigger {
-        TriggerV5::Owner(trigger) => OriginatingTriggerV5::Owner(trigger.clone()),
-        _ => unreachable!(),
-    };
-    replay.trigger = TriggerV5::BrokerOutcome {
-        originating_trigger: Box::new(originating),
-        outcome: Box::new(BrokerOutcomeV5 {
-            outcome_id: "outcome.1".to_owned(),
-            continuation_id: command.fence.continuation_id.clone(),
-            continuation_generation: command.fence.continuation_generation,
-            command_id: command.command_id.clone(),
-            command_kind: BrokerCommandKindV5::PlaceOrder,
-            transition_sequence: 1,
-            target_order_id: None,
-            order_id: Some("order.1".to_owned()),
-            intent_id: Some("intent.1".to_owned()),
-            provider_order_id: Some("paper.1".to_owned()),
-            provider_client_id: Some(command.provider_client_id.clone()),
-            status: BrokerOutcomeStatusV5::Resting,
-            return_value: BrokerCommandReturnV5::PlaceOrder(PlaceOrderReturnV5::Ok(
-                KernelOrderResultV5 {
-                    order_id: "order.1".to_owned(),
-                    status: KernelOrderStatusV5::Pending,
-                    filled_quantity_hundredths: 0,
-                    fill_price_micros: 0,
-                    fee_cost_micros: 0,
-                    reason: "resting".to_owned(),
-                },
-            )),
-            requested_quantity_hundredths: 300,
-            filled_quantity_hundredths: 0,
-            remaining_quantity_hundredths: 300,
-            average_fill_price_micros: None,
-            reason: None,
-            updated_at_unix_ms: DECISION_MS,
-            broker_revision: 0,
-        }),
-    };
-    replay.validate().unwrap();
-    let (seen, completed) = run(&replay, true);
-    assert_eq!(completed.disposition, DecisionDispositionV5::Completed);
-    assert_eq!(completed.kernel_checkpoint.unwrap().sequence, 2);
-    assert!(
-        seen.iter()
-            .any(|line| line.starts_with("placed=") && line.contains("Pending")),
-        "the exact Broker return reaches the replayed kernel: {seen:?}"
+        decode_decision_context_v6(&encode_decision_context_v6(&context).unwrap()).unwrap();
+    assert_eq!(
+        run(&stored, true).1,
+        placed,
+        "one run per event, deterministic"
     );
-    assert!(
-        seen[0].contains("temperature_f: Some(73.0)"),
-        "replay presents the stored supplied event, not current state"
-    );
-}
-
-#[test]
-fn telemetry_actions_are_bounded_with_explicit_overflow_accounting() {
-    use strategy_core_v3::kernel_v5::append_kernel_telemetry;
-    let context = observation_context(Some("22.8"), Some("73"));
-    let (_, mut result) = run(&context, false);
-    let message =
-        serde_json::json!({"reason": "large_evidence", "details": "x".repeat(5000)}).to_string();
-    let actions = (0..80)
-        .map(|_| {
-            KernelAction::Log(LogAction {
-                level: "info".to_owned(),
-                message: message.clone(),
-            })
-        })
-        .chain(std::iter::once(KernelAction::Telemetry(TelemetryAction {
-            name: "late".to_owned(),
-            value: 2.0,
-            fields: Vec::new(),
-        })))
-        .collect::<Vec<_>>();
-    append_kernel_telemetry(&actions, &mut result);
-    let overflow = result
-        .diagnostics
-        .iter()
-        .find(|d| d.code == "kernel_telemetry_overflow")
-        .expect("overflow is accounted");
-    let lost =
-        serde_json::from_str::<serde_json::Value>(&overflow.message).unwrap()["lost_actions"]
-            .as_u64()
-            .unwrap();
-    assert!(lost > 0);
-    assert!(result.evidence.iter().all(|evidence| {
-        serde_json::from_slice::<serde_json::Value>(&evidence.payload).is_ok()
-    }));
 }

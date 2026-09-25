@@ -1772,6 +1772,11 @@ fn validate_checkpoint_transition(
     Ok(())
 }
 
+/// Bounds of one command on its own, as result validation checks them.
+pub fn validate_command_v6(command: &StrategyCommandV6) -> Result<(), DecisionV6Error> {
+    validate_command(command)
+}
+
 fn validate_command(command: &StrategyCommandV6) -> Result<(), DecisionV6Error> {
     if !valid_identifier(command.command_id()) {
         return Err(DecisionV6Error::InvalidContract);

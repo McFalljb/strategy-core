@@ -1,6 +1,6 @@
 use crate::actions::{
-    CancelOrderRequest, ContractQuantity, ContractSide, KernelAction, OrderResult, OrderStatusView,
-    PendingOrderView, PlaceOrderRequest, WakeAtRequest,
+    CancelOrderRequest, CommandTicket, ContractQuantity, ContractSide, KernelAction,
+    OrderStatusView, OrderTicket, PendingOrderView, PlaceOrderRequest, WakeAtRequest,
 };
 use crate::errors::{KernelError, KernelResult};
 use crate::events::{
@@ -24,12 +24,6 @@ pub trait NativeKernel {
         event: StrategyEventView<'_>,
         ctx: &mut dyn StrategyKernelContext,
     ) -> KernelResult<()>;
-
-    /// Not called by the Decision V5 host, which has no final invocation for a Sleeve. The
-    /// legacy v2 bot host and the backtester's kernel runner call it.
-    fn on_finish(&mut self, _ctx: &mut dyn StrategyKernelContext) -> KernelResult<()> {
-        Ok(())
-    }
 }
 
 pub trait StrategyKernelContext {
@@ -45,6 +39,12 @@ pub trait StrategyKernelContext {
     /// states no mode.
     fn capabilities(&self) -> KernelCapabilities {
         KernelCapabilities::default()
+    }
+
+    /// Every station whose data settles the Sleeve's event, in the host's order (the primary
+    /// station among them). Hosts that do not state them return none.
+    fn contributor_stations(&self) -> &[String] {
+        &[]
     }
 
     fn data(&self) -> &dyn StrategyKernelData;
@@ -69,13 +69,6 @@ pub trait StrategyKernelState {
     fn station(&self, station_id: &str) -> Option<&StationState>;
 
     fn market(&self, ticker: &str) -> Option<&MarketState>;
-
-    /// Diagnostics of host state reads made for this invocation. The Decision V5 host reads
-    /// nothing at decision time (all state arrives in the context), so it returns none;
-    /// `dsm_reaction_v10` and the champion kernels still record the (empty) list.
-    fn state_read_diagnostics(&self) -> Vec<StateReadDiagnostic> {
-        Vec::new()
-    }
 }
 
 impl dyn StrategyKernelState + '_ {
@@ -108,28 +101,6 @@ impl dyn StrategyKernelState + '_ {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StateReadDiagnostic {
-    pub kind: String,
-    pub key: String,
-    pub status: String,
-    pub reason: Option<String>,
-    pub client_request_started_at: Option<DateTime<Utc>>,
-    pub client_response_received_at: Option<DateTime<Utc>>,
-    pub client_latency_us: Option<u64>,
-    pub host_request_received_at: Option<DateTime<Utc>>,
-    pub host_read_started_at: Option<DateTime<Utc>>,
-    pub host_read_completed_at: Option<DateTime<Utc>>,
-    pub host_response_sent_at: Option<DateTime<Utc>>,
-    pub payload_bytes: Option<u64>,
-    pub payload_sha256: Option<String>,
-    pub host_state_seq: Option<u64>,
-    pub source_feed_event_seq: Option<u64>,
-    pub source_state_seq: Option<u64>,
-    pub source_observed_at: Option<DateTime<Utc>>,
-    pub source_updated_at: Option<DateTime<Utc>>,
-}
-
 pub trait StrategyKernelData {}
 
 pub trait StrategyKernelBroker {
@@ -149,14 +120,20 @@ pub trait StrategyKernelBroker {
         None
     }
 
-    fn place_order(&mut self, request: PlaceOrderRequest) -> KernelResult<OrderResult>;
+    /// Issues an order and returns its ticket at once. `Err` means only a local problem: an
+    /// invalid request or a bound exceeded. A Broker refusal is never an `Err`; it arrives as
+    /// an `OrderUpdate` event, like every later change of the order.
+    fn place_order(&mut self, request: PlaceOrderRequest) -> KernelResult<OrderTicket>;
 
-    fn cancel_order(&mut self, _request: CancelOrderRequest) -> KernelResult<bool> {
-        Ok(false)
+    /// Issues a cancel and returns its ticket at once; see [`Self::place_order`] for `Err`.
+    fn cancel_order(&mut self, _request: CancelOrderRequest) -> KernelResult<CommandTicket> {
+        Err(KernelError::new("this host does not cancel orders"))
     }
 
-    fn cancel_all_orders(&mut self) -> KernelResult<usize> {
-        Ok(0)
+    /// Issues a cancel of every open order of the Sleeve, including ones placed earlier in the
+    /// same decision; see [`Self::place_order`] for `Err`.
+    fn cancel_all_orders(&mut self) -> KernelResult<CommandTicket> {
+        Err(KernelError::new("this host does not cancel orders"))
     }
 }
 
@@ -165,15 +142,10 @@ pub trait StrategyKernelRuntime {
         None
     }
 
-    fn wake_at(&mut self, request: WakeAtRequest) -> KernelResult<()>;
-
-    /// Schedules a timer as [`Self::wake_at`] does and returns its handle, which
-    /// [`Self::cancel_timer`] accepts in this or a later decision; keep it in the checkpoint to
-    /// cancel later. Hosts without handles (`KernelCapabilities::timer_handles` false) refuse
-    /// and schedule nothing.
-    fn schedule_timer(&mut self, _request: WakeAtRequest) -> KernelResult<TimerHandle> {
-        Err(KernelError::new("this host does not issue timer handles"))
-    }
+    /// Schedules a one-shot timer and returns its handle, which [`Self::cancel_timer`] accepts
+    /// in this or a later decision; keep it in the checkpoint to cancel later. A later schedule
+    /// with the same key replaces the timer.
+    fn wake_at(&mut self, request: WakeAtRequest) -> KernelResult<TimerHandle>;
 
     /// Cancels the timer the handle names if it is still pending with that generation; a
     /// timer that already fired or was replaced is left alone. Hosts without handles refuse.
@@ -361,11 +333,13 @@ pub struct KernelCapabilities {
     pub mode: Option<RuntimeMode>,
     /// `StrategyKernelRuntime::wake_at` schedules one-shot timers.
     pub timers: bool,
-    /// `schedule_timer` returns handles that `cancel_timer` accepts, and `pending_timers`
-    /// reports the Sleeve's pending timers.
+    /// `cancel_timer` accepts the handles `wake_at` returns, and `pending_timers` reports the
+    /// Sleeve's pending timers.
     pub timer_handles: bool,
     /// `StrategyKernelTelemetry::gauge` is recorded.
     pub gauges: bool,
     /// `StrategyKernelTelemetry::annotate` is recorded.
     pub annotations: bool,
+    /// External request names the host allows, sorted. Empty until hosts grant any.
+    pub external_requests: Vec<String>,
 }

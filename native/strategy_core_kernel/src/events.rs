@@ -6,11 +6,10 @@
 //! explicit floors of the exact hundredths carried next to them.
 
 use std::borrow::Cow;
-use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
 
-use crate::actions::ContractQuantity;
+use crate::actions::{ContractQuantity, OrderUpdate};
 use crate::supplied::{
     SuppliedExtreme, SuppliedForecast, SuppliedForecastModel, SuppliedObservation,
     SuppliedOracleTable, SuppliedReport, SuppliedWeatherEvent,
@@ -326,16 +325,6 @@ pub struct ForecastUpdatedView<'a> {
     pub version: &'a str,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct ForecastVersionsView<'a> {
-    pub event_id: Option<&'a str>,
-    pub sequence: Option<i64>,
-    pub emitted_at: Option<DateTime<Utc>>,
-    pub slug: &'a str,
-    pub station_id: &'a str,
-    pub versions: &'a BTreeMap<String, String>,
-}
-
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct OracleScoresUpdatedView<'a> {
     pub event_id: Option<&'a str>,
@@ -425,11 +414,6 @@ pub struct TimerWakeView<'a> {
     pub name: &'a str,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
-pub struct ShutdownView<'a> {
-    pub reason: &'a str,
-}
-
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct TickerPriceView<'a> {
     pub ticker: &'a str,
@@ -483,20 +467,13 @@ pub enum StrategyEventView<'a> {
     PriceUpdate(PriceUpdateView<'a>),
     Observation(ObservationView<'a>),
     ForecastUpdated(ForecastUpdatedView<'a>),
-    /// Not delivered by the Decision V5 host, which presents forecasts as `ForecastUpdated`
-    /// and in state; only the legacy v2 bot host delivers it. Every kernel still matches it,
-    /// so it goes with the Decision V6 kernel API change rather than now.
-    ForecastVersions(ForecastVersionsView<'a>),
     OracleScoresUpdated(OracleScoresUpdatedView<'a>),
     StationReport(StationReportView<'a>),
     WeatherEvent(WeatherEventView<'a>),
     NewHigh(HighLowView<'a>),
     NewLow(HighLowView<'a>),
     TimerWake(TimerWakeView<'a>),
-    /// Not delivered by the Decision V5 host (a Sleeve stops between decisions, with no
-    /// final invocation); only the legacy v2 bot host delivers it. Every kernel still matches
-    /// it, so it goes with the Decision V6 kernel API change rather than now.
-    Shutdown(ShutdownView<'a>),
+    OrderUpdate(&'a OrderUpdate),
     Unknown {
         event_type: &'a str,
         emitted_at: Option<DateTime<Utc>>,
@@ -510,14 +487,13 @@ impl StrategyEventView<'_> {
             Self::PriceUpdate(_) => "price_update",
             Self::Observation(_) => "observation",
             Self::ForecastUpdated(_) => "forecast_updated",
-            Self::ForecastVersions(_) => "forecast_versions",
             Self::OracleScoresUpdated(_) => "oracle_scores_updated",
             Self::StationReport(_) => "station_report",
             Self::WeatherEvent(_) => "weather_event",
             Self::NewHigh(_) => "new_high",
             Self::NewLow(_) => "new_low",
             Self::TimerWake(_) => "timer_wake",
-            Self::Shutdown(_) => "shutdown",
+            Self::OrderUpdate(_) => "order_update",
             Self::Unknown { event_type, .. } => event_type,
         }
     }
