@@ -13,6 +13,9 @@ use strategy_core_v3::decision_v6::{
     convert_v5_kernel_checkpoint, validate_decision_result_v6,
 };
 
+#[path = "delivery.rs"]
+mod delivery;
+
 type Step = fn(&mut dyn StrategyKernelContext, &mut Vec<String>) -> KernelResult<()>;
 
 /// Runs `step` for the decision's own event and records every order update it is shown.
