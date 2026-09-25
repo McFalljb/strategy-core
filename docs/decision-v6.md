@@ -18,7 +18,7 @@ to settle beyond the design note are listed in
 V6 context (owner projection, scope, Broker state, command receipts, checkpoint, trigger)
   -> runner compares Broker state + receipts with the checkpoint's runner section
   -> on_event(OrderUpdate) for each change, in the order the commands were issued
-     (updates the previous decision deferred first)
+     (updates the previous decision deferred first; a cancel's never before its target's)
   -> on_event(trigger event) / on_start (Bootstrap, Recovery)
   -> one result: post-event checkpoint + commands in issue order + acknowledged command ids
 ```
@@ -42,9 +42,12 @@ V6 context (owner projection, scope, Broker state, command receipts, checkpoint,
   the update's own commands would fit a decision without them. It waits, as it was
   (`order_update_deferred`, a `warn` diagnostic), for up to `MAX_DELIVERY_DEFERRALS = 8`
   decisions in a row (`delivery_deferrals`), then is abandoned like a failed one. The next
-  decision delivers deferred updates first (in issue order), before the others (in issue
-  order), so a deferred update runs without earlier commands: it then succeeds, or its
-  refusal counts. The order is deterministic, and the evidence follows it. A refusal
+  decision delivers deferred updates first, the most deferred first (then in issue order),
+  before the others (in issue order), so the update closest to the bound runs without
+  earlier commands: it then succeeds, or its refusal counts. A cancel's update never
+  precedes an update of its target: the target's is delivered just before it (for a
+  cancel-all, the updates of every order placed before it). The order is deterministic,
+  and the evidence follows it. A refusal
   at a Sleeve-wide bound (the open-order cap, 256 live runner entries), or at a decision
   limit the update exceeds on its own, is an ordinary counted failure.
 - A snapshot the kernel's codec cannot take before an update is a counted failure of that
@@ -186,7 +189,8 @@ Strategy was shown, the Broker revision it was issued at, whether it is a tombst
 since which revision, for how many views), and how often the kernel failed on its pending
 update (and for how many decisions in a row it was deferred). Orders are matched to
 entries by command id only. Before the trigger, for each entry in issue order (the updates
-are then delivered in issue order, those the previous decision deferred first):
+are then delivered in issue order, those the previous decision deferred first, a cancel's
+never before its target's):
 
 | Context shows | Update | Entry |
 |---|---|---|

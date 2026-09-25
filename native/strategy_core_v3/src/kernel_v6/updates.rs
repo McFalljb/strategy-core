@@ -83,6 +83,13 @@ impl Step {
                 .is_some_and(|entry| entry.delivery_deferrals > 0)
     }
 
+    /// Consecutive decisions that deferred this step's update.
+    pub fn deferrals(&self) -> u8 {
+        self.previous
+            .as_ref()
+            .map_or(0, |entry| entry.delivery_deferrals)
+    }
+
     /// The consecutive deferral this step's update would be.
     pub fn deferral(&self) -> u8 {
         self.previous
@@ -99,6 +106,65 @@ impl Step {
 }
 
 impl Derived {
+    /// The indexes of the steps with an update, in delivery order. Updates the previous
+    /// decision deferred come first, the most deferred first (then in issue order), so the
+    /// one closest to `MAX_DELIVERY_DEFERRALS` runs without earlier commands; the others
+    /// follow in issue order. A cancel's update never precedes an update of its target: the
+    /// target's is pulled forward to just before it (for a cancel-all, every order placed
+    /// before it).
+    pub fn delivery_order(&self) -> Vec<usize> {
+        let with_update = |index: &usize| self.steps[*index].update.is_some();
+        let mut deferred = (0..self.steps.len())
+            .filter(|index| self.steps[*index].deferred())
+            .collect::<Vec<_>>();
+        deferred.sort_by_key(|index| (std::cmp::Reverse(self.steps[*index].deferrals()), *index));
+        let rest = (0..self.steps.len())
+            .filter(with_update)
+            .filter(|index| !self.steps[*index].deferred());
+        let mut order = Vec::new();
+        let mut placed = BTreeSet::new();
+        for index in deferred.into_iter().chain(rest) {
+            if placed.contains(&index) {
+                continue;
+            }
+            for target in self.targets(index) {
+                if placed.insert(target) {
+                    order.push(target);
+                }
+            }
+            placed.insert(index);
+            order.push(index);
+        }
+        order
+    }
+
+    /// The steps with an update of the orders the cancel at `index` targets (none for a
+    /// place).
+    fn targets(&self, index: usize) -> Vec<usize> {
+        let Some(cancel) = self.steps[index].previous.as_ref() else {
+            return Vec::new();
+        };
+        let is_target = |other: usize| {
+            let step = &self.steps[other];
+            let Some(order) = step.previous.as_ref() else {
+                return false;
+            };
+            step.update.is_some()
+                && order.kind == BrokerCommandKindV6::PlaceOrder
+                && match cancel.kind {
+                    BrokerCommandKindV6::PlaceOrder => false,
+                    BrokerCommandKindV6::CancelOrder => {
+                        cancel.client_order_id.is_some()
+                            && order.client_order_id == cancel.client_order_id
+                    }
+                    BrokerCommandKindV6::CancelAllOrders => other < index,
+                }
+        };
+        (0..self.steps.len())
+            .filter(|other| is_target(*other))
+            .collect()
+    }
+
     /// The entries as they stand if every update is handled.
     pub fn entries(&self) -> Vec<RunnerEntryV6> {
         self.steps

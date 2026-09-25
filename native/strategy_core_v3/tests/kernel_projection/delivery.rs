@@ -1253,3 +1253,140 @@ fn a_kernel_the_factory_cannot_restore_goes_back_to_the_decision_start() {
     plan.failing_restores.set(2);
     assert!(run_transaction(&factory, &next).is_err());
 }
+
+#[test]
+fn contenders_for_the_same_room_take_turns_and_none_is_abandoned() {
+    use BrokerOrderStatusV6::*;
+    // Three orders each move every decision, and each update needs 40 of the 64 commands:
+    // one fits a decision after another. The most deferred goes first, so the turns rotate.
+    const FORTY3: &[Act] = &[
+        Act {
+            client: "a-first",
+            issue: place_small,
+            count: 40,
+            on_refusal: OnRefusal::Return,
+        },
+        Act {
+            client: "m-mid",
+            issue: place_small,
+            count: 40,
+            on_refusal: OnRefusal::Return,
+        },
+        Act {
+            client: "z-target",
+            issue: place_small,
+            count: 40,
+            on_refusal: OnRefusal::Return,
+        },
+    ];
+    let factory = ScriptedFactory(FORTY3);
+    let view = |delivery: u64| {
+        ["a-first", "m-mid", "z-target"]
+            .into_iter()
+            .map(|client| {
+                order(
+                    &format!("command.{client}"),
+                    client,
+                    PartiallyFilled,
+                    delivery,
+                    delivery + 1,
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let context = priced_context();
+    let mut first = follow_up(&context, None, 1, view(0), vec![]);
+    first.trigger = TriggerV6::Owner(OwnerTriggerV6::Recovery);
+    let mut previous = run_transaction(&factory, &first).unwrap();
+    for delivery in 2..=20_u32 {
+        let next = follow_up(
+            &context,
+            Some(&previous),
+            delivery,
+            view(u64::from(delivery)),
+            vec![],
+        );
+        let result = run_transaction(&factory, &next).unwrap();
+        validate_decision_result_v6(&next, &result).unwrap();
+        assert!(
+            update_codes(&result)
+                .iter()
+                .all(|(_, code)| *code == "order_update_deferred"),
+            "delivery {delivery}: {:?}",
+            update_codes(&result)
+        );
+        let deferrals = ["a-first", "m-mid", "z-target"].map(|client| {
+            entry(&result, &format!("command.{client}"))
+                .unwrap()
+                .delivery_deferrals
+        });
+        assert!(
+            deferrals.iter().all(|deferrals| *deferrals <= 2),
+            "delivery {delivery}: {deferrals:?}"
+        );
+        assert_eq!(
+            result.commands.len(),
+            40,
+            "one update's commands per decision"
+        );
+        previous = result;
+    }
+}
+
+#[test]
+fn a_deferred_cancel_is_never_delivered_before_its_target() {
+    use BrokerOrderStatusV6::*;
+    const NONE: &[Act] = &[];
+    let factory = ScriptedFactory(NONE);
+    let context = priced_context();
+    let mut first = follow_up(
+        &context,
+        None,
+        1,
+        vec![order("command.t", "t", Resting, 0, 1)],
+        vec![],
+    );
+    first.trigger = TriggerV6::Owner(OwnerTriggerV6::Recovery);
+    let seeded = run_transaction(&factory, &first).unwrap();
+    // A cancel of the order, whose refusal the previous decision deferred.
+    let mut checkpoint = seeded.kernel_checkpoint.clone().unwrap();
+    let mut cancel = checkpoint.runner.entries[0].clone();
+    cancel.command_id = "command.c".to_owned();
+    cancel.kind = BrokerCommandKindV6::CancelOrder;
+    cancel.delivery_deferrals = 1;
+    cancel.last_status = None;
+    cancel.issued_broker_revision = 15;
+    checkpoint.runner.entries.push(cancel);
+    let mut next = follow_up(
+        &context,
+        None,
+        2,
+        vec![order("command.t", "t", Filled, 300, 5)],
+        vec![CommandReceiptV6 {
+            command_id: "command.c".to_owned(),
+            kind: BrokerCommandKindV6::CancelOrder,
+            outcome: CommandOutcomeV6::Refused {
+                code: "order_not_open".to_owned(),
+                reason: "filled".to_owned(),
+            },
+        }],
+    );
+    next.kernel_checkpoint = Some(checkpoint.seal());
+    next.validate().unwrap();
+    let result = run_transaction(&factory, &next).unwrap();
+    validate_decision_result_v6(&next, &result).unwrap();
+    let recorded = result
+        .evidence
+        .iter()
+        .flat_map(|evidence| {
+            strategy_core_v3::decision_v6::decode_order_update_evidence(evidence).unwrap()
+        })
+        .map(|record| record.command_id)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        recorded,
+        ["command.t", "command.c"],
+        "the fill, then the refusal"
+    );
+    assert_eq!(state(&result), "300");
+}
