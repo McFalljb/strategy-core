@@ -27,6 +27,28 @@ pub const PROVIDER_REJECTED_REASON: &str = "the provider rejected the order";
 pub(super) struct Note {
     pub code: &'static str,
     pub command_id: String,
+    /// Fill quantity (hundredths) the kernel was never told of, for an abandoned update.
+    pub lost_hundredths: u64,
+}
+
+impl Note {
+    fn new(code: &'static str, command_id: String) -> Self {
+        Self {
+            code,
+            command_id,
+            lost_hundredths: 0,
+        }
+    }
+}
+
+/// How the kernel failed on one order update.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum Failure {
+    /// The attempt counts toward `MAX_DELIVERY_ATTEMPTS`.
+    Counted,
+    /// The host refused a call for a decision-wide capacity limit during the update, or the
+    /// update was rolled back with others: it stays pending as it was.
+    Uncounted,
 }
 
 /// One runner entry's comparison: the entry before, the entry after (none once its outcome
@@ -77,22 +99,31 @@ impl Derived {
     }
 
     /// The runner section's entries after delivery. An entry whose update the kernel failed
-    /// on (the indexes of `failed`) stays as it was, to be delivered again, until
-    /// `MAX_DELIVERY_ATTEMPTS`; then its update counts as seen. `issued` are the entries of
-    /// the decision's own commands. Tombstones past `MAX_TOMBSTONES` are evicted, oldest
-    /// first.
+    /// on (the indexes of `failed`) stays as it was, to be delivered again; a counted failure
+    /// adds to its `delivery_failures`, and at `MAX_DELIVERY_ATTEMPTS` its update counts as
+    /// seen (abandoned, reported with the fill it carried). `issued` are the entries of the
+    /// decision's own commands. Tombstones past `MAX_TOMBSTONES` are evicted, oldest first,
+    /// and a tombstone whose order is back with an update still to deliver after all others.
     pub fn finalize(
         self,
-        failed: &BTreeSet<usize>,
+        failed: &BTreeMap<usize, Failure>,
         issued: Vec<RunnerEntryV6>,
     ) -> (Vec<RunnerEntryV6>, Vec<Note>) {
         let mut notes = self.notes;
         let mut entries = Vec::new();
+        // Command ids of tombstones whose order is back but whose update failed: evicted last.
+        let mut pending = BTreeSet::new();
         for (index, step) in self.steps.into_iter().enumerate() {
-            if failed.contains(&index) {
+            if let Some(failure) = failed.get(&index) {
                 let previous = step.previous.expect("an update comes from an entry");
-                let attempts = previous.delivery_failures + 1;
+                let attempts = match failure {
+                    Failure::Counted => previous.delivery_failures + 1,
+                    Failure::Uncounted => previous.delivery_failures,
+                };
                 if attempts < MAX_DELIVERY_ATTEMPTS {
+                    if previous.vanished {
+                        pending.insert(previous.command_id.clone());
+                    }
                     entries.push(RunnerEntryV6 {
                         delivery_failures: attempts,
                         ..previous
@@ -102,6 +133,10 @@ impl Derived {
                 notes.push(Note {
                     code: "order_update_abandoned",
                     command_id: previous.command_id.clone(),
+                    lost_hundredths: step
+                        .update
+                        .as_ref()
+                        .map_or(0, |update| update.newly_filled_quantity_hundredths),
                 });
             }
             if let Some(next) = step.next {
@@ -122,13 +157,19 @@ impl Derived {
                 .iter()
                 .enumerate()
                 .filter(|(_, entry)| entry.vanished)
-                .min_by_key(|(index, entry)| (entry.vanished_revision, *index))
+                .min_by_key(|(index, entry)| {
+                    (
+                        pending.contains(&entry.command_id),
+                        entry.vanished_revision,
+                        *index,
+                    )
+                })
                 .map(|(index, _)| index)
                 .expect("a tombstone exists");
-            notes.push(Note {
-                code: "runner_tombstone_evicted",
-                command_id: entries.remove(oldest).command_id,
-            });
+            notes.push(Note::new(
+                "runner_tombstone_evicted",
+                entries.remove(oldest).command_id,
+            ));
         }
         (entries, notes)
     }
@@ -180,10 +221,7 @@ pub(super) fn derive(context: &DecisionContextV6) -> Result<Derived, KernelTrans
             } else if revision <= entry.vanished_revision {
                 Some(entry)
             } else if entry.absent_views + 1 >= TOMBSTONE_EXPIRY_VIEWS {
-                notes.push(Note {
-                    code: "runner_tombstone_expired",
-                    command_id: entry.command_id,
-                });
+                notes.push(Note::new("runner_tombstone_expired", entry.command_id));
                 None
             } else {
                 Some(RunnerEntryV6 {
@@ -307,10 +345,7 @@ pub(super) fn derive(context: &DecisionContextV6) -> Result<Derived, KernelTrans
             }
             seeded = true;
         } else {
-            notes.push(Note {
-                code: "runner_not_seeded",
-                command_id: String::new(),
-            });
+            notes.push(Note::new("runner_not_seeded", String::new()));
         }
     }
     let live = steps

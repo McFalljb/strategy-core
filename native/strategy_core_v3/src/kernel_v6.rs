@@ -31,7 +31,8 @@ mod events;
 mod projection;
 mod updates;
 
-use std::collections::BTreeSet;
+use std::cell::Cell;
+use std::collections::{BTreeMap, BTreeSet};
 
 use chrono::{DateTime, TimeZone, Utc};
 use strategy_core_kernel::{
@@ -49,6 +50,7 @@ pub use self::events::KernelEvent;
 use self::projection::{
     hundredths_quantity, market_state, millis, price, price_micros, station_state,
 };
+use self::updates::Failure;
 pub use self::updates::{PROVIDER_REJECTED_CODE, PROVIDER_REJECTED_REASON};
 use crate::decision_v6::{
     self as wire, AnnotationValueV6, BrokerCommandKindV6, BrokerDetailV6, BrokerOrderStatusV6,
@@ -179,28 +181,84 @@ pub fn run_transaction<F: TransactionKernelFactory>(
 
     // Each update is delivered on its own. When the kernel fails on one, the kernel and the
     // decision go back to how they were before it and the failure is recorded; the update is
-    // delivered again in the next decisions, up to MAX_DELIVERY_ATTEMPTS, then counts as seen.
-    // The remaining updates and the trigger are still delivered.
-    let mut failed = BTreeSet::new();
+    // delivered again in the next decisions, up to MAX_DELIVERY_ATTEMPTS counted failures,
+    // then counts as seen. A failure while the host refused a call for a decision-wide
+    // capacity limit is not counted: the update waits until there is room. The remaining
+    // updates and the trigger are still delivered.
+    let mut failed = BTreeMap::new();
+    let mut start = Some(host.save());
     for (index, step) in derived.steps.iter().enumerate() {
         let Some(record) = &step.update else {
             continue;
         };
+        let describe = |failure: Failure, error: &dyn std::fmt::Display| {
+            let counted = match failure {
+                Failure::Counted => "",
+                Failure::Uncounted => ", not counted",
+            };
+            HostOutput::UpdateError(
+                format!(
+                    "order update of {} (attempt {} of {}{counted}): {error}",
+                    record.command_id,
+                    step.attempt(),
+                    wire::MAX_DELIVERY_ATTEMPTS
+                ),
+                failure,
+            )
+        };
         // The kernel's own codec snapshots it; a failed update restores it through the factory.
-        let snapshot = snapshot_checkpoint(context, &codec, kernel.encode_checkpoint_state()?);
+        // A snapshot that cannot be taken is a failure of the update, which is not delivered.
+        let snapshot = match kernel.encode_checkpoint_state() {
+            Ok(state) => snapshot_checkpoint(context, &codec, state),
+            Err(error) => {
+                failed.insert(index, Failure::Counted);
+                host.outputs.push(describe(
+                    Failure::Counted,
+                    &format!("the kernel's state could not be saved before it: {error}"),
+                ));
+                continue;
+            }
+        };
+        host.capacity_refused.set(false);
         let saved = host.save();
         let delivered = StrategyEvent::OrderUpdate(order_update(record))
             .with_view(|view| kernel.on_event(view, &mut host));
-        if let Err(error) = delivered {
-            kernel = factory.restore(context, &snapshot)?;
-            host.restore(saved);
-            failed.insert(index);
-            host.outputs.push(HostOutput::UpdateError(format!(
-                "order update of {} (attempt {} of {}): {error}",
-                record.command_id,
-                step.attempt(),
-                wire::MAX_DELIVERY_ATTEMPTS
-            )));
+        let Err(error) = delivered else {
+            continue;
+        };
+        let failure = if host.capacity_refused.get() {
+            Failure::Uncounted
+        } else {
+            Failure::Counted
+        };
+        host.restore(saved);
+        failed.insert(index, failure);
+        host.outputs.push(describe(failure, &error));
+        match factory.restore(context, &snapshot) {
+            Ok(restored) => kernel = restored,
+            Err(error) => {
+                // The kernel cannot go back to how it was before this update: the kernel and
+                // the decision go back to how they were before the first one, and every
+                // update is delivered again (only this one's failure counts).
+                kernel = restore()?;
+                if let Some(start) = start.take() {
+                    host.restore(start);
+                }
+                for (other, step) in derived.steps.iter().enumerate() {
+                    if step.update.is_some() {
+                        failed.entry(other).or_insert(Failure::Uncounted);
+                    }
+                }
+                host.outputs.push(HostOutput::UpdateError(
+                    format!(
+                        "the kernel's state could not be restored after the order update of \
+                         {}: {error}; every order update is delivered again",
+                        record.command_id
+                    ),
+                    Failure::Counted,
+                ));
+                break;
+            }
         }
     }
     let outcome = event.run(&mut kernel, &mut host);
@@ -265,6 +323,7 @@ pub fn run_transaction<F: TransactionKernelFactory>(
 }
 
 /// A checkpoint of the kernel's state mid-decision, for restoring it after a failed update.
+/// It carries an empty runner section, so taking it costs the kernel's state only.
 fn snapshot_checkpoint(
     context: &DecisionContextV6,
     codec: &KernelCheckpointCodec,
@@ -281,11 +340,8 @@ fn snapshot_checkpoint(
             .as_ref()
             .map_or(1, |checkpoint| checkpoint.sequence),
         state,
-        runner: context
-            .kernel_checkpoint
-            .as_ref()
-            .map(|checkpoint| checkpoint.runner.clone())
-            .unwrap_or_default(),
+        // A factory restores the kernel's state; the runner section is the runner's own.
+        runner: RunnerSectionV6::default(),
         state_sha256: [0; 32],
     }
     .seal()
@@ -528,7 +584,9 @@ struct ProvisionalOrder {
 enum HostOutput {
     Log(LogAction),
     Telemetry(TelemetryEntryV6),
-    UpdateError(String),
+    /// A failed order update; one not counted waits for capacity (a `warn`
+    /// `order_update_deferred` diagnostic), any other is a `kernel_error`.
+    UpdateError(String, Failure),
 }
 
 /// What a decision has issued so far, saved before each order update.
@@ -564,6 +622,9 @@ pub struct KernelHost<'a> {
     fixed_bytes: usize,
     /// Live runner entries a failed order update could bring back.
     reinstatable_live: usize,
+    /// A call was refused for a decision-wide capacity limit (commands, plan rows, result
+    /// bytes, runner entries, open orders) since the runner last cleared it.
+    capacity_refused: Cell<bool>,
 }
 
 impl<'a> KernelHost<'a> {
@@ -594,6 +655,7 @@ impl<'a> KernelHost<'a> {
             market_buy_cap: None,
             fixed_bytes: RESULT_OVERHEAD_BYTES + wire::MAX_KERNEL_CHECKPOINT_BYTES,
             reinstatable_live: 0,
+            capacity_refused: Cell::new(false),
         })
     }
 
@@ -623,13 +685,15 @@ impl<'a> KernelHost<'a> {
         self.runner = saved.runner;
         self.rows = saved.rows;
         self.timer_keys = saved.timer_keys;
-        // Telemetry of a rolled-back update describes work that never happened; its logs stay.
+        // Telemetry of a rolled-back update describes work that never happened; its logs and
+        // the recorded failures stay.
         let tail = self
             .outputs
             .split_off(saved.outputs_len.min(self.outputs.len()));
         self.outputs.extend(
-            tail.into_iter()
-                .filter(|output| matches!(output, HostOutput::Log(_))),
+            tail.into_iter().filter(|output| {
+                matches!(output, HostOutput::Log(_) | HostOutput::UpdateError(..))
+            }),
         );
     }
 
@@ -637,9 +701,15 @@ impl<'a> KernelHost<'a> {
         &self.context.broker
     }
 
+    /// A call refused for a decision-wide capacity limit.
+    fn capacity_error(&self, message: String) -> KernelError {
+        self.capacity_refused.set(true);
+        KernelError::new(message)
+    }
+
     fn next_ordinal(&self) -> KernelResult<usize> {
         if self.commands.len() >= wire::MAX_STRATEGY_COMMANDS {
-            return Err(KernelError::new(format!(
+            return Err(self.capacity_error(format!(
                 "a decision carries at most {} commands",
                 wire::MAX_STRATEGY_COMMANDS
             )));
@@ -662,8 +732,8 @@ impl<'a> KernelHost<'a> {
             + wire::encoded_len(command)
             + entry.map_or(0, wire::encoded_len);
         if bytes > wire::RESULT_ENCODED_BUDGET_BYTES {
-            return Err(KernelError::new(
-                "the decision's commands would exceed the result size bound",
+            return Err(self.capacity_error(
+                "the decision's commands would exceed the result size bound".to_owned(),
             ));
         }
         Ok(())
@@ -684,7 +754,7 @@ impl<'a> KernelHost<'a> {
         self.check_result_bytes(&command, Some(&entry))?;
         let rows = self.rows.with(&command, &self.context.broker);
         if rows.total() > wire::MAX_DECISION_PLAN_ROWS {
-            return Err(KernelError::new(format!(
+            return Err(self.capacity_error(format!(
                 "the decision's Broker commands need {} plan rows, over the limit of {}",
                 rows.total(),
                 wire::MAX_DECISION_PLAN_ROWS
@@ -693,7 +763,7 @@ impl<'a> KernelHost<'a> {
         // Tombstones do not count: they never keep the Strategy from cancelling.
         let live = self.runner.iter().filter(|entry| entry.is_live()).count();
         if live + self.reinstatable_live >= wire::MAX_RUNNER_ENTRIES {
-            return Err(KernelError::new(format!(
+            return Err(self.capacity_error(format!(
                 "the runner tracks at most {} orders and commands",
                 wire::MAX_RUNNER_ENTRIES
             )));
@@ -748,9 +818,7 @@ impl<'a> KernelHost<'a> {
         let context = self.context;
         let cap = wire::max_open_orders(context.deployment_mode);
         if self.open_orders() >= cap {
-            return Err(KernelError::new(format!(
-                "a Sleeve holds at most {cap} open orders"
-            )));
+            return Err(self.capacity_error(format!("a Sleeve holds at most {cap} open orders")));
         }
         let provider_client_id = match &request.client_order_id {
             Some(client) if client.starts_with(DERIVED_CLIENT_ID_PREFIX) => {
@@ -1441,13 +1509,17 @@ fn append_outputs(
                     lost_bytes += message.len();
                 }
             }
-            HostOutput::UpdateError(message) => {
+            HostOutput::UpdateError(message, failure) => {
                 let mut message = message.clone();
                 truncate_utf8(&mut message, wire::MAX_RESULT_DIAGNOSTIC_BYTES);
+                let (severity, code) = match failure {
+                    Failure::Counted => ("error", "kernel_error"),
+                    Failure::Uncounted => ("warn", "order_update_deferred"),
+                };
                 if result.diagnostics.len() < diagnostic_room && take(message.len() + 32) {
                     result.diagnostics.push(ResultDiagnosticV6 {
-                        severity: "error".to_owned(),
-                        code: "kernel_error".to_owned(),
+                        severity: severity.to_owned(),
+                        code: code.to_owned(),
                         message,
                     });
                 } else {
@@ -1571,22 +1643,40 @@ fn fit_result(
 }
 
 /// Reports what the order-update comparison did, one diagnostic per kind.
+/// One diagnostic per note code. An abandoned update is an error: the kernel was never told
+/// of the fill it carried, which the diagnostic reports.
 fn append_notes(notes: &[updates::Note], result: &mut DecisionResultV6) {
-    let mut by_code = std::collections::BTreeMap::<&str, Vec<&str>>::new();
+    let mut by_code = BTreeMap::<&str, Vec<&updates::Note>>::new();
     for note in notes {
-        by_code.entry(note.code).or_default().push(&note.command_id);
+        by_code.entry(note.code).or_default().push(note);
     }
-    for (code, command_ids) in by_code {
-        let named = command_ids
+    for (code, notes) in by_code {
+        let named = notes
             .iter()
-            .filter(|id| !id.is_empty())
             .take(8)
+            .map(|note| note.command_id.as_str())
             .collect::<Vec<_>>();
+        let mut message = serde_json::json!({"count": notes.len(), "command_ids": named});
+        let severity = if code == "order_update_abandoned" {
+            message["lost_newly_filled_hundredths"] = notes
+                .iter()
+                .take(8)
+                .map(|note| note.lost_hundredths)
+                .collect::<Vec<_>>()
+                .into();
+            message["total_lost_newly_filled_hundredths"] = notes
+                .iter()
+                .map(|note| note.lost_hundredths)
+                .fold(0_u64, u64::saturating_add)
+                .into();
+            "error"
+        } else {
+            "warn"
+        };
         result.diagnostics.push(ResultDiagnosticV6 {
-            severity: "warn".to_owned(),
+            severity: severity.to_owned(),
             code: code.to_owned(),
-            message: serde_json::json!({"count": command_ids.len(), "command_ids": named})
-                .to_string(),
+            message: message.to_string(),
         });
     }
 }
