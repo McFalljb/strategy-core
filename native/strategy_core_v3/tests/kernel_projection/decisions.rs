@@ -1009,6 +1009,7 @@ fn crowded_with(
         vanished_revision: 0,
         absent_views: 0,
         delivery_failures: 0,
+        delivery_deferrals: 0,
     };
     checkpoint.runner.entries.extend((0..live).map(|index| {
         strategy_core_v3::decision_v6::RunnerEntryV6 {

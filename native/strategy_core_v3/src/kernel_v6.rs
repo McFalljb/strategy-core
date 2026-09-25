@@ -31,7 +31,7 @@ mod events;
 mod projection;
 mod updates;
 
-use std::cell::Cell;
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 
 use chrono::{DateTime, TimeZone, Utc};
@@ -175,13 +175,15 @@ pub fn run_transaction<F: TransactionKernelFactory>(
     host.fixed_bytes = fixed_bytes;
     host.reinstatable_live = derived.reinstatable_live();
     let issued_from = host.runner.len();
+    host.derived_entries = issued_from;
 
     // Each update is delivered on its own. When the kernel fails on one, the kernel and the
     // decision go back to how they were before it and the failure is recorded; the update is
     // delivered again in the next decisions, up to MAX_DELIVERY_ATTEMPTS counted failures,
-    // then counts as seen. A failure while the host refused a call for a decision-wide
-    // capacity limit is not counted: the update waits until there is room. The remaining
-    // updates and the trigger are still delivered.
+    // then counts as seen. A kernel that returns the host's refusal for room in the decision
+    // that earlier updates of the same decision took is deferred instead, up to
+    // MAX_DELIVERY_DEFERRALS decisions in a row. The remaining updates and the trigger are
+    // still delivered.
     let mut failed = BTreeMap::new();
     let mut start = Some(host.save());
     for (index, step) in derived.steps.iter().enumerate() {
@@ -189,17 +191,20 @@ pub fn run_transaction<F: TransactionKernelFactory>(
             continue;
         };
         let describe = |failure: Failure, error: &dyn std::fmt::Display| {
-            let counted = match failure {
-                Failure::Counted => "",
-                Failure::Uncounted => ", not counted",
-            };
-            HostOutput::UpdateError(
-                format!(
-                    "order update of {} (attempt {} of {}{counted}): {error}",
-                    record.command_id,
+            let attempt = match failure {
+                Failure::Deferred => format!(
+                    "deferred {} of {}",
+                    step.deferral(),
+                    wire::MAX_DELIVERY_DEFERRALS
+                ),
+                _ => format!(
+                    "attempt {} of {}",
                     step.attempt(),
                     wire::MAX_DELIVERY_ATTEMPTS
                 ),
+            };
+            HostOutput::UpdateError(
+                format!("order update of {} ({attempt}): {error}", record.command_id),
                 failure,
             )
         };
@@ -216,43 +221,48 @@ pub fn run_transaction<F: TransactionKernelFactory>(
                 continue;
             }
         };
-        host.capacity_refused.set(false);
         let saved = host.save();
+        host.begin_update();
         let delivered = StrategyEvent::OrderUpdate(order_update(record))
             .with_view(|view| kernel.on_event(view, &mut host));
+        let deferrable = host.end_update();
         let Err(error) = delivered else {
             continue;
         };
-        let failure = if host.capacity_refused.get() {
-            Failure::Uncounted
-        } else {
-            Failure::Counted
-        };
         host.restore(saved);
-        failed.insert(index, failure);
-        host.outputs.push(describe(failure, &error));
         match factory.restore(context, &snapshot) {
-            Ok(restored) => kernel = restored,
-            Err(error) => {
-                // The kernel cannot go back to how it was before this update: the kernel and
-                // the decision go back to how they were before the first one, and every
-                // update is delivered again (only this one's failure counts).
+            Ok(restored) => {
+                kernel = restored;
+                // Deferred only when the kernel returned the refusal itself.
+                let failure = if deferrable.as_deref() == Some(error.message()) {
+                    Failure::Deferred
+                } else {
+                    Failure::Counted
+                };
+                failed.insert(index, failure);
+                host.outputs.push(describe(failure, &error));
+            }
+            Err(restore_error) => {
+                // The kernel cannot go back to how it was before this update (a kernel or
+                // factory defect, so the failure counts): the kernel and the decision go back
+                // to how they were before the first update, and every other update is
+                // delivered again.
                 kernel = restore()?;
                 if let Some(start) = start.take() {
                     host.restore(start);
                 }
+                failed.insert(index, Failure::Counted);
                 for (other, step) in derived.steps.iter().enumerate() {
                     if step.update.is_some() {
-                        failed.entry(other).or_insert(Failure::Uncounted);
+                        failed.entry(other).or_insert(Failure::RolledBack);
                     }
                 }
-                host.outputs.push(HostOutput::UpdateError(
-                    format!(
-                        "the kernel's state could not be restored after the order update of \
-                         {}: {error}; every order update is delivered again",
-                        record.command_id
-                    ),
+                host.outputs.push(describe(
                     Failure::Counted,
+                    &format!(
+                        "{error}; the kernel's state could not be restored after it: \
+                         {restore_error}; every order update is delivered again"
+                    ),
                 ));
                 break;
             }
@@ -586,9 +596,16 @@ struct ProvisionalOrder {
 enum HostOutput {
     Log(LogAction),
     Telemetry(TelemetryEntryV6),
-    /// A failed order update; one not counted waits for capacity (a `warn`
-    /// `order_update_deferred` diagnostic), any other is a `kernel_error`.
+    /// A failed order update: a deferred one is a `warn` `order_update_deferred` diagnostic,
+    /// any other a `kernel_error`.
     UpdateError(String, Failure),
+}
+
+/// What the decision had issued when an order update began.
+#[derive(Clone, Copy)]
+struct UpdateStart {
+    commands: usize,
+    entries: usize,
 }
 
 /// What a decision has issued so far, saved before each order update.
@@ -624,9 +641,15 @@ pub struct KernelHost<'a> {
     fixed_bytes: usize,
     /// Live runner entries a failed order update could bring back.
     reinstatable_live: usize,
-    /// A call was refused for a decision-wide capacity limit (commands, plan rows, result
-    /// bytes, runner entries, open orders) since the runner last cleared it.
-    capacity_refused: Cell<bool>,
+    /// Plan rows of a decision without commands, to count what one update alone needs.
+    empty_rows: DecisionPlanRows,
+    /// Runner entries before the decision's own.
+    derived_entries: usize,
+    /// What the decision had issued when the current order update began.
+    update_start: Option<UpdateStart>,
+    /// The last refusal, in the current order update, for room in the decision that earlier
+    /// updates took: returned by the kernel, it defers the update.
+    deferrable: RefCell<Option<String>>,
 }
 
 impl<'a> KernelHost<'a> {
@@ -657,7 +680,14 @@ impl<'a> KernelHost<'a> {
             market_buy_cap: None,
             fixed_bytes: RESULT_OVERHEAD_BYTES + wire::MAX_KERNEL_CHECKPOINT_BYTES,
             reinstatable_live: 0,
-            capacity_refused: Cell::new(false),
+            empty_rows: DecisionPlanRows::new(
+                &context.broker,
+                acknowledgements,
+                context.deployment_mode,
+            ),
+            derived_entries: 0,
+            update_start: None,
+            deferrable: RefCell::new(None),
         })
     }
 
@@ -703,18 +733,51 @@ impl<'a> KernelHost<'a> {
         &self.context.broker
     }
 
-    /// A call refused for a decision-wide capacity limit.
-    fn capacity_error(&self, message: String) -> KernelError {
-        self.capacity_refused.set(true);
+    fn begin_update(&mut self) {
+        self.update_start = Some(UpdateStart {
+            commands: self.commands.len(),
+            entries: self.runner.len(),
+        });
+        self.deferrable.replace(None);
+    }
+
+    /// The refusal that defers the update, if the kernel returns it.
+    fn end_update(&mut self) -> Option<String> {
+        self.update_start = None;
+        self.deferrable.take()
+    }
+
+    /// The commands and runner entries issued before the current update, if earlier updates
+    /// of this decision issued any.
+    fn issued_before(&self) -> Option<(&[StrategyCommandV6], &[RunnerEntryV6])> {
+        let start = self.update_start?;
+        (start.commands > 0).then(|| {
+            (
+                &self.commands[..start.commands],
+                &self.runner[self.derived_entries.min(start.entries)..start.entries],
+            )
+        })
+    }
+
+    /// A call refused for room in the decision. `alone` tells whether the call would fit
+    /// if the decision held only the current update's commands: then earlier updates took
+    /// the room, and the kernel returning this refusal defers the update.
+    fn capacity_error(&self, message: String, alone: impl FnOnce(&Self) -> bool) -> KernelError {
+        let deferrable = self.issued_before().is_some() && alone(self);
+        self.deferrable.replace(deferrable.then(|| message.clone()));
         KernelError::new(message)
     }
 
     fn next_ordinal(&self) -> KernelResult<usize> {
         if self.commands.len() >= wire::MAX_STRATEGY_COMMANDS {
-            return Err(self.capacity_error(format!(
-                "a decision carries at most {} commands",
-                wire::MAX_STRATEGY_COMMANDS
-            )));
+            // With commands issued before the update, the update's own fit alone.
+            return Err(self.capacity_error(
+                format!(
+                    "a decision carries at most {} commands",
+                    wire::MAX_STRATEGY_COMMANDS
+                ),
+                |_| true,
+            ));
         }
         Ok(self.commands.len())
     }
@@ -736,6 +799,13 @@ impl<'a> KernelHost<'a> {
         if bytes > wire::RESULT_ENCODED_BUDGET_BYTES {
             return Err(self.capacity_error(
                 "the decision's commands would exceed the result size bound".to_owned(),
+                |host| {
+                    host.issued_before().is_some_and(|(commands, entries)| {
+                        let earlier = commands.iter().map(wire::encoded_len).sum::<usize>()
+                            + entries.iter().map(wire::encoded_len).sum::<usize>();
+                        bytes - earlier <= wire::RESULT_ENCODED_BUDGET_BYTES
+                    })
+                },
             ));
         }
         Ok(())
@@ -756,16 +826,30 @@ impl<'a> KernelHost<'a> {
         self.check_result_bytes(&command, Some(&entry))?;
         let rows = self.rows.with(&command, &self.context.broker);
         if rows.total() > wire::MAX_DECISION_PLAN_ROWS {
-            return Err(self.capacity_error(format!(
-                "the decision's Broker commands need {} plan rows, over the limit of {}",
-                rows.total(),
-                wire::MAX_DECISION_PLAN_ROWS
-            )));
+            return Err(self.capacity_error(
+                format!(
+                    "the decision's Broker commands need {} plan rows, over the limit of {}",
+                    rows.total(),
+                    wire::MAX_DECISION_PLAN_ROWS
+                ),
+                |host| {
+                    let Some(start) = host.update_start else {
+                        return false;
+                    };
+                    let mut alone = host.empty_rows.clone();
+                    for issued in &host.commands[start.commands..] {
+                        alone.add(issued, &host.context.broker);
+                    }
+                    alone.with(&command, &host.context.broker).total()
+                        <= wire::MAX_DECISION_PLAN_ROWS
+                },
+            ));
         }
-        // Tombstones do not count: they never keep the Strategy from cancelling.
+        // Tombstones do not count: they never keep the Strategy from cancelling. A Sleeve-wide
+        // bound: never deferred.
         let live = self.runner.iter().filter(|entry| entry.is_live()).count();
         if live + self.reinstatable_live >= wire::MAX_RUNNER_ENTRIES {
-            return Err(self.capacity_error(format!(
+            return Err(KernelError::new(format!(
                 "the runner tracks at most {} orders and commands",
                 wire::MAX_RUNNER_ENTRIES
             )));
@@ -820,7 +904,10 @@ impl<'a> KernelHost<'a> {
         let context = self.context;
         let cap = wire::max_open_orders(context.deployment_mode);
         if self.open_orders() >= cap {
-            return Err(self.capacity_error(format!("a Sleeve holds at most {cap} open orders")));
+            // A Sleeve-wide bound: never deferred.
+            return Err(KernelError::new(format!(
+                "a Sleeve holds at most {cap} open orders"
+            )));
         }
         let provider_client_id = match &request.client_order_id {
             Some(client) if client.starts_with(DERIVED_CLIENT_ID_PREFIX) => {
@@ -895,6 +982,7 @@ impl<'a> KernelHost<'a> {
             vanished_revision: 0,
             absent_views: 0,
             delivery_failures: 0,
+            delivery_deferrals: 0,
         };
         self.issue_broker_command(command, entry)?;
         self.finances.current_commitment_micros = self
@@ -982,6 +1070,7 @@ impl<'a> KernelHost<'a> {
             vanished_revision: 0,
             absent_views: 0,
             delivery_failures: 0,
+            delivery_deferrals: 0,
         };
         let (target, entry) = match (target, provisional, order) {
             (Some(target), Some(index), _) => {
@@ -1066,6 +1155,7 @@ impl<'a> KernelHost<'a> {
             vanished_revision: 0,
             absent_views: 0,
             delivery_failures: 0,
+            delivery_deferrals: 0,
         };
         self.issue_broker_command(command, entry)?;
         for order in &self.context.broker.orders {
@@ -1516,7 +1606,8 @@ fn append_outputs(
                 truncate_utf8(&mut message, wire::MAX_RESULT_DIAGNOSTIC_BYTES);
                 let (severity, code) = match failure {
                     Failure::Counted => ("error", "kernel_error"),
-                    Failure::Uncounted => ("warn", "order_update_deferred"),
+                    Failure::Deferred => ("warn", "order_update_deferred"),
+                    Failure::RolledBack => ("warn", "order_update_rolled_back"),
                 };
                 if result.diagnostics.len() < diagnostic_room && take(message.len() + 32) {
                     result.diagnostics.push(ResultDiagnosticV6 {

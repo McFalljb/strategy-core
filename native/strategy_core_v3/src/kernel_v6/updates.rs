@@ -16,8 +16,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::KernelTransactionError;
 use crate::decision_v6::{
     BrokerCommandKindV6, BrokerOrderStatusV6, BrokerOrderV6, CommandOutcomeV6, DecisionContextV6,
-    MAX_DELIVERY_ATTEMPTS, MAX_RUNNER_SECTION_ENTRIES, MAX_TOMBSTONES, OrderUpdateRecordV6,
-    OrderUpdateStatusV6, RunnerEntryV6, TOMBSTONE_EXPIRY_VIEWS,
+    MAX_DELIVERY_ATTEMPTS, MAX_DELIVERY_DEFERRALS, MAX_RUNNER_SECTION_ENTRIES, MAX_TOMBSTONES,
+    OrderUpdateRecordV6, OrderUpdateStatusV6, RunnerEntryV6, TOMBSTONE_EXPIRY_VIEWS,
 };
 
 /// Refusal code of an order the provider rejected after admission.
@@ -48,9 +48,12 @@ impl Note {
 pub(super) enum Failure {
     /// The attempt counts toward `MAX_DELIVERY_ATTEMPTS`.
     Counted,
-    /// The host refused a call for a decision-wide capacity limit during the update, or the
-    /// update was rolled back with others: it stays pending as it was.
-    Uncounted,
+    /// The kernel returned the host's refusal for room in the decision that earlier updates
+    /// of the same decision took: counts toward `MAX_DELIVERY_DEFERRALS` only.
+    Deferred,
+    /// Undone with every other update of the decision (the kernel could not be restored
+    /// after another one): it stays pending as it was.
+    RolledBack,
 }
 
 /// One runner entry's comparison: the entry before, the entry after (none once its outcome
@@ -71,6 +74,13 @@ pub(super) struct Derived {
 }
 
 impl Step {
+    /// The consecutive deferral this step's update would be.
+    pub fn deferral(&self) -> u8 {
+        self.previous
+            .as_ref()
+            .map_or(1, |entry| entry.delivery_deferrals + 1)
+    }
+
     /// The delivery attempt this step's update is on.
     pub fn attempt(&self) -> u8 {
         self.previous
@@ -102,8 +112,9 @@ impl Derived {
 
     /// The runner section's entries after delivery. An entry whose update the kernel failed
     /// on (the indexes of `failed`) stays as it was, to be delivered again; a counted failure
-    /// adds to its `delivery_failures`, and at `MAX_DELIVERY_ATTEMPTS` its update counts as
-    /// seen (abandoned, reported with the fill it carried). `issued` are the entries of the
+    /// adds to its `delivery_failures` (and ends a run of deferrals), a deferral to its
+    /// `delivery_deferrals`, and at `MAX_DELIVERY_ATTEMPTS` or `MAX_DELIVERY_DEFERRALS` its
+    /// update counts as seen (abandoned, reported with the fill it carried). `issued` are the entries of the
     /// decision's own commands. Tombstones past `MAX_TOMBSTONES` are evicted, oldest first,
     /// and a tombstone whose order is back with an update still to deliver after all others.
     pub fn finalize(
@@ -118,16 +129,22 @@ impl Derived {
         for (index, step) in self.steps.into_iter().enumerate() {
             if let Some(failure) = failed.get(&index) {
                 let previous = step.previous.expect("an update comes from an entry");
-                let attempts = match failure {
-                    Failure::Counted => previous.delivery_failures + 1,
-                    Failure::Uncounted => previous.delivery_failures,
+                let (attempts, deferrals) = match failure {
+                    Failure::Counted => (previous.delivery_failures + 1, 0),
+                    Failure::Deferred => {
+                        (previous.delivery_failures, previous.delivery_deferrals + 1)
+                    }
+                    Failure::RolledBack => {
+                        (previous.delivery_failures, previous.delivery_deferrals)
+                    }
                 };
-                if attempts < MAX_DELIVERY_ATTEMPTS {
+                if attempts < MAX_DELIVERY_ATTEMPTS && deferrals < MAX_DELIVERY_DEFERRALS {
                     if previous.vanished {
                         pending.insert(previous.command_id.clone());
                     }
                     entries.push(RunnerEntryV6 {
                         delivery_failures: attempts,
+                        delivery_deferrals: deferrals,
                         ..previous
                     });
                     continue;
@@ -142,13 +159,14 @@ impl Derived {
                 });
             }
             if let Some(next) = step.next {
-                let delivery_failures = if step.update.is_some() {
-                    0
+                let (delivery_failures, delivery_deferrals) = if step.update.is_some() {
+                    (0, 0)
                 } else {
-                    next.delivery_failures
+                    (next.delivery_failures, next.delivery_deferrals)
                 };
                 entries.push(RunnerEntryV6 {
                     delivery_failures,
+                    delivery_deferrals,
                     ..next
                 });
             }
@@ -440,6 +458,7 @@ fn adopted(order: &BrokerOrderV6, revision: u64) -> RunnerEntryV6 {
         vanished_revision: 0,
         absent_views: 0,
         delivery_failures: 0,
+        delivery_deferrals: 0,
     }
 }
 

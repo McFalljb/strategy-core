@@ -147,8 +147,9 @@ impl NativeKernel for Ledger {
                 entry.1 = true;
             }
             // A fill of an order the Sleeve chose is hedged at once; a refusal fails the
-            // update, which the runner delivers again (not counted when the refusal was for
-            // capacity).
+            // update, which the runner delivers again (deferred, not counted, when an earlier
+            // update of the decision took the room; counted, and possibly abandoned, at the
+            // open-order cap).
             if hedge && update.newly_filled.is_positive() && update.client_order_id.starts_with('o')
             {
                 self.place(context, "h")?;
@@ -628,10 +629,7 @@ impl Accounts {
         self.deferred += result
             .diagnostics
             .iter()
-            .filter(|diagnostic| {
-                diagnostic.code == "order_update_deferred"
-                    && diagnostic.message.contains("not counted")
-            })
+            .filter(|diagnostic| diagnostic.code == "order_update_deferred")
             .count();
     }
 }

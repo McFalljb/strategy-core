@@ -197,6 +197,7 @@ pub(super) fn context() -> DecisionContextV6 {
                     vanished_revision: 0,
                     absent_views: 0,
                     delivery_failures: 0,
+                    delivery_deferrals: 0,
                 }],
             },
         )),
@@ -254,6 +255,7 @@ pub(super) fn place_entry(command: &StrategyCommandV6) -> RunnerEntryV6 {
         vanished_revision: 0,
         absent_views: 0,
         delivery_failures: 0,
+        delivery_deferrals: 0,
     }
 }
 
@@ -275,6 +277,7 @@ pub(super) fn command_entry(command: &StrategyCommandV6) -> RunnerEntryV6 {
         vanished_revision: 0,
         absent_views: 0,
         delivery_failures: 0,
+        delivery_deferrals: 0,
     }
 }
 

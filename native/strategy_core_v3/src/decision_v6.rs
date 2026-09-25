@@ -55,6 +55,9 @@ pub const TOMBSTONE_EXPIRY_VIEWS: u16 = 16;
 /// Times an order update is delivered to a kernel that returns an error for it before the
 /// runner gives up and treats it as seen.
 pub const MAX_DELIVERY_ATTEMPTS: u8 = 3;
+/// Consecutive decisions an order update may wait for room in the decision (the room earlier
+/// updates of the same decision took) before the runner gives up and treats it as seen.
+pub const MAX_DELIVERY_DEFERRALS: u8 = 8;
 pub const MAX_RESULT_EVIDENCE: usize = 64;
 pub const MAX_RESULT_DIAGNOSTICS: usize = 64;
 pub const MAX_RESULT_TELEMETRY: usize = 256;
@@ -408,6 +411,9 @@ pub struct RunnerEntryV6 {
     /// Decisions whose kernel returned an error for this entry's pending update; the update
     /// is delivered again until `MAX_DELIVERY_ATTEMPTS`.
     pub delivery_failures: u8,
+    /// Consecutive decisions that deferred this entry's pending update because earlier work
+    /// in the decision took the room it needed; at `MAX_DELIVERY_DEFERRALS` it is abandoned.
+    pub delivery_deferrals: u8,
 }
 
 impl RunnerEntryV6 {
@@ -1669,6 +1675,7 @@ fn validate_runner_section(runner: &RunnerSectionV6) -> Result<(), DecisionV6Err
     }
     if runner.entries.iter().any(|entry| {
         entry.delivery_failures >= MAX_DELIVERY_ATTEMPTS
+            || entry.delivery_deferrals >= MAX_DELIVERY_DEFERRALS
             || (!entry.vanished && (entry.vanished_revision != 0 || entry.absent_views != 0))
             || entry.absent_views >= TOMBSTONE_EXPIRY_VIEWS
     }) {

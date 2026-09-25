@@ -270,6 +270,7 @@ fn converted_result(context: &DecisionContextV6) -> DecisionResultV6 {
         vanished_revision: 0,
         absent_views: 0,
         delivery_failures: 0,
+        delivery_deferrals: 0,
     };
     DecisionResultV6 {
         delivery_id: context.owner_state.delivery_id.clone(),

@@ -35,15 +35,20 @@ V6 context (owner projection, scope, Broker state, command receipts, checkpoint,
   failures; then it counts as seen (`order_update_abandoned`, an `error` diagnostic with
   the fill the kernel was never told of). Until then its receipt or terminal order is not
   acknowledged.
-- A failure is not counted when, during that update, the runner refused a Broker or runtime
-  call for a decision-wide capacity limit (64 commands, 512 plan rows, the result's byte
-  budget, 256 live runner entries, the open-order cap): the update waits, as it was, until
-  there is room (`order_update_deferred`, a `warn` diagnostic). A snapshot the kernel's
-  codec cannot take before an update is a counted failure of that update (it is not
-  delivered). A snapshot the factory cannot restore after a failed update takes the kernel
-  and the decision back to how they were before the first update; every update is
-  delivered again later and only that one's failure counts. If the kernel cannot be
-  restored even to the decision's start, the decision fails.
+- An update is deferred instead of failed when the kernel returns the runner's refusal
+  itself (not another error after catching one) for room in the decision (64 commands, 512
+  plan rows, the result's byte budget) that earlier updates of the same decision took:
+  the update's own commands would fit a decision without them. It waits, as it was
+  (`order_update_deferred`, a `warn` diagnostic), for up to `MAX_DELIVERY_DEFERRALS = 8`
+  decisions in a row (`delivery_deferrals`), then is abandoned like a failed one. A refusal
+  at a Sleeve-wide bound (the open-order cap, 256 live runner entries), or at a decision
+  limit the update exceeds on its own, is an ordinary counted failure.
+- A snapshot the kernel's codec cannot take before an update is a counted failure of that
+  update (it is not delivered). A snapshot the factory cannot restore after a failed update
+  is a counted failure too (a kernel or factory defect); the kernel and the decision go back
+  to how they were before the first update, and every other update is delivered again
+  later without counting. If the kernel cannot be restored even to the decision's start,
+  the decision fails.
 - The host validates with `validate_decision_result_v6(context, result)`, which binds the
   delivery, Sleeve, state fence (`decision_fence_v6_sha256`), Broker revision, Market scope,
   cancel targets, timer capability, acknowledgements and the plan row limit.
@@ -143,8 +148,8 @@ telemetry }`.
   `runner_order_not_adopted`, `runner_tombstone_evicted`, `runner_tombstone_expired` and
   `order_update_abandoned`, one per kind with a count and up to 8 command ids (the
   abandoned one is an `error` and also lists the fill each update carried and their
-  total); a failed update is a `kernel_error`, one that waits for capacity an
-  `order_update_deferred` warning.
+  total); a failed update is a `kernel_error`, a deferred one an `order_update_deferred`
+  warning.
 
 `KernelCheckpointV6` is the V5 checkpoint plus the runner section, sealed under
 `strategy-core/decision-v6/checkpoint/v1`. The kernel's private state stays at most 128 KiB
@@ -175,7 +180,7 @@ seen finish: the command id and kind, the client order id, the order id once kno
 action, side, requested quantity, the last status, filled quantity and order revision the
 Strategy was shown, the Broker revision it was issued at, whether it is a tombstone (and
 since which revision, for how many views), and how often the kernel failed on its pending
-update. Orders are matched to entries by command id only. Before the trigger, for each
+update (and for how many decisions in a row it was deferred). Orders are matched to entries by command id only. Before the trigger, for each
 entry in issue order:
 
 | Context shows | Update | Entry |

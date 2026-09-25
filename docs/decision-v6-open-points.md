@@ -169,15 +169,22 @@ traderv3 and strategies must build to these choices or change them here first.
     counted failures (per entry, consecutively), then counts as seen
     (`order_update_abandoned`, severity `error`, with the `newly_filled` each abandoned update
     carried and their total); its receipt or terminal order is not acknowledged until then.
-    A failure is not counted when the host refused a Broker or runtime call during that
-    update for a decision-wide capacity limit (64 commands, 512 plan rows, the result byte
-    budget, 256 live entries, the open-order cap): the update waits until there is room
-    (`order_update_deferred`, a warning), so a kernel that reacts to a fill with `?` does not
-    lose it. A snapshot the kernel's codec cannot take before an update is a counted failure
-    of that update, which is not delivered. A snapshot the factory cannot restore after a
-    failed update takes the kernel and the decision back to their start; every update is
-    delivered again later (only that one's failure counts), the trigger still runs, and only
-    a failure to restore the decision's start fails the transaction. The snapshot carries an
+    An update is deferred, not failed, only when the kernel returns the runner's refusal
+    itself (compared by its text: an error returned after catching a refusal counts) and
+    the refusal was for room in the decision (64 commands, 512 plan rows, the result byte
+    budget) that earlier updates of the same decision took, so the update's own commands
+    would fit a decision without them (`order_update_deferred`, a warning). A kernel that
+    hedges a fill with `?` does not lose it to a burst of an earlier update. Deferrals are
+    bounded separately: after `MAX_DELIVERY_DEFERRALS = 8` decisions in a row
+    (`RunnerEntryV6::delivery_deferrals`) the update is abandoned. A refusal at a
+    Sleeve-wide bound (open-order cap, 256 live entries), or one an update hits on its own,
+    counts: waiting would never make room. A snapshot the kernel's codec cannot take before
+    an update is a counted failure of that update, which is not delivered. A snapshot the
+    factory cannot restore after a failed update is a counted failure (a kernel or factory
+    defect, so the decisions cannot loop on it) and takes the kernel and the decision back
+    to their start; every other update is delivered again later without counting, the
+    trigger still runs, and only a failure to restore the decision's start fails the
+    transaction. The snapshot carries an
     empty runner section, so it costs the kernel's state only.
     `TransactionKernel` no longer needs `Clone`. A kernel error on the trigger rejects the
     decision.
