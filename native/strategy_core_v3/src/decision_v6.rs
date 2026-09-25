@@ -70,7 +70,8 @@ pub const MAX_IDENTIFIER_BYTES: usize = 160;
 pub const MAX_PROVIDER_CLIENT_ID_BYTES: usize = 128;
 pub const MAX_SHORT_TEXT_BYTES: usize = 512;
 pub const MAX_REASON_BYTES: usize = 4 * 1024;
-/// The most of a provider's rejection text the runner hands a kernel.
+/// The most of a refusal reason (a provider's rejection text or a receipt's reason) an order
+/// update's evidence records; the kernel sees the whole reason (at most `MAX_REASON_BYTES`).
 pub const MAX_REJECTION_REASON_BYTES: usize = 512;
 pub const MAX_PRICE_MICROS: u64 = 1_000_000;
 /// Request names the host may allow a Strategy (Phase 4); bounded now so the wire need not
@@ -308,8 +309,9 @@ pub struct BrokerOrderV6 {
     pub fees_micros: u64,
     /// The provider's rejection text of a `Rejected` order, when it gave one (at most
     /// `MAX_REASON_BYTES`; empty is the same as none, and it is ignored on other statuses).
-    /// The host writes it with the order's status, atomically. The runner hands kernels at
-    /// most `MAX_REJECTION_REASON_BYTES` of it; they classify transient rejections by it.
+    /// The host writes it with the order's status, atomically. The runner hands kernels all
+    /// of it (they classify transient rejections by it); evidence records at most
+    /// `MAX_REJECTION_REASON_BYTES`.
     pub rejection_reason: Option<String>,
     pub created_at_unix_ms: Option<i64>,
     pub updated_at_unix_ms: Option<i64>,

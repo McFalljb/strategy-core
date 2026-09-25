@@ -16,8 +16,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::KernelTransactionError;
 use crate::decision_v6::{
     BrokerCommandKindV6, BrokerOrderStatusV6, BrokerOrderV6, CommandOutcomeV6, DecisionContextV6,
-    MAX_DELIVERY_ATTEMPTS, MAX_REJECTION_REASON_BYTES, MAX_RUNNER_SECTION_ENTRIES, MAX_TOMBSTONES,
-    OrderUpdateRecordV6, OrderUpdateStatusV6, RunnerEntryV6, TOMBSTONE_EXPIRY_VIEWS,
+    MAX_DELIVERY_ATTEMPTS, MAX_RUNNER_SECTION_ENTRIES, MAX_TOMBSTONES, OrderUpdateRecordV6,
+    OrderUpdateStatusV6, RunnerEntryV6, TOMBSTONE_EXPIRY_VIEWS,
 };
 
 /// Refusal code of an order the provider rejected after admission.
@@ -472,17 +472,11 @@ pub(super) fn seen_status(
     }
 }
 
-/// The provider's text of a rejected order, cut to `MAX_REJECTION_REASON_BYTES` on a
-/// character boundary; the fixed text when the provider gave none.
+/// The provider's text of a rejected order (at most `MAX_REASON_BYTES`, validated); the
+/// fixed text when the provider gave none.
 fn rejection_reason(order: &BrokerOrderV6) -> String {
     match order.rejection_reason.as_deref() {
-        Some(reason) if !reason.is_empty() => {
-            let mut end = reason.len().min(MAX_REJECTION_REASON_BYTES);
-            while !reason.is_char_boundary(end) {
-                end -= 1;
-            }
-            reason[..end].to_owned()
-        }
+        Some(reason) if !reason.is_empty() => reason.to_owned(),
         _ => PROVIDER_REJECTED_REASON.to_owned(),
     }
 }

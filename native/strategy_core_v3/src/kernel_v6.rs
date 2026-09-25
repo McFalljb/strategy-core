@@ -72,9 +72,6 @@ const MAX_TELEMETRY_BYTES: usize = 256 * 1024;
 /// Encoded bytes of a result's fixed fields and closing diagnostics (ids, fence, the kernel
 /// error and overflow diagnostics).
 const RESULT_OVERHEAD_BYTES: usize = 16 * 1024;
-/// A refusal reason recorded in order-update evidence is cut to this many bytes (the kernel
-/// sees the whole reason), so the evidence of 256 updates always fits the result.
-const MAX_EVIDENCE_REASON_BYTES: usize = 512;
 
 #[derive(Debug)]
 pub enum KernelTransactionError {
@@ -395,11 +392,12 @@ fn parameter_json(
 }
 
 /// The update as recorded in the result's evidence: a refusal reason is cut to
-/// `MAX_EVIDENCE_REASON_BYTES`.
+/// `MAX_REJECTION_REASON_BYTES` (the kernel sees all of it), so the evidence of every update
+/// always fits the result.
 fn evidence_record(record: &OrderUpdateRecordV6) -> OrderUpdateRecordV6 {
     let mut record = record.clone();
     if let OrderUpdateStatusV6::Refused { reason, .. } = &mut record.status {
-        truncate_utf8(reason, MAX_EVIDENCE_REASON_BYTES);
+        truncate_utf8(reason, wire::MAX_REJECTION_REASON_BYTES);
     }
     record
 }

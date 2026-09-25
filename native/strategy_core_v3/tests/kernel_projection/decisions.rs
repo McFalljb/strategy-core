@@ -9,7 +9,7 @@ use strategy_core_kernel::{
 use strategy_core_v3::decision_v6::{
     BrokerCommandKindV6, BrokerOrderStatusV6, BrokerOrderV6, CancelTargetV6, CommandOutcomeV6,
     CommandReceiptV6, ContractSideV6, DecisionResultV6, KernelCheckpointV5Layout,
-    MAX_DECISION_PLAN_ROWS, MAX_STRATEGY_COMMANDS, OrderActionV6, OrderTypeV6,
+    MAX_DECISION_PLAN_ROWS, MAX_STRATEGY_COMMANDS, OrderActionV6, OrderTypeV6, OrderUpdateStatusV6,
     convert_v5_kernel_checkpoint, validate_decision_result_v6,
 };
 
@@ -1808,8 +1808,8 @@ fn a_provider_rejection_carries_the_provider_text() {
             Some(""),
             strategy_core_v3::kernel_v6::PROVIDER_REJECTED_REASON.to_owned(),
         ),
-        // Cut to 512 bytes on a character boundary.
-        (Some(long.as_str()), "x".repeat(511)),
+        // The kernel sees all of it; evidence records 512 bytes, cut on a character boundary.
+        (Some(long.as_str()), long.clone()),
     ] {
         let mut rejected = order(&command_id, "yes-1", BrokerOrderStatusV6::Rejected, 0, 2);
         rejected.rejection_reason = reason.map(str::to_owned);
@@ -1827,6 +1827,27 @@ fn a_provider_rejection_carries_the_provider_text() {
                 true
             )]
         );
+        let recorded = decision
+            .result
+            .evidence
+            .iter()
+            .filter(|evidence| evidence.code == "order_updates")
+            .flat_map(|evidence| {
+                strategy_core_v3::decision_v6::decode_order_update_evidence(evidence).unwrap()
+            })
+            .collect::<Vec<_>>();
+        let expected_evidence = if expected == long {
+            "x".repeat(511)
+        } else {
+            expected
+        };
+        assert!(matches!(
+            &recorded[..],
+            [record] if matches!(
+                &record.status,
+                OrderUpdateStatusV6::Refused { reason, .. } if *reason == expected_evidence
+            )
+        ));
     }
 }
 
