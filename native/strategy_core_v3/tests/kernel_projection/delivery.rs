@@ -259,7 +259,8 @@ enum OnRefusal {
 
 /// On an update of `client`, issues commands with `issue` (at most `count`) and handles the
 /// refusal that ends the run as `on_refusal`; counts every fill it handles. A `client`
-/// written `!name` acts on updates of the order `name` itself only (not on its cancels').
+/// written `!name` acts on updates of the order `name` itself only (not on its cancels'),
+/// one written `~name` on updates of cancels of `name` only.
 #[derive(Clone, Copy)]
 struct Act {
     client: &'static str,
@@ -294,7 +295,10 @@ impl NativeKernel for Scripted {
             .iter()
             .filter(|act| match act.client.strip_prefix('!') {
                 Some(client) => own && client == update.client_order_id,
-                None => act.client == update.client_order_id,
+                None => match act.client.strip_prefix('~') {
+                    Some(client) => !own && client == update.client_order_id,
+                    None => act.client == update.client_order_id,
+                },
             })
         {
             for index in 0..act.count {
@@ -1819,4 +1823,119 @@ fn a_cancel_is_held_when_its_target_failed_in_an_earlier_unit_of_the_decision() 
             .acknowledged_command_ids
             .contains(&"command.cancel".to_owned())
     );
+}
+
+#[test]
+fn a_room_refusal_on_an_out_of_order_delivery_counts_and_never_abandons() {
+    use BrokerOrderStatusV6::*;
+    // `t` always fails (70 places on its own updates); each of its two cancels places 40 on
+    // its refusal update. Both cancels are held to the bound and delivered out of order in
+    // the same decision: the second's places are refused for the room the first took. On
+    // an out-of-order delivery that refusal counts instead of deferring past the bound.
+    const ACTS: &[Act] = &[
+        Act {
+            client: "!t",
+            issue: place_unique,
+            count: 70,
+            on_refusal: OnRefusal::Return,
+        },
+        Act {
+            client: "~t",
+            issue: place_unique,
+            count: 40,
+            on_refusal: OnRefusal::Return,
+        },
+    ];
+    let factory = ScriptedFactory(ACTS);
+    let view = |delivery: u32| {
+        let filled = u64::from(delivery);
+        vec![order("command.t", "t", PartiallyFilled, filled, filled + 1)]
+    };
+    let mut checkpoint = with_deferred_cancel(&factory, view(1), Some("t"));
+    let mut second = checkpoint
+        .runner
+        .entries
+        .iter()
+        .find(|entry| entry.command_id == "command.cancel")
+        .unwrap()
+        .clone();
+    second.command_id = "command.cancel2".to_owned();
+    checkpoint.runner.entries.push(second);
+    for entry in &mut checkpoint.runner.entries {
+        if entry.command_id.starts_with("command.cancel") {
+            entry.delivery_deferrals = strategy_core_v3::decision_v6::MAX_DELIVERY_DEFERRALS - 1;
+        }
+    }
+    let context = priced_context();
+    let receipts = || {
+        ["command.cancel", "command.cancel2"]
+            .map(|command_id| CommandReceiptV6 {
+                command_id: command_id.to_owned(),
+                kind: BrokerCommandKindV6::CancelOrder,
+                outcome: CommandOutcomeV6::Refused {
+                    code: "rate_limited".to_owned(),
+                    reason: "busy".to_owned(),
+                },
+            })
+            .to_vec()
+    };
+    let abandoned = |result: &DecisionResultV6| {
+        result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == "order_update_abandoned"
+                && diagnostic.message.contains("command.cancel2")
+        })
+    };
+    let mut next = follow_up(&context, None, 2, view(2), receipts());
+    next.kernel_checkpoint = Some(checkpoint.seal());
+    next.validate().unwrap();
+    let first = run_transaction(&factory, &next).unwrap();
+    validate_decision_result_v6(&next, &first).unwrap();
+    assert!(
+        entry(&first, "command.cancel").is_none(),
+        "the first is delivered"
+    );
+    let second = entry(&first, "command.cancel2").expect("the second is refused, counted");
+    assert_eq!(
+        (second.delivery_failures, second.delivery_deferrals),
+        (1, 0)
+    );
+    assert!(!abandoned(&first));
+    let out_of_order = first
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.code == "order_update_out_of_order")
+        .collect::<Vec<_>>();
+    assert_eq!(
+        out_of_order.len(),
+        1,
+        "only the delivered one: {out_of_order:?}"
+    );
+    assert!(out_of_order[0].message.contains("command.cancel "));
+    assert!(out_of_order[0].message.contains("after 7 decisions"));
+
+    // Alone afterwards, the second is held to the bound again, then delivered.
+    let mut previous = first;
+    for delivery in 3..=20_u32 {
+        let next = follow_up(
+            &context,
+            Some(&previous),
+            delivery,
+            view(delivery),
+            receipts(),
+        );
+        let result = run_transaction(&factory, &next).unwrap();
+        validate_decision_result_v6(&next, &result).unwrap();
+        assert!(!abandoned(&result), "never abandoned");
+        if entry(&result, "command.cancel2").is_none() {
+            assert!(
+                result
+                    .acknowledged_command_ids
+                    .contains(&"command.cancel2".to_owned())
+            );
+            assert_eq!(delivery, 10, "held seven more decisions, then delivered");
+            return;
+        }
+        previous = result;
+    }
+    panic!("the second cancel was never delivered");
 }

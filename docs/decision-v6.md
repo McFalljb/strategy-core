@@ -53,7 +53,9 @@ V6 context (owner projection, scope, Broker state, command receipts, checkpoint,
   one, for any reason): it waits as it was, to follow its target's (`order_update_held`, a
   warning). A hold counts as a deferral; rather than reach `MAX_DELIVERY_DEFERRALS`, the
   runner delivers the cancel's update anyway, out of order (`order_update_out_of_order`, a
-  warning), so a cancel is never abandoned for its targets' failures. A unit that can never
+  warning, once that delivery succeeds), so a cancel is never abandoned for its targets'
+  failures: a refusal for room on that delivery counts as a failure (it does not defer
+  past the bound). A unit that can never
   fit (targets and cancel together over a limit every decision) ends with the cancel
   abandoned after three counted failures of its own. The order is deterministic, and the evidence follows it. A refusal
   at a Sleeve-wide bound (the open-order cap, 256 live runner entries), or at a decision

@@ -210,34 +210,23 @@ pub fn run_transaction<F: TransactionKernelFactory>(
         // targets failed anywhere in this decision, the cancel's waits, as it was, to follow
         // it in a later decision. Holds are counted as deferrals; at the bound the cancel's
         // update is delivered anyway, out of order, never abandoned for it.
-        if derived
+        let out_of_order = derived
             .targets(index)
             .iter()
-            .any(|target| failed.contains_key(target))
-        {
-            if step.deferral() < wire::MAX_DELIVERY_DEFERRALS {
-                failed.insert(index, Failure::Held);
-                host.outputs.push(HostOutput::UpdateError(
-                    format!(
-                        "order update of {} held ({} of {}): an update of its target failed \
-                         in this decision",
-                        record.command_id,
-                        step.deferral(),
-                        wire::MAX_DELIVERY_DEFERRALS - 1
-                    ),
-                    Failure::Held,
-                ));
-                continue;
-            }
-            host.outputs.push(HostOutput::UpdateWarning(
-                "order_update_out_of_order",
+            .any(|target| failed.contains_key(target));
+        if out_of_order && step.deferral() < wire::MAX_DELIVERY_DEFERRALS {
+            failed.insert(index, Failure::Held);
+            host.outputs.push(HostOutput::UpdateError(
                 format!(
-                    "order update of {} delivered before an update of its target, which \
-                     failed in this decision: it was held {} times",
+                    "order update of {} held ({} of {}): an update of its target failed \
+                     in this decision",
                     record.command_id,
+                    step.deferral(),
                     wire::MAX_DELIVERY_DEFERRALS - 1
                 ),
+                Failure::Held,
             ));
+            continue;
         }
         let describe = |failure: Failure, error: &dyn std::fmt::Display| {
             let attempt = match failure {
@@ -276,14 +265,26 @@ pub fn run_transaction<F: TransactionKernelFactory>(
             .with_view(|view| kernel.on_event(view, &mut host));
         let deferrable = host.end_update();
         let Err(error) = delivered else {
+            if out_of_order {
+                host.outputs.push(HostOutput::UpdateWarning(
+                    "order_update_out_of_order",
+                    format!(
+                        "order update of {} delivered before an update of its target, which \
+                         failed in this decision, after {} decisions held or deferred",
+                        record.command_id,
+                        step.deferrals()
+                    ),
+                ));
+            }
             continue;
         };
         host.restore(saved);
         match factory.restore(context, &snapshot) {
             Ok(restored) => {
                 kernel = restored;
-                // Deferred only when the kernel returned the refusal itself.
-                let failure = if deferrable.as_deref() == Some(error.message()) {
+                // Deferred only when the kernel returned the refusal itself, and never on a
+                // cancel's out-of-order delivery at the deferral bound: a refusal there counts.
+                let failure = if !out_of_order && deferrable.as_deref() == Some(error.message()) {
                     Failure::Deferred
                 } else {
                     Failure::Counted
@@ -768,17 +769,17 @@ impl<'a> KernelHost<'a> {
         self.runner = saved.runner;
         self.rows = saved.rows;
         self.timer_keys = saved.timer_keys;
-        // Telemetry of a rolled-back update describes work that never happened; its logs and
-        // the recorded failures stay.
+        // Telemetry of a rolled-back update describes work that never happened, and so does a
+        // warning about an update delivered out of order; its logs and the recorded failures
+        // stay.
         let tail = self
             .outputs
             .split_off(saved.outputs_len.min(self.outputs.len()));
-        self.outputs.extend(tail.into_iter().filter(|output| {
-            matches!(
-                output,
-                HostOutput::Log(_) | HostOutput::UpdateError(..) | HostOutput::UpdateWarning(..)
-            )
-        }));
+        self.outputs.extend(
+            tail.into_iter().filter(|output| {
+                matches!(output, HostOutput::Log(_) | HostOutput::UpdateError(..))
+            }),
+        );
     }
 
     fn broker_detail(&self) -> &BrokerDetailV6 {
