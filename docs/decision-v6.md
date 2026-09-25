@@ -91,8 +91,8 @@ checkpoint and order updates are never shed; `run_transaction` does not fail for
 frozen-encoding evidence, plus:
 
 - `deployment_mode`: `Paper` or `Live`.
-- `capabilities`: `timers` and the sorted `external_requests` names the host allows (empty
-  until Phase 4 grants any).
+- `capabilities`: `timers` and the sorted `external_requests` the host allows, each
+  `http:<endpoint>` or `command:<name>` (see "External requests").
 - `orders_complete`: true when `broker.orders` holds every order of the Sleeve the host
   keeps. The host sets it false when it had to truncate the view; a truncated view never
   reports an order as vanished and allows no cancel-all.
@@ -126,15 +126,17 @@ execution fees charged for the order's fills so far, and `rejection_reason`, the
 rejection text of a `Rejected` order when it gave one (at most 4 KiB; empty is the same as
 none; ignored on other statuses). The host writes the reason with the status, atomically.
 
-`TriggerV6` is `Owner(OwnerTriggerV6)` or `BrokerState { broker_revision }`, valid on its own
-(not only under Recovery). `BrokerOutcome` is gone.
+`TriggerV6` is `Owner(OwnerTriggerV6)`, `BrokerState { broker_revision }`, valid on its own
+(not only under Recovery), or `ExternalResponse { request_id, outcome }` (see "External
+requests"). `BrokerOutcome` is gone.
 
 `DecisionResultV6` is `{ delivery_id, sleeve_identity, state_fence, expected_broker_revision,
 disposition, kernel_checkpoint, commands, acknowledged_command_ids, evidence, diagnostics,
 telemetry }`.
 
 - Commands are `PlaceOrder`, `CancelOrder { target }`, `CancelAllOrders`, `ScheduleTimer`,
-  `CancelTimer` and `Stop`, at most 64, all of which may be Broker commands. The command at
+  `CancelTimer`, `Stop` and `ExternalRequest`, at most 64, all of which may be Broker
+  commands (at most 8 external requests). The command at
   index `n` of the result has ordinal `n`, timer and stop commands included. Its IntentId is
   `sha256(INTENT_DOMAIN, DecisionId, n)` with `DecisionId = sha256(DECISION_DOMAIN, Sleeve id,
   incarnation, delivery id)` (`intent_id_v6`), and its id is `command.` plus the first 32 hex
@@ -153,7 +155,7 @@ telemetry }`.
   carries the generation the timer was scheduled under. One timer operation per key.
 - `acknowledged_command_ids` lists the receipts and terminal orders in the context whose
   final outcome the Strategy has seen, never a command the result's runner section still
-  tracks. When they arrive in a durable write the host deletes the receipts and stops keeping
+  tracks, and, when the trigger is an external response, the request it answers. When they arrive in a durable write the host deletes the receipts and stops keeping
   those terminal orders ahead of acknowledged ones.
 - `telemetry` holds typed `Counter`, `Gauge` and `Annotation` entries in call order; floats
   keep their exact bits. Logs are `kernel_log` diagnostics; a kernel error is a `kernel_error`
@@ -175,6 +177,53 @@ and its codec stays the kernel's. The runner section is bounded separately: whet
 seeded, the newest Broker revision it has compared (`newest_view_revision`), and at most `MAX_RUNNER_SECTION_ENTRIES = 288` entries of bounded identifiers
 (`MAX_RUNNER_ENTRIES = 256` plus `MAX_TOMBSTONES = 32`), of which at most 32 are
 tombstones.
+
+## External requests
+
+A Strategy may ask the host for an HTTP call or a command run; the host performs it after the
+decision is saved, off the decision path, and the answer arrives as a later decision's
+trigger. The call belongs to the Strategy (it builds the request, chooses when, handles the
+answer); the host only does the I/O.
+
+- **Kernel API.** `ctx.runtime().request_http(HttpRequest { endpoint, method, path, body,
+  timeout_ms })` and `request_command(CommandRequest { command, args, stdin, timeout_ms })`
+  return a `RequestTicket { request_id }` at once. The answer is the event
+  `ExternalResponse { request_id, outcome: Ok { status, body } | Err { kind, message } }`.
+- **Names, not addresses.** `endpoint` and `command` are allowlist names. The context grants
+  them in `capabilities.external_requests` as `http:<endpoint>` and `command:<name>` (a name
+  is an identifier without `:`), so the runner and validation know each one's kind. The
+  host owns the base URL, credentials, program, leading arguments and environment.
+- **Wire.** `StrategyCommandV6::ExternalRequest { command_id, kind, target, payload,
+  timeout_ms }`: `kind` is `Http { method: Get | Post, path }` or `Command { args }`,
+  `target` the allowlist name, `payload` the HTTP body or the command's standard input.
+  `TriggerV6::ExternalResponse { request_id, outcome }` carries the answer's bytes in the
+  context, so a recorded decision shows exactly what the Strategy saw and re-runs to the
+  same result.
+- **Ids.** A request's id is its command id (`command.` + 32 hex digits of its IntentId),
+  like every other command of the decision.
+- **Bounds.** A path starts with one `/`, has no `.` or `..` segment, no `\` or `#`, and is at
+  most 2 KiB of visible ASCII (a query is allowed); at most 64 arguments without NUL; the path
+  or arguments plus the payload at most 64 KiB (`MAX_EXTERNAL_REQUEST_BYTES`); a timeout of
+  1 ms to 120 s; at most 8 requests per decision (`MAX_OUTSTANDING_EXTERNAL_REQUESTS`). A
+  response body is at most 256 KiB; an `Ok` status is 0 (a command) or 2xx, an error's
+  message 1 byte to 4 KiB, and a `Status` error names a status outside 2xx.
+- **Errors.** `Refused` (not sent: not allowed, the Sleeve's 8 outstanding, shutdown),
+  `Timeout`, `Transport`, `Status(code)`, `TooLarge`, `Malformed`, `Exit(code)` and
+  `Abandoned` (the host restarted while the request was in flight).
+- **Local errors.** A request not granted for its kind, outside the bounds, the ninth of a
+  decision, or past the decision's command or byte budget is a local `Err`. Room refusals
+  inside an order update defer the update like any other.
+- **Ordering and durability.** A request is not a Broker command: it has no fence, no runner
+  entry and no plan rows, and may share a decision with orders. It leaves the host
+  (`StrategyCommandV6::leaves_host`), so a decision with a request needs the durable write
+  a decision with Broker commands has; the host submits each once, also after a restart,
+  and answers every request that was in flight at a restart `Abandoned`.
+- **Acknowledgement.** A completed result whose trigger is an external response
+  acknowledges that request id; the host forgets the request once the acknowledgement is
+  durable. A rejected result acknowledges nothing.
+- **Handshake.** A Strategy executable that issues requests states
+  `EXTERNAL_REQUESTS_CAPABILITY` (`external-requests`) besides `HANDSHAKE_CAPABILITIES_V6`;
+  the host requires it exactly when it grants the Strategy any request.
 
 ## Plan rows
 

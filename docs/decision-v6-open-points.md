@@ -25,7 +25,8 @@ traderv3 and strategies must build to these choices or change them here first.
    only the evidence copy is cut to 512 bytes on a character boundary. The harness's V5
    conversion fills it from the V5 outcome's reason.
 3. **Capabilities.** `CapabilityGrantV6 { timers, external_requests }`; the request names
-   are strictly sorted identifiers, at most 32, empty until Phase 4. Without `timers`,
+   are strictly sorted identifiers, at most 32, each `http:<name>` or `command:<name>`
+   (point 37). Without `timers`,
    `wake_at` and `cancel_timer` are local errors and validation rejects timer commands.
    `KernelCapabilities` gained `external_requests`.
 4. **Deployment mode** is `Paper` or `Live` (traderv3's `DeploymentMode`); there is no
@@ -264,3 +265,43 @@ traderv3 and strategies must build to these choices or change them here first.
 35. The factory's `gate_telemetry_code` is gone: logs and telemetry never take a command
     ordinal, so nothing needs exempting.
 36. Extreme events from a non-primary station use that station's climate date.
+
+## External requests (Phase 4)
+
+Branch `phase4/external-requests`, from the design in
+`traderv3/docs/plans/2026-09-24-strategy-core-parity-and-legacy-removal.md` ("External
+requests (HTTP and CLI) design").
+
+37. **Kind-qualified grants.** The design lists allowlist names only. `CapabilityGrantV6`
+    cannot gain a field without breaking stored contexts, so each grant carries its kind:
+    `http:<endpoint>` or `command:<name>`, a name being an identifier without `:`. The runner
+    and validation then know that `request_http("pi-forecast")` names a command, not an
+    endpoint, and refuse it locally.
+38. **Request ids are command ids.** The design names ids `request.<delivery_id>.<ordinal>`.
+    That form has the collision point 7 fixed for command ids (Sleeves share delivery ids)
+    and can pass the 160-byte identifier bound. A request's id is its command id
+    (`command.` + 32 hex digits of the IntentId), one namespace with orders.
+39. **Wire shape.** `ExternalRequest { command_id, kind, target, payload, timeout_ms }` as
+    designed, with `kind` carrying what differs: `Http { method, path }` or `Command { args }`;
+    `payload` is the HTTP body or standard input. Methods are `Get` and `Post` only. The
+    new command and trigger variants are appended, so every V6 context and result encoded
+    before them decodes unchanged and the magics stay `SDCTXV6A`/`SDRESV6A`. An older
+    executable cannot decode an `ExternalResponse` trigger; the host sends one only to an
+    executable that stated `external-requests`.
+40. **The 64 KiB request bound** covers the HTTP path or the command arguments plus the
+    payload (the design says "request payload"). Paths are relative to the endpoint's base
+    URL and cannot climb out of it: one leading `/`, no `.`/`..` segment, no `\`, no `#`.
+41. **Outstanding bound.** The context does not list outstanding requests (a new context
+    field would break stored contexts), so the runner bounds requests per decision at 8
+    and the host enforces 8 outstanding per Sleeve, answering a request past it `Refused`.
+42. **Errors are a closed kind plus a message.** `Status(code)` names a non-2xx status and
+    `Exit(code)` a failed command, so a kernel can retry on 429/503 without parsing text.
+    An `Ok` answer is always 2xx (or exit status 0).
+43. **Acknowledging the answer.** A completed result whose trigger is an external response
+    lists the request id in `acknowledged_command_ids` (the bound grew by one). The host
+    keeps a request until that acknowledgement is durable, so a request whose answer a crash
+    lost from the Strategy's saved state is answered `Abandoned` after the restart.
+44. **No plan rows.** Requests are not account plan rows (the host keeps them in their own
+    table, written in the decision's transaction), so `decision_plan_rows_v6` does not count
+    them. `StrategyCommandV6::leaves_host` tells the host that a decision with a request
+    needs the durable write even without a Broker command.

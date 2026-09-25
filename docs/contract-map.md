@@ -64,7 +64,7 @@ The conformance inventory in
 | Native fallback callable alias | 1 | 0 | Python names it `FallbackHandler`; Rust represents the same callback as a generic closure/future. |
 | Rust representation support | 0 | 14 | Rust-only enums, aliases, and error/result carriers needed to express Python unions and exceptions safely. |
 | Rust exact fee helpers | 0 | 5 | Rust-only hundredths and direct-member exact-unit fee helpers for native execution hosts; not part of broad Python/Rust parity. |
-| Native-kernel contract | 0 | 0 | 115 additional names exist only in the kernel crate (58 borrowed actions, views, errors and traits; 57 canonical state, event, supplied-input, decimal and weather types); they are not part of broad Python/Rust parity. |
+| Native-kernel contract | 0 | 0 | 122 additional names exist only in the kernel crate (65 borrowed actions, views, errors and traits; 57 canonical state, event, supplied-input, decimal and weather types); they are not part of broad Python/Rust parity. |
 
 The first five rows are the parity surface: names match one-for-one. Additional
 Rust root exports are `DateLike`, `EventDelivery`, `JsonObject`, `JsonValue`,
@@ -1443,7 +1443,7 @@ The legacy export groups are:
 |---|---|
 | Lifecycle and context traits | `NativeKernel`, `StrategyKernelContext`, `StrategyKernelState`, `StrategyKernelData`, `StrategyKernelBroker`, `StrategyKernelRuntime`, `StrategyKernelTelemetry` |
 | Errors | `KernelError`, `KernelResult` |
-| Actions, orders, and action payloads | `KernelAction`, `OrderAction`, `ContractSide`, `OrderType`, `BrokerOrderStatus`, `PlaceOrderRequest`, `CancelOrderRequest`, `CancelTarget`, `CancelAllOrdersRequest`, `PendingOrderView`, `OrderStatusView`, `OrderTicket`, `CommandTicket`, `OrderUpdate`, `OrderUpdateStatus`, `BrokerCommandKind`, `WakeAtRequest`, `TelemetryAction`, `LogAction`, `StopAction` |
+| Actions, orders, and action payloads | `KernelAction`, `OrderAction`, `ContractSide`, `OrderType`, `BrokerOrderStatus`, `PlaceOrderRequest`, `CancelOrderRequest`, `CancelTarget`, `CancelAllOrdersRequest`, `PendingOrderView`, `OrderStatusView`, `OrderTicket`, `CommandTicket`, `OrderUpdate`, `OrderUpdateStatus`, `BrokerCommandKind`, `WakeAtRequest`, `HttpRequest`, `HttpMethod`, `CommandRequest`, `RequestTicket`, `ExternalResponse`, `ExternalOutcome`, `ExternalErrorKind`, `TelemetryAction`, `LogAction`, `StopAction` |
 | Event and state views | `StrategyEventView`, `PriceLevelView`, `MarketBracketView`, `PriceUpdateView`, `ObservationView`, `StationReportView`, `StationWeatherView`, `ForecastHourlySnapshot`, `ForecastModelSnapshot`, `ForecastInputSnapshot`, `OracleModelScoreSnapshot`, `OracleInputSnapshot`, `ForecastUpdatedView`, `OracleScoresUpdatedView`, `WeatherEventSourceView`, `WeatherEventView`, `HighLowView`, `TimerWakeView`, `TickerPriceView` |
 
 `KernelResult<T>` is `Result<T, KernelError>`. `KernelError::new(message)`
@@ -1470,11 +1470,12 @@ The native context exposes these exact trait surfaces:
 - `StrategyKernelContext::capabilities() -> KernelCapabilities`: what the host
   grants: `mode` (`Paper`, `Live`, `Replay`, or `None` when the host does not
   state it), `timers`, `timer_handles`, `gauges`, `annotations`,
-  `external_requests` (allowed request names) and `market_sell` (the Broker admits Market
+  `external_requests` (the allowed requests, sorted: `http:<endpoint>` and
+  `command:<name>`) and `market_sell` (the Broker admits Market
   sells; false in live until Phase 5). The default grants nothing.
   The Decision V6 host states the context's deployment mode, grants timers (and
   handles) as the context grants them, always records gauges and annotations, and
-  reports the granted request names.
+  reports the granted requests.
 - `StrategyKernelContext::contributor_stations() -> &[String]`: every station whose
   data settles the Sleeve's event (the primary station among them), so a kernel
   need not hard-code them. Hosts that do not state them return none.
@@ -1514,6 +1515,22 @@ The native context exposes these exact trait surfaces:
   `wake_at`/`cancel_timer` for a key is refused; rescheduling a key in a later
   decision replaces the timer), and a cancel is a `CancelTimer` command. Hosts
   without handles refuse `cancel_timer`.
+  `request_http(HttpRequest { endpoint, method, path, body, timeout_ms })` and
+  `request_command(CommandRequest { command, args, stdin, timeout_ms })` ask the host
+  to make an HTTP call or run a command after the decision is saved, and return a
+  `RequestTicket { request_id }` at once. `endpoint` and `command` are allowlist
+  names the host grants (`http:<endpoint>`, `command:<name>` in
+  `capabilities().external_requests`), never URLs or paths; the host owns the base URL,
+  credentials, program, leading arguments and environment. The answer arrives in a
+  later decision as the `ExternalResponse { request_id, outcome }` event, where
+  `outcome` is `Ok { status, body }` (a 2xx status, or 0 and a command's standard
+  output) or `Err { kind, message }` with an `ExternalErrorKind` (`Refused`,
+  `Timeout`, `Transport`, `Status(code)` for a non-2xx status, `TooLarge`,
+  `Malformed`, `Exit(code)`, `Abandoned` after a host restart). `Err` from the call
+  itself means only a local problem: not granted, outside the bounds (a path from one
+  `/` without `.`/`..` segments, a timeout of 1 ms to 120 s, at most 64 KiB of path or
+  arguments plus payload), or more than 8 requests in one decision. Hosts without
+  requests refuse both calls.
 - `StrategyKernelContext::telemetry() -> &mut dyn StrategyKernelTelemetry`:
   `counter(name, value, fields)` where fields are `&[(&str, &str)]`;
   `gauge(name, value, fields)`; and `annotate(name, value, fields)` with an
@@ -1529,7 +1546,7 @@ The native context exposes these exact trait surfaces:
 
 `StrategyEventView` variants are `PriceUpdate`, `Observation`,
 `ForecastUpdated`, `OracleScoresUpdated`, `StationReport`, `WeatherEvent`,
-`NewHigh`, `NewLow`, `TimerWake`, `OrderUpdate`, and `Unknown`.
+`NewHigh`, `NewLow`, `TimerWake`, `OrderUpdate`, `ExternalResponse`, and `Unknown`.
 `event_type()` returns the shared discriminator string. `Unknown` carries
 `event_type` and optional `emitted_at`.
 
