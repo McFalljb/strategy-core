@@ -68,6 +68,7 @@ pub(super) fn resting_order() -> BrokerOrderV6 {
         reserved_principal_micros: 600_000,
         reserved_fee_micros: 0,
         fees_micros: 20_000,
+        rejection_reason: None,
         created_at_unix_ms: Some(1),
         updated_at_unix_ms: Some(2),
         signal_type: Some("dsm_reaction_v10".to_owned()),
@@ -1022,5 +1023,38 @@ fn a_cancel_all_counts_the_orders_open_when_it_is_issued() {
             ..base.clone()
         };
         assert_eq!(decision_plan_rows_v6(&context, &result), rows, "{name}");
+    }
+}
+
+#[test]
+fn a_rejection_reason_belongs_to_a_rejected_order_within_its_bound() {
+    let markets = [MARKET.to_owned()];
+    let rejected = BrokerOrderV6 {
+        status: BrokerOrderStatusV6::Rejected,
+        filled_quantity_hundredths: 0,
+        remaining_quantity_hundredths: 300,
+        reserved_principal_micros: 0,
+        rejection_reason: Some("r".repeat(MAX_REJECTION_REASON_BYTES)),
+        ..resting_order()
+    };
+    validate_broker_order_v6(&rejected, &markets).unwrap();
+    for invalid in [
+        BrokerOrderV6 {
+            rejection_reason: Some("r".repeat(MAX_REJECTION_REASON_BYTES + 1)),
+            ..rejected.clone()
+        },
+        BrokerOrderV6 {
+            rejection_reason: Some(String::new()),
+            ..rejected.clone()
+        },
+        BrokerOrderV6 {
+            rejection_reason: Some("rejected".to_owned()),
+            ..resting_order()
+        },
+    ] {
+        assert_eq!(
+            validate_broker_order_v6(&invalid, &markets),
+            Err(DecisionV6Error::InvalidContract)
+        );
     }
 }

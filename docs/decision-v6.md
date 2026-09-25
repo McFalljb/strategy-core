@@ -72,7 +72,9 @@ with less than their whole quantity filled.
 Contributor stations are the owner projection's `opportunity.contributor_stations`; V6
 requires them to be exactly the owner projection's stations (at most `MAX_STATIONS = 5`). The
 multi-station owner projection is unchanged. `BrokerOrderV6` adds `fees_micros`, the
-execution fees charged for the order's fills so far.
+execution fees charged for the order's fills so far, and `rejection_reason`, the provider's
+rejection text of a `Rejected` order when it gave one (non-empty, at most 512 bytes, only on
+a `Rejected` order).
 
 `TriggerV6` is `Owner(OwnerTriggerV6)` or `BrokerState { broker_revision }`, valid on its own
 (not only under Recovery). `BrokerOutcome` is gone.
@@ -151,7 +153,9 @@ matched to entries by command id only. Before the trigger, for each entry in iss
 
 Broker statuses map to update statuses: accepted and dispatched are `Accepted`, resting
 `Resting`, partially filled `PartiallyFilled`, filled `Filled`, cancelled `Cancelled`, expired
-`Expired`, rejected `Refused { code: "provider_rejected" }`. A cancellation request or a
+`Expired`, rejected `Refused { code: "provider_rejected", reason }` where `reason` is the
+order's `rejection_reason`, or "the provider rejected the order" when the provider gave
+none. Kernels classify transient rejections by that text. A cancellation request or a
 recovery hold is not news of its own: the order keeps its last status (`PartiallyFilled`
 once anything filled).
 

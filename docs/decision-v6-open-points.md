@@ -14,8 +14,13 @@ traderv3 and strategies must build to these choices or change them here first.
    exposes it (`DecisionContextV6::contributor_stations`) and validation requires it to be
    exactly the owner projection's stations, unique, at most `MAX_STATIONS = 5`, including
    the primary station. traderv3 must deliver a station for every contributor.
-2. **Order fees.** `OrderUpdate.fee_cost` needs the fees charged on each order, which V5's
-   Broker order did not carry. `BrokerOrderV6` adds `fees_micros`.
+2. **Order fees and rejection text.** `OrderUpdate.fee_cost` needs the fees charged on
+   each order, which V5's Broker order did not carry: `BrokerOrderV6` adds `fees_micros`.
+   Kernels (V10, V12) classify transient rejections by the provider's text, so
+   `BrokerOrderV6` also adds `rejection_reason` (non-empty, at most 512 bytes, only on a
+   `Rejected` order), which the host fills from the provider's rejection message; the runner
+   reports it as the `provider_rejected` refusal's reason, with a fixed text when absent. The
+   harness's V5 conversion leaves it absent.
 3. **Capabilities.** `CapabilityGrantV6 { timers, external_requests }`; the request names
    are strictly sorted identifiers, at most 32, empty until Phase 4. Without `timers`,
    `wake_at` and `cancel_timer` are local errors and validation rejects timer commands.
@@ -102,7 +107,8 @@ traderv3 and strategies must build to these choices or change them here first.
     admitted cancel has no update of its own: the target's `Cancelled` update reports it.
 21. **Status mapping.** Durably accepted and dispatched are `Accepted`. A cancellation
     request or a recovery hold keeps the last status (`PartiallyFilled` once anything
-    filled). A provider-rejected order is `Refused { code: "provider_rejected" }`. An order
+    filled). A provider-rejected order is `Refused { code: "provider_rejected" }` with the
+    order's `rejection_reason` (or a fixed text). An order
     that vanishes before its first update is reported as `Accepted`, final, nothing
     remaining.
 22. **Stale views and tombstones.** Each entry records the Broker revision it was issued

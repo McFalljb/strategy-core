@@ -181,6 +181,7 @@ fn order(
         reserved_principal_micros: reserved,
         reserved_fee_micros: 0,
         fees_micros: filled * 70,
+        rejection_reason: None,
         created_at_unix_ms: Some(DECISION_MS),
         updated_at_unix_ms: Some(DECISION_MS),
         signal_type: None,
@@ -1512,4 +1513,32 @@ fn commands_past_the_result_size_bound_are_a_local_error() {
     let encoded =
         strategy_core_v3::decision_v6::encode_decision_result_v6(&decision.result).unwrap();
     assert!(encoded.len() <= strategy_core_v3::decision_v6::MAX_DECISION_RESULT_V6_BYTES);
+}
+
+#[test]
+fn a_provider_rejection_carries_the_provider_text() {
+    let context = priced_context();
+    let placed = decide(&context, place_yes);
+    let command_id = cid(1, 0);
+    for (reason, expected) in [
+        (Some("market paused"), "market paused"),
+        (None, strategy_core_v3::kernel_v6::PROVIDER_REJECTED_REASON),
+    ] {
+        let mut rejected = order(&command_id, "yes-1", BrokerOrderStatusV6::Rejected, 0, 2);
+        rejected.rejection_reason = reason.map(str::to_owned);
+        let next = follow_up(&context, Some(&placed.result), 2, vec![rejected], vec![]);
+        let decision = decide(&next, nothing);
+        assert_eq!(
+            decision.updates.iter().map(summary).collect::<Vec<_>>(),
+            [(
+                OrderUpdateStatus::Refused {
+                    code: strategy_core_v3::kernel_v6::PROVIDER_REJECTED_CODE.to_owned(),
+                    reason: expected.to_owned(),
+                },
+                0,
+                300,
+                true
+            )]
+        );
+    }
 }

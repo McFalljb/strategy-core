@@ -49,7 +49,7 @@ pub use self::events::KernelEvent;
 use self::projection::{
     hundredths_quantity, market_state, millis, price, price_micros, station_state,
 };
-pub use self::updates::PROVIDER_REJECTED_CODE;
+pub use self::updates::{PROVIDER_REJECTED_CODE, PROVIDER_REJECTED_REASON};
 use crate::decision_v6::{
     self as wire, AnnotationValueV6, BrokerCommandKindV6, BrokerDetailV6, BrokerOrderStatusV6,
     BrokerOrderV6, CancelTargetV6, ContractSideV6, DecisionContextV6, DecisionDispositionV6,

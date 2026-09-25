@@ -138,6 +138,27 @@ fn live_context() -> DecisionContextV6 {
     context
 }
 
+/// A second order the provider rejected, with its rejection text.
+fn provider_rejection_context() -> DecisionContextV6 {
+    let mut context = context();
+    context.broker.orders.push(BrokerOrderV6 {
+        command_id: "command.delivery.daily.0.1".to_owned(),
+        intent_id: "intent.daily.2".to_owned(),
+        order_id: "order.daily.2".to_owned(),
+        provider_order_id: None,
+        provider_client_id: "dsm-v10-ksea-20260830-2".to_owned(),
+        filled_quantity_hundredths: 0,
+        remaining_quantity_hundredths: 300,
+        average_fill_price_micros: None,
+        reserved_principal_micros: 0,
+        fees_micros: 0,
+        status: BrokerOrderStatusV6::Rejected,
+        rejection_reason: Some("post only cross: the order would take liquidity".to_owned()),
+        ..resting_order()
+    });
+    context
+}
+
 fn truncated_context() -> DecisionContextV6 {
     let mut context = context();
     context.orders_complete = false;
@@ -153,6 +174,7 @@ fn valid_contexts() -> Vec<(&'static str, DecisionContextV6)> {
         ("live-request-grants", live_context()),
         ("row-limit-view", row_limit_case().0),
         ("truncated-order-view", truncated_context()),
+        ("provider-rejection-reason", provider_rejection_context()),
     ]
 }
 
@@ -351,6 +373,21 @@ fn invalid_contexts() -> Vec<(&'static str, DecisionV6Error, ContextMutation)> {
                 let mut checkpoint = context.kernel_checkpoint.take().unwrap();
                 checkpoint.runner.entries[0].last_status = Some(OrderUpdateStatusV6::Filled);
                 context.kernel_checkpoint = Some(checkpoint.seal());
+            },
+        ),
+        (
+            "rejection-reason-on-an-open-order",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                context.broker.orders[0].rejection_reason = Some("rejected".to_owned());
+            },
+        ),
+        (
+            "rejection-reason-over-512-bytes",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = provider_rejection_context();
+                context.broker.orders[1].rejection_reason = Some("r".repeat(513));
             },
         ),
         (
@@ -887,7 +924,7 @@ fn v6_corpus_is_current_and_every_vector_decodes_to_its_verdict() {
         }
     }
     let invalid = recorded["invalid"].as_array().unwrap();
-    assert_eq!(invalid.len(), 33);
+    assert_eq!(invalid.len(), 35);
     for entry in invalid {
         let id = entry["id"].as_str().unwrap();
         let bytes = bytes(entry);

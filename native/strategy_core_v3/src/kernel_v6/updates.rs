@@ -18,6 +18,8 @@ use crate::decision_v6::{
 
 /// Refusal code of an order the provider rejected after admission.
 pub const PROVIDER_REJECTED_CODE: &str = "provider_rejected";
+/// The refusal reason of a rejected order whose provider gave no text.
+pub const PROVIDER_REJECTED_REASON: &str = "the provider rejected the order";
 
 /// The comparison's outcome: the updates to deliver in issue order, the runner section's
 /// entries and reported terminal orders afterwards, and the receipts and terminal orders the
@@ -250,7 +252,10 @@ pub(super) fn seen_status(
         BrokerOrderStatusV6::Expired => OrderUpdateStatusV6::Expired,
         BrokerOrderStatusV6::Rejected => OrderUpdateStatusV6::Refused {
             code: PROVIDER_REJECTED_CODE.to_owned(),
-            reason: "the provider rejected the order".to_owned(),
+            reason: order
+                .rejection_reason
+                .clone()
+                .unwrap_or_else(|| PROVIDER_REJECTED_REASON.to_owned()),
         },
         BrokerOrderStatusV6::CancellationRequested | BrokerOrderStatusV6::RecoveryRequired => {
             if order.filled_quantity_hundredths > 0 {
