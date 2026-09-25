@@ -893,3 +893,39 @@ fn a_huge_length_prefix_fails_to_decode_without_allocating() {
         }
     }
 }
+
+#[test]
+fn terminal_orders_that_stopped_early_may_report_nothing_remaining() {
+    let markets = [MARKET.to_owned()];
+    for status in [
+        BrokerOrderStatusV6::Cancelled,
+        BrokerOrderStatusV6::Expired,
+        BrokerOrderStatusV6::Rejected,
+        BrokerOrderStatusV6::Filled,
+        BrokerOrderStatusV6::Resting,
+    ] {
+        let order = BrokerOrderV6 {
+            status,
+            filled_quantity_hundredths: 100,
+            remaining_quantity_hundredths: 0,
+            reserved_principal_micros: 0,
+            ..resting_order()
+        };
+        let stopped_early = !matches!(
+            status,
+            BrokerOrderStatusV6::Filled | BrokerOrderStatusV6::Resting
+        );
+        assert_eq!(
+            validate_broker_order_v6(&order, &markets).is_ok(),
+            stopped_early,
+            "{status:?}"
+        );
+    }
+    let mut foreign = resting_order();
+    foreign.market_id = "KXOTHER".to_owned();
+    assert_eq!(
+        validate_broker_order_v6(&foreign, &markets),
+        Err(DecisionV6Error::InvalidContract),
+        "a host can quarantine a record before building the context"
+    );
+}

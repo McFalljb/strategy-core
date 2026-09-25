@@ -1067,35 +1067,11 @@ fn validate_broker(context: &DecisionContextV6) -> Result<(), DecisionV6Error> {
             || u128::from(position.cost_basis_micros)
                 > maximum_quantity_value(position.quantity_hundredths)
             || !owner_market_ids.contains(position.market_id.as_str())
-    }) || broker.orders.iter().any(|order| {
-        let accounted = order
-            .filled_quantity_hundredths
-            .checked_add(order.remaining_quantity_hundredths);
-        let quantities_valid = accounted == Some(order.quantity_hundredths)
-            || (order.status == BrokerOrderStatusV6::Cancelled
-                && order.remaining_quantity_hundredths == 0
-                && accounted.is_some_and(|quantity| quantity <= order.quantity_hundredths));
-        !valid_identifier(&order.command_id)
-            || !valid_identifier(&order.intent_id)
-            || !valid_identifier(&order.order_id)
-            || !valid_optional_identifier(&order.provider_order_id)
-            || !valid_identifier(&order.provider_client_id)
-            || !owner_market_ids.contains(order.market_id.as_str())
-            || order.quantity_hundredths == 0
-            || order.quantity_hundredths > i64::MAX as u64
-            || !quantities_valid
-            || order
-                .limit_price_micros
-                .is_some_and(|price| price > MAX_PRICE_MICROS)
-            || order
-                .average_fill_price_micros
-                .is_some_and(|price| price > MAX_PRICE_MICROS)
-            || matches!(order.order_type, OrderTypeV6::Limit) && order.limit_price_micros.is_none()
-            || matches!(order.order_type, OrderTypeV6::Market) && order.limit_price_micros.is_some()
-            || !valid_order_reservation(order)
-            || !valid_optional_text(&order.signal_type, MAX_SHORT_TEXT_BYTES)
-            || !valid_optional_text(&order.signal_metadata, MAX_COMMAND_METADATA_BYTES)
-    }) {
+    }) || broker
+        .orders
+        .iter()
+        .any(|order| validate_broker_order_v6(order, &context.strategy.market_ids).is_err())
+    {
         return Err(DecisionV6Error::InvalidContract);
     }
     let reserved_cash = broker.orders.iter().fold(0_u128, |total, order| {
@@ -1125,6 +1101,56 @@ fn validate_broker(context: &DecisionContextV6) -> Result<(), DecisionV6Error> {
             .iter()
             .filter_map(|order| order.provider_order_id.as_deref()),
     )?;
+    Ok(())
+}
+
+/// Checks one Broker order record on its own: identities, quantities, prices, reservations
+/// and text bounds, and that its Market is one of `market_ids`. A host can run it over its
+/// order records before building a context, to quarantine a record that would make every
+/// context of the Sleeve invalid.
+///
+/// A terminal order that stopped early (`Cancelled`, `Expired`, `Rejected`) may report no
+/// remaining quantity with less than its whole quantity filled.
+pub fn validate_broker_order_v6(
+    order: &BrokerOrderV6,
+    market_ids: &[String],
+) -> Result<(), DecisionV6Error> {
+    let accounted = order
+        .filled_quantity_hundredths
+        .checked_add(order.remaining_quantity_hundredths);
+    let stopped_early = matches!(
+        order.status,
+        BrokerOrderStatusV6::Cancelled
+            | BrokerOrderStatusV6::Expired
+            | BrokerOrderStatusV6::Rejected
+    );
+    let quantities_valid = accounted == Some(order.quantity_hundredths)
+        || (stopped_early
+            && order.remaining_quantity_hundredths == 0
+            && accounted.is_some_and(|quantity| quantity <= order.quantity_hundredths));
+    if !valid_identifier(&order.command_id)
+        || !valid_identifier(&order.intent_id)
+        || !valid_identifier(&order.order_id)
+        || !valid_optional_identifier(&order.provider_order_id)
+        || !valid_identifier(&order.provider_client_id)
+        || !market_ids.iter().any(|market| *market == order.market_id)
+        || order.quantity_hundredths == 0
+        || order.quantity_hundredths > i64::MAX as u64
+        || !quantities_valid
+        || order
+            .limit_price_micros
+            .is_some_and(|price| price > MAX_PRICE_MICROS)
+        || order
+            .average_fill_price_micros
+            .is_some_and(|price| price > MAX_PRICE_MICROS)
+        || matches!(order.order_type, OrderTypeV6::Limit) && order.limit_price_micros.is_none()
+        || matches!(order.order_type, OrderTypeV6::Market) && order.limit_price_micros.is_some()
+        || !valid_order_reservation(order)
+        || !valid_optional_text(&order.signal_type, MAX_SHORT_TEXT_BYTES)
+        || !valid_optional_text(&order.signal_metadata, MAX_COMMAND_METADATA_BYTES)
+    {
+        return Err(DecisionV6Error::InvalidContract);
+    }
     Ok(())
 }
 
