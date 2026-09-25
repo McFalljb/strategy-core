@@ -1967,3 +1967,101 @@ fn a_kernel_that_keeps_a_vanished_order_counts_its_fill_when_it_returns() {
     );
     assert!(r4.diagnostics.is_empty(), "{:?}", r4.diagnostics);
 }
+
+#[test]
+fn a_failed_update_is_undone_through_the_kernels_own_codec() {
+    /// Counts updates in its checkpoint and fails on each after changing its count, placing
+    /// an order, logging and counting.
+    struct Counting {
+        updates: u32,
+    }
+    impl NativeKernel for Counting {
+        fn name(&self) -> &str {
+            "counting"
+        }
+        fn on_event(
+            &mut self,
+            event: StrategyEventView<'_>,
+            context: &mut dyn StrategyKernelContext,
+        ) -> KernelResult<()> {
+            if let StrategyEventView::OrderUpdate(_) = event {
+                self.updates += 1;
+                context.broker().place_order(limit_buy(
+                    "replacement",
+                    ContractSide::Yes,
+                    100,
+                    0.4,
+                ))?;
+                context.telemetry().counter("orders_placed", 1.0, &[])?;
+                context.emit(KernelAction::Log(LogAction {
+                    level: "warn".to_owned(),
+                    message: "about to fail".to_owned(),
+                }))?;
+                return Err(strategy_core_kernel::KernelError::new("boom"));
+            }
+            Ok(())
+        }
+    }
+    impl TransactionKernel for Counting {
+        fn encode_checkpoint_state(&self) -> Result<Vec<u8>, KernelTransactionError> {
+            Ok(self.updates.to_string().into_bytes())
+        }
+    }
+    struct CountingFactory;
+    impl TransactionKernelFactory for CountingFactory {
+        type Kernel = Counting;
+        fn checkpoint_codec(
+            &self,
+            _: &str,
+        ) -> Result<KernelCheckpointCodec, KernelTransactionError> {
+            Ok(KernelCheckpointCodec {
+                profile: "script.checkpoint.v1".to_owned(),
+                version: 1,
+            })
+        }
+        fn create(&self, _: &DecisionContextV6) -> Result<Counting, KernelTransactionError> {
+            Ok(Counting { updates: 0 })
+        }
+        fn restore(
+            &self,
+            _: &DecisionContextV6,
+            checkpoint: &strategy_core_v3::decision_v6::KernelCheckpointV6,
+        ) -> Result<Counting, KernelTransactionError> {
+            let text = String::from_utf8(checkpoint.state.clone()).unwrap();
+            Ok(Counting {
+                updates: text.parse().unwrap_or(0),
+            })
+        }
+    }
+    let context = priced_context();
+    let placed = decide(&context, place_yes);
+    let next = follow_up(
+        &context,
+        Some(&placed.result),
+        2,
+        vec![order(
+            &cid(1, 0),
+            "yes-1",
+            BrokerOrderStatusV6::Resting,
+            0,
+            1,
+        )],
+        vec![],
+    );
+    let result = run_transaction(&CountingFactory, &next).unwrap();
+    assert_eq!(
+        result.kernel_checkpoint.as_ref().unwrap().state,
+        b"0",
+        "state undone"
+    );
+    assert!(result.commands.is_empty(), "the order was never sent");
+    assert!(result.telemetry.is_empty(), "nor counted");
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "kernel_log"
+                && diagnostic.message == "about to fail"),
+        "its logs stay"
+    );
+}

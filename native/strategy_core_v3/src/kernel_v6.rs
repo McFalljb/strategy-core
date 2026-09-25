@@ -108,7 +108,7 @@ pub struct KernelCheckpointCodec {
 
 /// A kernel as driven by the runner: an ordinary [`NativeKernel`] that can also checkpoint its
 /// private state.
-pub trait TransactionKernel: NativeKernel + Clone {
+pub trait TransactionKernel: NativeKernel {
     /// Opaque private state for the checkpoint (at most `MAX_KERNEL_CHECKPOINT_BYTES`).
     fn encode_checkpoint_state(&self) -> Result<Vec<u8>, KernelTransactionError>;
     /// Authoritative maximum per-contract price of a Market buy, asked once when the kernel
@@ -145,12 +145,13 @@ pub fn run_transaction<F: TransactionKernelFactory>(
 ) -> Result<DecisionResultV6, KernelTransactionError> {
     context.validate()?;
     let codec = factory.checkpoint_codec(&context.strategy.strategy_id)?;
-    let mut kernel = match &context.kernel_checkpoint {
-        Some(checkpoint) => factory.restore(context, checkpoint)?,
-        None => factory.create(context)?,
+    let restore = || match &context.kernel_checkpoint {
+        Some(checkpoint) => factory.restore(context, checkpoint),
+        None => factory.create(context),
     };
+    let mut kernel = restore()?;
     // The Market-buy cap is asked of the kernel as restored for this decision.
-    let restored = kernel.clone();
+    let restored = restore()?;
     let market_buy_cap =
         |request: &PlaceOrderRequest| restored.market_buy_price_cap_micros(request);
     let derived = updates::derive(context)?;
@@ -185,12 +186,13 @@ pub fn run_transaction<F: TransactionKernelFactory>(
         let Some(record) = &step.update else {
             continue;
         };
-        let before = (kernel.clone(), host.save());
+        // The kernel's own codec snapshots it; a failed update restores it through the factory.
+        let snapshot = snapshot_checkpoint(context, &codec, kernel.encode_checkpoint_state()?);
+        let saved = host.save();
         let delivered = StrategyEvent::OrderUpdate(order_update(record))
             .with_view(|view| kernel.on_event(view, &mut host));
         if let Err(error) = delivered {
-            let (restored, saved) = before;
-            kernel = restored;
+            kernel = factory.restore(context, &snapshot)?;
             host.restore(saved);
             failed.insert(index);
             host.outputs.push(HostOutput::UpdateError(format!(
@@ -259,6 +261,33 @@ pub fn run_transaction<F: TransactionKernelFactory>(
     wire::validate_decision_result_v6(context, &result)?;
     wire::encode_decision_result_v6(&result)?;
     Ok(result)
+}
+
+/// A checkpoint of the kernel's state mid-decision, for restoring it after a failed update.
+fn snapshot_checkpoint(
+    context: &DecisionContextV6,
+    codec: &KernelCheckpointCodec,
+    state: Vec<u8>,
+) -> KernelCheckpointV6 {
+    KernelCheckpointV6 {
+        codec_profile: codec.profile.clone(),
+        codec_version: codec.version,
+        strategy_id: context.strategy.strategy_id.clone(),
+        strategy_profile: context.strategy.profile.clone(),
+        profile_and_calculator_digest: context.strategy.profile_and_calculator_digest.clone(),
+        sequence: context
+            .kernel_checkpoint
+            .as_ref()
+            .map_or(1, |checkpoint| checkpoint.sequence),
+        state,
+        runner: context
+            .kernel_checkpoint
+            .as_ref()
+            .map(|checkpoint| checkpoint.runner.clone())
+            .unwrap_or_default(),
+        state_sha256: [0; 32],
+    }
+    .seal()
 }
 
 /// The Strategy parameters projected without loss into a JSON object for kernel initializers.
@@ -508,6 +537,7 @@ struct SavedDecision {
     runner: Vec<RunnerEntryV6>,
     rows: DecisionPlanRows,
     timer_keys: BTreeSet<String>,
+    outputs_len: usize,
 }
 
 type MarketBuyCap<'a> =
@@ -578,6 +608,7 @@ impl<'a> KernelHost<'a> {
             runner: self.runner.clone(),
             rows: self.rows.clone(),
             timer_keys: self.timer_keys.clone(),
+            outputs_len: self.outputs.len(),
         }
     }
 
@@ -589,6 +620,14 @@ impl<'a> KernelHost<'a> {
         self.runner = saved.runner;
         self.rows = saved.rows;
         self.timer_keys = saved.timer_keys;
+        // Telemetry of a rolled-back update describes work that never happened; its logs stay.
+        let tail = self
+            .outputs
+            .split_off(saved.outputs_len.min(self.outputs.len()));
+        self.outputs.extend(
+            tail.into_iter()
+                .filter(|output| matches!(output, HostOutput::Log(_))),
+        );
     }
 
     fn broker_detail(&self) -> &BrokerDetailV6 {
