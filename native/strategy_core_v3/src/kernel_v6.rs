@@ -67,6 +67,12 @@ pub const DEFAULT_TIMER_KEY: &str = "kernel.wake";
 const TIMER_ACTIVE: u8 = 0;
 /// Telemetry payload bytes one result keeps; entries past it are counted as lost.
 const MAX_TELEMETRY_BYTES: usize = 256 * 1024;
+/// Encoded bytes of a result's fixed fields and closing diagnostics (ids, fence, the kernel
+/// error and overflow diagnostics).
+const RESULT_OVERHEAD_BYTES: usize = 16 * 1024;
+/// A refusal reason recorded in order-update evidence is cut to this many bytes (the kernel
+/// sees the whole reason), so the evidence of 256 updates always fits the result.
+const MAX_EVIDENCE_REASON_BYTES: usize = 512;
 
 #[derive(Debug)]
 pub enum KernelTransactionError {
@@ -149,8 +155,23 @@ pub fn run_transaction<F: TransactionKernelFactory>(
         |request: &PlaceOrderRequest| restored.market_buy_price_cap_micros(request);
     let derived = updates::derive(context)?;
     let event = KernelEvent::from_context(context)?;
+    let evidence = wire::order_update_evidence(
+        &derived
+            .updates
+            .iter()
+            .map(evidence_record)
+            .collect::<Vec<_>>(),
+    )?;
+    // Everything in the result but the commands, the runner entries and the kernel's
+    // telemetry, with the kernel's state at its bound: commands are admitted against the rest.
+    let fixed_bytes = wire::encoded_len(&evidence)
+        + wire::encoded_len(&derived.acknowledged)
+        + wire::encoded_len(&derived.reported)
+        + wire::MAX_KERNEL_CHECKPOINT_BYTES
+        + RESULT_OVERHEAD_BYTES;
     let mut host = KernelHost::new(context, derived.entries, !derived.acknowledged.is_empty())?;
     host.market_buy_cap = Some(&market_buy_cap);
+    host.fixed_bytes = fixed_bytes;
 
     // Each update is delivered on its own: when the kernel fails on one, the kernel and the
     // decision go back to how they were before it, the failure is recorded, and the update
@@ -180,7 +201,7 @@ pub fn run_transaction<F: TransactionKernelFactory>(
         kernel_checkpoint: None,
         commands: Vec::new(),
         acknowledged_command_ids: Vec::new(),
-        evidence: wire::order_update_evidence(&derived.updates)?,
+        evidence,
         diagnostics: Vec::new(),
         telemetry: Vec::new(),
     };
@@ -270,6 +291,16 @@ fn parameter_json(
         }
         StrategyParameterValueV6::String(value) => serde_json::Value::String(value.clone()),
     })
+}
+
+/// The update as recorded in the result's evidence: a refusal reason is cut to
+/// `MAX_EVIDENCE_REASON_BYTES`.
+fn evidence_record(record: &OrderUpdateRecordV6) -> OrderUpdateRecordV6 {
+    let mut record = record.clone();
+    if let OrderUpdateStatusV6::Refused { reason, .. } = &mut record.status {
+        truncate_utf8(reason, MAX_EVIDENCE_REASON_BYTES);
+    }
+    record
 }
 
 /// Presents one derived update record to a kernel.
@@ -484,6 +515,8 @@ pub struct KernelHost<'a> {
     timer_keys: BTreeSet<String>,
     outputs: Vec<HostOutput>,
     market_buy_cap: Option<MarketBuyCap<'a>>,
+    /// Encoded bytes the result needs besides its commands and runner entries.
+    fixed_bytes: usize,
 }
 
 impl<'a> KernelHost<'a> {
@@ -512,6 +545,7 @@ impl<'a> KernelHost<'a> {
             timer_keys: BTreeSet::new(),
             outputs: Vec::new(),
             market_buy_cap: None,
+            fixed_bytes: RESULT_OVERHEAD_BYTES + wire::MAX_KERNEL_CHECKPOINT_BYTES,
         })
     }
 
@@ -557,11 +591,40 @@ impl<'a> KernelHost<'a> {
     }
 
     /// Admits a Broker command against the row budget and the runner section's bound.
+    /// The result stays within its encoded budget with `command` (and its runner entry) added,
+    /// whatever the kernel's state and telemetry: a command past it is a local error, so the
+    /// result never exceeds its bound.
+    fn check_result_bytes(
+        &self,
+        command: &StrategyCommandV6,
+        entry: Option<&RunnerEntryV6>,
+    ) -> KernelResult<()> {
+        let bytes = self.fixed_bytes
+            + wire::encoded_len(&self.commands)
+            + wire::encoded_len(&self.runner)
+            + wire::encoded_len(command)
+            + entry.map_or(0, wire::encoded_len);
+        if bytes > wire::RESULT_ENCODED_BUDGET_BYTES {
+            return Err(KernelError::new(
+                "the decision's commands would exceed the result size bound",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Adds a timer or stop command.
+    fn push_command(&mut self, command: StrategyCommandV6) -> KernelResult<()> {
+        self.check_result_bytes(&command, None)?;
+        self.commands.push(command);
+        Ok(())
+    }
+
     fn issue_broker_command(
         &mut self,
         command: StrategyCommandV6,
         entry: RunnerEntryV6,
     ) -> KernelResult<()> {
+        self.check_result_bytes(&command, Some(&entry))?;
         let rows = self.rows.with(&command, &self.context.broker);
         if rows.total() > wire::MAX_DECISION_PLAN_ROWS {
             return Err(KernelError::new(format!(
@@ -967,11 +1030,10 @@ impl StrategyKernelContext for KernelHost<'_> {
                 if stop.reason.is_empty() || stop.reason.len() > wire::MAX_REASON_BYTES {
                     return Err(KernelError::new("invalid stop reason"));
                 }
-                self.commands.push(StrategyCommandV6::Stop {
+                self.push_command(StrategyCommandV6::Stop {
                     command_id: self.context.command_id(ordinal),
                     reason: stop.reason,
-                });
-                Ok(())
+                })
             }
         }
     }
@@ -1122,13 +1184,13 @@ impl StrategyKernelRuntime for KernelHost<'_> {
             .and_then(|nanos| u64::try_from(nanos).ok())
             .ok_or_else(|| KernelError::new("the timer time is outside the epoch range"))?;
         let generation = self.context.timer_generation();
-        self.commands.push(StrategyCommandV6::ScheduleTimer {
+        self.push_command(StrategyCommandV6::ScheduleTimer {
             command_id: self.context.command_id(ordinal),
             key: key.clone(),
             scheduled_at_epoch_ns,
             generation: generation.clone(),
             semantics: Vec::new(),
-        });
+        })?;
         self.timer_keys.insert(key.clone());
         Ok(TimerHandle { key, generation })
     }
@@ -1141,11 +1203,11 @@ impl StrategyKernelRuntime for KernelHost<'_> {
             )));
         }
         let ordinal = self.next_ordinal()?;
-        self.commands.push(StrategyCommandV6::CancelTimer {
+        self.push_command(StrategyCommandV6::CancelTimer {
             command_id: self.context.command_id(ordinal),
             key: handle.key.clone(),
             generation: handle.generation.clone(),
-        });
+        })?;
         self.timer_keys.insert(handle.key.clone());
         Ok(())
     }
@@ -1257,6 +1319,17 @@ fn append_outputs(
 ) {
     // Room for the kernel error and the overflow diagnostic.
     let diagnostic_room = wire::MAX_RESULT_DIAGNOSTICS - 2;
+    // Logs and telemetry fill only the bytes the checkpoint, commands and updates leave.
+    let mut room = wire::RESULT_ENCODED_BUDGET_BYTES
+        .saturating_sub(wire::encoded_len(result))
+        .saturating_sub(RESULT_OVERHEAD_BYTES);
+    let mut take = |bytes: usize| {
+        let fits = bytes <= room;
+        if fits {
+            room -= bytes;
+        }
+        fits
+    };
     let mut telemetry_bytes = 0usize;
     let mut lost = 0usize;
     let mut lost_bytes = 0usize;
@@ -1277,8 +1350,10 @@ fn append_outputs(
                 } else {
                     "info"
                 };
+                let bytes = message.len() + 32;
                 if message.len() <= wire::MAX_RESULT_DIAGNOSTIC_BYTES
                     && result.diagnostics.len() < diagnostic_room
+                    && take(bytes)
                 {
                     result.diagnostics.push(ResultDiagnosticV6 {
                         severity: severity.to_owned(),
@@ -1287,6 +1362,7 @@ fn append_outputs(
                     });
                 } else if message.len() <= wire::MAX_EVIDENCE_PAYLOAD_BYTES
                     && result.evidence.len() < wire::MAX_RESULT_EVIDENCE
+                    && take(bytes)
                 {
                     result.evidence.push(ResultEvidenceV6 {
                         code: "kernel_log".to_owned(),
@@ -1300,7 +1376,7 @@ fn append_outputs(
             HostOutput::UpdateError(message) => {
                 let mut message = message.clone();
                 truncate_utf8(&mut message, wire::MAX_RESULT_DIAGNOSTIC_BYTES);
-                if result.diagnostics.len() < diagnostic_room {
+                if result.diagnostics.len() < diagnostic_room && take(message.len() + 32) {
                     result.diagnostics.push(ResultDiagnosticV6 {
                         severity: "error".to_owned(),
                         code: "kernel_error".to_owned(),
@@ -1317,6 +1393,7 @@ fn append_outputs(
                 if entry.is_valid()
                     && result.telemetry.len() < wire::MAX_RESULT_TELEMETRY
                     && telemetry_bytes.saturating_add(bytes) <= MAX_TELEMETRY_BYTES
+                    && take(bytes)
                 {
                     telemetry_bytes += bytes;
                     result.telemetry.push(entry.clone());

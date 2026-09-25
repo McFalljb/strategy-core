@@ -1456,3 +1456,60 @@ fn every_fill_is_reported_exactly_once_whatever_the_views() {
         assert_eq!(filled_updates, 1, "seed {seed}: one Filled update");
     }
 }
+
+#[test]
+fn large_logs_fill_only_the_room_the_result_has_left() {
+    let context = priced_context();
+    let decision = decide(&context, |context, _| {
+        for index in 0..20 {
+            context.emit(KernelAction::Log(LogAction {
+                level: "info".to_owned(),
+                message: format!("{index}:{}", "x".repeat(60 * 1024)),
+            }))?;
+        }
+        Ok(())
+    });
+    let result = decision.result;
+    assert_eq!(result.disposition, DecisionDispositionV6::Completed);
+    let encoded = strategy_core_v3::decision_v6::encode_decision_result_v6(&result).unwrap();
+    assert!(encoded.len() <= strategy_core_v3::decision_v6::RESULT_ENCODED_BUDGET_BYTES);
+    let overflow = result
+        .diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code == "kernel_telemetry_overflow")
+        .expect("the logs past the room are counted");
+    let lost =
+        serde_json::from_str::<serde_json::Value>(&overflow.message).unwrap()["lost_entries"]
+            .as_u64()
+            .unwrap();
+    let kept = result
+        .evidence
+        .iter()
+        .filter(|evidence| evidence.code == "kernel_log")
+        .count() as u64;
+    assert_eq!(kept + lost, 20);
+    assert!(lost > 0 && kept > 0);
+}
+
+#[test]
+fn commands_past_the_result_size_bound_are_a_local_error() {
+    let decision = decide(&priced_context(), |context, seen| {
+        for index in 0..MAX_STRATEGY_COMMANDS {
+            let mut request = limit_buy(&format!("big-{index}"), ContractSide::Yes, 100, 0.4);
+            request.signal_metadata = Some("m".repeat(60 * 1024));
+            if let Err(error) = context.broker().place_order(request) {
+                seen.push(error.to_string());
+                break;
+            }
+        }
+        Ok(())
+    });
+    assert_eq!(
+        decision.seen,
+        ["the decision's commands would exceed the result size bound"]
+    );
+    assert!(!decision.result.commands.is_empty());
+    let encoded =
+        strategy_core_v3::decision_v6::encode_decision_result_v6(&decision.result).unwrap();
+    assert!(encoded.len() <= strategy_core_v3::decision_v6::MAX_DECISION_RESULT_V6_BYTES);
+}

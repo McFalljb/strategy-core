@@ -28,6 +28,10 @@ pub const MAX_DECISION_CONTEXT_V6_BYTES: usize = 20 * 1024 * 1024;
 /// The kernel's 128 KiB state, the runner section, 64 commands, the derived order updates and
 /// bounded telemetry.
 pub const MAX_DECISION_RESULT_V6_BYTES: usize = 1024 * 1024;
+/// The encoded size the runner keeps a result within: the result bound less room for the
+/// decoder's in-memory accounting of integers (it charges each decoded integer its full
+/// width), so every result the runner writes decodes under the result bound.
+pub const RESULT_ENCODED_BUDGET_BYTES: usize = MAX_DECISION_RESULT_V6_BYTES - 128 * 1024;
 pub const MAX_STRATEGY_PARAMETERS: usize = 256;
 pub const MAX_BROKER_POSITIONS: usize = 256;
 pub const MAX_BROKER_ORDERS: usize = 256;
@@ -2206,6 +2210,11 @@ pub fn decision_fence_v6_sha256(context: &DecisionContextV6) -> Result<[u8; 32],
     hash_component(&mut hasher, &encode(&context.capabilities)?);
     hash_component(&mut hasher, &encode(&context.command_receipts)?);
     Ok(hasher.finalize().into())
+}
+
+/// The wire-encoded length of a value (without a magic).
+pub fn encoded_len<T: Encode>(value: &T) -> usize {
+    bincode::encode_to_vec(value, wire_config()).map_or(usize::MAX, |bytes| bytes.len())
 }
 
 fn encode<T: Encode>(value: &T) -> Result<Vec<u8>, DecisionV6Error> {
