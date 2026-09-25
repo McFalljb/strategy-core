@@ -1481,7 +1481,10 @@ The native context exposes these exact trait surfaces:
   `cancel_all_orders() -> KernelResult<CommandTicket>`. Tickets return at once; `Err`
   means only a local problem (an invalid request or a bound exceeded). A Broker refusal
   is never an `Err`: it arrives as an `OrderUpdate` event, as does every later change
-  of the order. Inside a decision the reads are provisional: the decision's own orders
+  of the order. A kernel's own `client_order_id` may not start with `tv3` (reserved for ids
+  the host derives) and must be unique for the account's lifetime. A kernel error while
+  handling an `OrderUpdate` is recorded and the update counts as seen; the decision goes on.
+  Inside a decision the reads are provisional: the decision's own orders
   are pending with status `submitted` and reserve budget with the Broker's formula,
   cancels mark their targets `cancellation_requested`, and positions are unchanged.
 - `StrategyKernelContext::runtime() -> &mut dyn StrategyKernelRuntime`:
