@@ -1,11 +1,13 @@
 use chrono::{TimeZone, Utc};
 use strategy_core_kernel::{
-    AnnotationValue, CancelAllOrdersRequest, CancelOrderRequest, ContractQuantity, ContractSide,
-    KernelAction, KernelCapabilities, KernelResult, MarketBracketView, NativeKernel, OrderAction,
-    OrderResult, OrderStatus, OrderStatusView, OrderType, ParameterValue, PlaceOrderRequest,
-    PriceLevelView, PriceUpdateView, StrategyEventView, StrategyKernelBroker,
-    StrategyKernelContext, StrategyKernelData, StrategyKernelRuntime, StrategyKernelState,
-    StrategyKernelTelemetry, StrategyParameters, TimerHandle, TimerWakeView, WakeAtRequest,
+    AnnotationValue, BrokerCommandKind, BrokerOrderStatus, CancelAllOrdersRequest,
+    CancelOrderRequest, CancelTarget, ContractQuantity, ContractSide, KernelAction,
+    KernelCapabilities, KernelResult, MarketBracketView, NativeKernel, OrderAction,
+    OrderStatusView, OrderTicket, OrderType, OrderUpdate, OrderUpdateStatus, ParameterValue,
+    PlaceOrderRequest, PriceLevelView, PriceUpdateView, StrategyEvent, StrategyEventView,
+    StrategyKernelBroker, StrategyKernelContext, StrategyKernelData, StrategyKernelRuntime,
+    StrategyKernelState, StrategyKernelTelemetry, StrategyParameters, TimerHandle, TimerWakeView,
+    WakeAtRequest,
 };
 
 const YES_BID_LEVELS: [PriceLevelView; 1] = [PriceLevelView::whole(0.41, 12)];
@@ -107,18 +109,13 @@ impl StrategyKernelBroker for FakeBroker {
         None
     }
 
-    fn place_order(&mut self, request: PlaceOrderRequest) -> KernelResult<OrderResult> {
-        let filled_quantity = request.quantity;
+    fn place_order(&mut self, request: PlaceOrderRequest) -> KernelResult<OrderTicket> {
+        let ticket = OrderTicket {
+            command_id: format!("command.delivery.{}", self.placed.len()),
+            client_order_id: request.client_order_id.clone().unwrap_or_default(),
+        };
         self.placed.push(request);
-        Ok(OrderResult {
-            order_id: "order-1".to_string(),
-            sleeve_id: "demo:KMIA".to_string(),
-            status: OrderStatus::Filled,
-            filled_quantity,
-            fill_price: 0.42,
-            fee_cost: 0.01,
-            reason: String::new(),
-        })
+        Ok(ticket)
     }
 }
 
@@ -128,9 +125,13 @@ struct FakeRuntime {
 }
 
 impl StrategyKernelRuntime for FakeRuntime {
-    fn wake_at(&mut self, request: WakeAtRequest) -> KernelResult<()> {
+    fn wake_at(&mut self, request: WakeAtRequest) -> KernelResult<TimerHandle> {
+        let key = request.name.clone().unwrap_or_default();
         self.wakes.push(request);
-        Ok(())
+        Ok(TimerHandle {
+            key,
+            generation: "timer.delivery".to_owned(),
+        })
     }
 }
 
@@ -226,13 +227,20 @@ fn kernel_can_emit_deterministic_place_order_action() {
 #[test]
 fn kernel_can_emit_deterministic_cancel_actions() {
     let cancel_one = KernelAction::CancelOrder(CancelOrderRequest {
-        order_id: "order-1".to_string(),
+        target: CancelTarget::OrderId("order-1".to_string()),
+    });
+    let cancel_same_decision = KernelAction::CancelOrder(CancelOrderRequest {
+        target: CancelTarget::ClientOrderId("kernel-1".to_string()),
     });
     let cancel_all = KernelAction::CancelAllOrders(CancelAllOrdersRequest {});
 
     assert_eq!(
         serde_json::to_string(&cancel_one).unwrap(),
-        r#"{"type":"cancel_order","order_id":"order-1"}"#,
+        r#"{"type":"cancel_order","target":{"order_id":"order-1"}}"#,
+    );
+    assert_eq!(
+        serde_json::to_string(&cancel_same_decision).unwrap(),
+        r#"{"type":"cancel_order","target":{"client_order_id":"kernel-1"}}"#,
     );
     assert_eq!(
         serde_json::to_string(&cancel_all).unwrap(),
@@ -246,7 +254,7 @@ fn order_status_view_preserves_borrowed_contract_fields() {
     let status = OrderStatusView {
         order_id: "order-1",
         client_order_id: "kernel-1",
-        status: OrderStatus::Partial,
+        status: BrokerOrderStatus::PartiallyFilled,
         requested_quantity: ContractQuantity::from_hundredths(250),
         filled_quantity: ContractQuantity::from_hundredths(125),
         remaining_quantity: ContractQuantity::from_hundredths(125),
@@ -256,7 +264,10 @@ fn order_status_view_preserves_borrowed_contract_fields() {
 
     assert_eq!(status.order_id, "order-1");
     assert_eq!(status.client_order_id, "kernel-1");
-    assert_eq!(status.status, OrderStatus::Partial);
+    assert_eq!(status.status, BrokerOrderStatus::PartiallyFilled);
+    assert_eq!(status.status.as_str(), "partial");
+    assert!(!status.status.is_terminal());
+    assert_eq!(BrokerOrderStatus::Submitted.as_str(), "submitted");
     assert_eq!(status.requested_quantity.hundredths(), 250);
     assert_eq!(status.filled_quantity.hundredths(), 125);
     assert_eq!(status.remaining_quantity.hundredths(), 125);
@@ -265,7 +276,7 @@ fn order_status_view_preserves_borrowed_contract_fields() {
 }
 
 #[test]
-fn fractional_quantity_flows_through_broker_position_and_order_result() {
+fn fractional_quantity_flows_through_broker_position_and_order_ticket() {
     let mut broker = FakeBroker::default();
     assert_eq!(
         broker
@@ -287,9 +298,9 @@ fn fractional_quantity_flows_through_broker_position_and_order_result() {
         signal_metadata: None,
         client_order_id: Some("fractional-exit-1".to_string()),
     };
-    let result = broker.place_order(request).unwrap();
+    let ticket = broker.place_order(request).unwrap();
 
-    assert_eq!(result.filled_quantity.hundredths(), 125);
+    assert_eq!(ticket.client_order_id, "fractional-exit-1");
     assert_eq!(broker.placed.len(), 1);
     assert_eq!(broker.placed[0].quantity.hundredths(), 125);
     assert!(broker.placed[0].reduce_only);
@@ -317,8 +328,9 @@ fn runtime_timer_requests_stay_engine_owned() {
         name: Some("recheck".to_string()),
     };
 
-    ctx.runtime().wake_at(wake.clone()).unwrap();
+    let handle = ctx.runtime().wake_at(wake.clone()).unwrap();
 
+    assert_eq!(handle.key, "recheck");
     assert_eq!(ctx.runtime.wakes, vec![wake]);
 }
 
@@ -345,20 +357,23 @@ fn hosts_without_parameters_or_capabilities_supply_none_by_default() {
     );
 
     assert!(!ctx.capabilities().timer_handles);
-    let mut runtime = FakeRuntime::default();
-    let request = WakeAtRequest {
-        when: Utc.with_ymd_and_hms(2026, 5, 30, 12, 0, 0).unwrap(),
-        name: Some("exit".to_owned()),
-    };
-    assert!(runtime.schedule_timer(request).is_err());
+    assert!(ctx.capabilities().external_requests.is_empty());
+    assert!(ctx.contributor_stations().is_empty());
+    let mut broker = FakeBroker::default();
     assert!(
-        runtime.wakes.is_empty(),
-        "a refused handle schedules nothing"
+        broker
+            .cancel_order(CancelOrderRequest {
+                target: CancelTarget::OrderId("order-1".to_owned()),
+            })
+            .is_err()
     );
+    assert!(broker.cancel_all_orders().is_err());
+    let runtime = FakeRuntime::default();
     let handle = TimerHandle {
         key: "exit".to_owned(),
         generation: "timer.delivery.1".to_owned(),
     };
+    let mut runtime = runtime;
     assert!(runtime.cancel_timer(&handle).is_err());
     assert!(runtime.pending_timers().is_empty());
     let kept = serde_json::to_string(&handle).unwrap();
@@ -396,6 +411,45 @@ fn timer_wake_view_preserves_missing_fired_at() {
         panic!("expected timer wake");
     };
     assert!(wake.fired_at.is_none());
+}
+
+#[test]
+fn order_updates_reach_kernels_as_borrowed_events() {
+    let update = OrderUpdate {
+        command_kind: BrokerCommandKind::PlaceOrder,
+        command_id: "command.delivery.1.0".to_owned(),
+        client_order_id: "kernel-1".to_owned(),
+        order_id: Some("order-1".to_owned()),
+        ticker: "KXHIGHMIA-26MAY30-B90".to_owned(),
+        action: Some(OrderAction::Buy),
+        contract_side: Some(ContractSide::No),
+        status: OrderUpdateStatus::Refused {
+            code: "price_moved".to_owned(),
+            reason: "the best ask moved past the limit".to_owned(),
+        },
+        requested: ContractQuantity::from_hundredths(300),
+        filled: ContractQuantity::ZERO,
+        remaining: ContractQuantity::ZERO,
+        newly_filled: ContractQuantity::ZERO,
+        average_fill_price: None,
+        fee_cost: 0.0,
+        is_final: true,
+        vanished: false,
+    };
+    assert!(update.status.is_terminal());
+    assert!(!OrderUpdateStatus::Resting.is_terminal());
+    let event = StrategyEvent::OrderUpdate(update.clone());
+    event.with_view(|view| {
+        assert_eq!(view.event_type(), "order_update");
+        let StrategyEventView::OrderUpdate(seen) = view else {
+            panic!("expected an order update");
+        };
+        assert_eq!(*seen, update);
+    });
+    assert_eq!(
+        serde_json::to_value(&update.status).unwrap(),
+        serde_json::json!({"refused": {"code": "price_moved", "reason": "the best ask moved past the limit"}})
+    );
 }
 
 #[test]

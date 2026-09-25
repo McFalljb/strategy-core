@@ -1,29 +1,30 @@
-//! Current-only retained inputs. Historical positional leaves are never extended here.
+//! Current inputs beside the V4 owner projection: per-station oracle tables with their
+//! supplied originals, and the complete accepted originating weather packet.
 use crate::decision_v4::{ComponentMetaV4, OracleTableV4, RankByV4};
-use crate::decision_v5::{DecisionContextV5, DecisionV5Error};
-use crate::supplied_v5::SuppliedOracleTableV5;
+use crate::decision_v6::{DecisionContextV6, DecisionV6Error};
+use crate::supplied_v6::SuppliedOracleTableV6;
 use bincode::{Decode, Encode};
 
 #[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
-pub struct CurrentInputsV5 {
-    pub stations: Vec<StationInputsV5>,
-    pub originating: Option<OriginatingWeatherV5>,
+pub struct CurrentInputsV6 {
+    pub stations: Vec<StationInputsV6>,
+    pub originating: Option<OriginatingWeatherV6>,
 }
 
 #[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
-pub struct OriginatingWeatherV5 {
+pub struct OriginatingWeatherV6 {
     pub station_id: String,
     pub source_generation: u64,
     pub source_sequence: u64,
     pub station_revision: u64,
     pub meta: ComponentMetaV4,
     pub cursor: crate::decision_v4::CursorV4,
-    pub data: WeatherDataV5,
+    pub data: WeatherDataV6,
     pub facts: strategy_core_kernel::WeatherFacts,
-    pub supplied: Option<crate::supplied_v5::SuppliedEventV5>,
+    pub supplied: Option<crate::supplied_v6::SuppliedEventV6>,
 }
 #[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
-pub enum WeatherDataV5 {
+pub enum WeatherDataV6 {
     Observation(crate::decision_v4::ObservationV4),
     Report(crate::decision_v4::ReportV4),
     Extreme {
@@ -33,18 +34,18 @@ pub enum WeatherDataV5 {
     WeatherEvent(crate::decision_v4::WeatherEventV4),
 }
 #[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
-pub struct StationInputsV5 {
+pub struct StationInputsV6 {
     pub station_id: String,
-    pub oracles: Vec<OracleInputV5>,
+    pub oracles: Vec<OracleInputV6>,
 }
 #[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
-pub struct OracleInputV5 {
+pub struct OracleInputV6 {
     pub meta: ComponentMetaV4,
     pub table: OracleTableV4,
-    pub supplied: Option<SuppliedOracleTableV5>,
+    pub supplied: Option<SuppliedOracleTableV6>,
 }
 
-pub(crate) fn validate(context: &DecisionContextV5) -> Result<(), DecisionV5Error> {
+pub(crate) fn validate(context: &DecisionContextV6) -> Result<(), DecisionV6Error> {
     let Some(current) = &context.current_inputs else {
         return Ok(());
     };
@@ -52,7 +53,7 @@ pub(crate) fn validate(context: &DecisionContextV5) -> Result<(), DecisionV5Erro
         originating.validate(context)?;
     }
     if current.stations.len() != context.owner_state.stations.len() {
-        return Err(DecisionV5Error::InvalidContract);
+        return Err(DecisionV6Error::InvalidContract);
     }
     for (inputs, station) in current.stations.iter().zip(&context.owner_state.stations) {
         if inputs.station_id != station.identity.station_id
@@ -62,7 +63,7 @@ pub(crate) fn validate(context: &DecisionContextV5) -> Result<(), DecisionV5Erro
                 .station(&inputs.station_id)
                 .is_some_and(|supplied| !supplied.oracle_tables.is_empty())
         {
-            return Err(DecisionV5Error::InvalidContract);
+            return Err(DecisionV6Error::InvalidContract);
         }
         let mut previous = None;
         for input in &inputs.oracles {
@@ -76,7 +77,7 @@ pub(crate) fn validate(context: &DecisionContextV5) -> Result<(), DecisionV5Erro
                 || table.rows.len() > 32
                 || input.meta.revision > station.revision
             {
-                return Err(DecisionV5Error::InvalidContract);
+                return Err(DecisionV6Error::InvalidContract);
             }
             previous = Some(low);
             validate_meta(&input.meta)?;
@@ -85,13 +86,13 @@ pub(crate) fn validate(context: &DecisionContextV5) -> Result<(), DecisionV5Erro
             text(&table.range_end)?;
             for (index, row) in table.rows.iter().enumerate() {
                 if row.rank as usize != index + 1 {
-                    return Err(DecisionV5Error::InvalidContract);
+                    return Err(DecisionV6Error::InvalidContract);
                 }
                 text(&row.model_id)?;
                 text(&row.model_name)?;
             }
             if let Some(original) = &input.supplied {
-                crate::supplied_v5::validate_oracle_table(original)?;
+                crate::supplied_v6::validate_oracle_table(original)?;
                 if original.station_id != inputs.station_id
                     || original
                         .score_mode
@@ -105,13 +106,13 @@ pub(crate) fn validate(context: &DecisionContextV5) -> Result<(), DecisionV5Erro
                         .days_requested
                         .is_some_and(|days| days != i64::from(query.days))
                 {
-                    return Err(DecisionV5Error::InvalidContract);
+                    return Err(DecisionV6Error::InvalidContract);
                 }
             }
             if table.query == station.oracle.query
                 && (table != &station.oracle || input.meta != station.oracle_meta)
             {
-                return Err(DecisionV5Error::InvalidContract);
+                return Err(DecisionV6Error::InvalidContract);
             }
         }
         if !inputs
@@ -119,23 +120,23 @@ pub(crate) fn validate(context: &DecisionContextV5) -> Result<(), DecisionV5Erro
             .iter()
             .any(|input| input.table.query == station.oracle.query)
         {
-            return Err(DecisionV5Error::InvalidContract);
+            return Err(DecisionV6Error::InvalidContract);
         }
     }
     Ok(())
 }
-impl OriginatingWeatherV5 {
-    pub(crate) fn validate(&self, context: &DecisionContextV5) -> Result<(), DecisionV5Error> {
+impl OriginatingWeatherV6 {
+    pub(crate) fn validate(&self, context: &DecisionContextV6) -> Result<(), DecisionV6Error> {
         use crate::{
-            decision_v4::TriggerV4, decision_v5::OwnerTriggerV5, supplied_v5::SuppliedEventV5,
+            decision_v4::TriggerV4, decision_v6::OwnerTriggerV6, supplied_v6::SuppliedEventV6,
         };
-        let invalid = DecisionV5Error::InvalidContract;
-        let expected = OwnerTriggerV5::CapturedWeather {
+        let invalid = DecisionV6Error::InvalidContract;
+        let expected = OwnerTriggerV6::CapturedWeather {
             station_id: self.station_id.clone(),
             source_generation: self.source_generation,
             source_sequence: self.source_sequence,
         };
-        if context.originating_owner_trigger() != Some(&expected)
+        if context.owner_trigger() != Some(&expected)
             || context.supplied.originating_event.is_some()
             || self.station_revision == 0
             || self.source_sequence == 0
@@ -150,10 +151,10 @@ impl OriginatingWeatherV5 {
             .stations
             .iter()
             .find(|station| station.identity.station_id == self.station_id)
-            .ok_or(DecisionV5Error::InvalidContract)?;
+            .ok_or(DecisionV6Error::InvalidContract)?;
         let header = match (&self.data, &context.owner_state.trigger) {
             (
-                WeatherDataV5::Report(report),
+                WeatherDataV6::Report(report),
                 TriggerV4::StationReport {
                     station_id,
                     report_id,
@@ -173,9 +174,9 @@ impl OriginatingWeatherV5 {
                     && *source_sequence == self.source_sequence
             }
             (
-                WeatherDataV5::Observation(_)
-                | WeatherDataV5::Extreme { .. }
-                | WeatherDataV5::WeatherEvent(_),
+                WeatherDataV6::Observation(_)
+                | WeatherDataV6::Extreme { .. }
+                | WeatherDataV6::WeatherEvent(_),
                 TriggerV4::Weather {
                     station_id,
                     source_generation,
@@ -189,15 +190,15 @@ impl OriginatingWeatherV5 {
             _ => false,
         };
         let current_meta = match &self.data {
-            WeatherDataV5::Observation(value) => {
+            WeatherDataV6::Observation(value) => {
                 if value.station_id != self.station_id {
                     return Err(invalid);
                 }
                 &station.observation_meta
             }
-            WeatherDataV5::Report(_) => &station.reports_meta,
-            WeatherDataV5::Extreme { .. } => &station.extrema_meta,
-            WeatherDataV5::WeatherEvent(_) => &station.weather_events_meta,
+            WeatherDataV6::Report(_) => &station.reports_meta,
+            WeatherDataV6::Extreme { .. } => &station.extrema_meta,
+            WeatherDataV6::WeatherEvent(_) => &station.weather_events_meta,
         };
         if !header
             || self.cursor.connection_generation > station.provider_cursor.connection_generation
@@ -222,33 +223,33 @@ impl OriginatingWeatherV5 {
         }
         for fact in self.facts.fields.values() {
             if let Some(envelope) = &fact.provenance.envelope {
-                crate::supplied_v5::validate_envelope(envelope)?;
+                crate::supplied_v6::validate_envelope(envelope)?;
             }
         }
         if let Some(event) = &self.supplied {
-            crate::supplied_v5::validate_event(event)?;
+            crate::supplied_v6::validate_event(event)?;
             let (matches, envelope) = match (&self.data, event) {
-                (WeatherDataV5::Observation(value), SuppliedEventV5::Observation(event)) => (
+                (WeatherDataV6::Observation(value), SuppliedEventV6::Observation(event)) => (
                     event.station_id == self.station_id
                         && event.observed_at_unix_ns.div_euclid(1_000_000)
                             == value.observed_at_unix_ms,
                     &event.envelope,
                 ),
-                (WeatherDataV5::Report(value), SuppliedEventV5::Report(event)) => (
+                (WeatherDataV6::Report(value), SuppliedEventV6::Report(event)) => (
                     event.station_id == self.station_id
                         && event.report_id == value.report_id
                         && event.report_type == value.report_type
                         && event.report_revision.unwrap_or(0) == value.revision,
                     &event.envelope,
                 ),
-                (WeatherDataV5::Extreme { high, value }, SuppliedEventV5::Extreme(event)) => (
+                (WeatherDataV6::Extreme { high, value }, SuppliedEventV6::Extreme(event)) => (
                     event.station_id == self.station_id
-                        && *high == (event.kind == crate::supplied_v5::ExtremeKindV5::High)
+                        && *high == (event.kind == crate::supplied_v6::ExtremeKindV6::High)
                         && event.observed_at_unix_ns.map(|at| at.div_euclid(1_000_000))
                             == value.observed_at_unix_ms,
                     &event.envelope,
                 ),
-                (WeatherDataV5::WeatherEvent(value), SuppliedEventV5::WeatherEvent(event)) => (
+                (WeatherDataV6::WeatherEvent(value), SuppliedEventV6::WeatherEvent(event)) => (
                     event.station_id == self.station_id
                         && event.episode_id == value.event_id
                         && event.state == value.state,
@@ -266,18 +267,18 @@ impl OriginatingWeatherV5 {
             }
         }
         if bincode::encode_to_vec(self, bincode::config::standard())
-            .map_err(|_| DecisionV5Error::Encode)?
+            .map_err(|_| DecisionV6Error::Encode)?
             .len()
             > 256 * 1024
         {
-            return Err(DecisionV5Error::BoundExceeded);
+            return Err(DecisionV6Error::BoundExceeded);
         }
         Ok(())
     }
 }
 
-impl WeatherDataV5 {
-    fn validate(&self) -> Result<(), DecisionV5Error> {
+impl WeatherDataV6 {
+    fn validate(&self) -> Result<(), DecisionV6Error> {
         let (provenance, optional) = match self {
             Self::Observation(value) => {
                 text(&value.station_id)?;
@@ -326,7 +327,7 @@ impl WeatherDataV5 {
                     text(value)?;
                 }
                 if !matches!(value.state.as_str(), "active" | "updated" | "ended") {
-                    return Err(DecisionV5Error::InvalidContract);
+                    return Err(DecisionV6Error::InvalidContract);
                 }
                 for value in [&value.name, &value.badge, &value.detail, &value.summary] {
                     content(value)?;
@@ -349,14 +350,14 @@ impl WeatherDataV5 {
         validate_provenance(provenance)
     }
 }
-fn content(value: &str) -> Result<(), DecisionV5Error> {
+fn content(value: &str) -> Result<(), DecisionV6Error> {
     if value.len() > 2048 {
-        Err(DecisionV5Error::BoundExceeded)
+        Err(DecisionV6Error::BoundExceeded)
     } else {
         Ok(())
     }
 }
-fn validate_provenance(value: &crate::decision_v4::ProvenanceV4) -> Result<(), DecisionV5Error> {
+fn validate_provenance(value: &crate::decision_v4::ProvenanceV4) -> Result<(), DecisionV6Error> {
     text(&value.provider)?;
     text(&value.source)?;
     if let Some(id) = &value.event_id {
@@ -365,16 +366,16 @@ fn validate_provenance(value: &crate::decision_v4::ProvenanceV4) -> Result<(), D
     Ok(())
 }
 
-pub(crate) fn text(value: &str) -> Result<(), DecisionV5Error> {
+pub(crate) fn text(value: &str) -> Result<(), DecisionV6Error> {
     if value.is_empty() || value.len() > 2048 {
-        Err(DecisionV5Error::BoundExceeded)
+        Err(DecisionV6Error::BoundExceeded)
     } else {
         Ok(())
     }
 }
-pub(crate) fn validate_meta(meta: &ComponentMetaV4) -> Result<(), DecisionV5Error> {
+pub(crate) fn validate_meta(meta: &ComponentMetaV4) -> Result<(), DecisionV6Error> {
     if meta.provenance.len() > 4 || meta.revision == 0 || meta.generation == 0 {
-        return Err(DecisionV5Error::InvalidContract);
+        return Err(DecisionV6Error::InvalidContract);
     }
     for value in [&meta.expected_version, &meta.refresh_error]
         .into_iter()

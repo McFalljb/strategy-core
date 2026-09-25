@@ -3,10 +3,12 @@
 
 use super::*;
 use strategy_core_kernel::{
-    AnnotationValue, KernelCapabilities, ParameterValue, TimerHandle, WakeAtRequest,
+    AnnotationValue, KernelCapabilities, ParameterValue, RuntimeMode, TimerHandle, WakeAtRequest,
 };
 use strategy_core_v3::decision_v4::TimerRecoveryV4;
-use strategy_core_v3::decision_v5::{DecisionResultV5, StrategyParameterValueV5};
+use strategy_core_v3::decision_v6::{
+    AnnotationValueV6, DecisionResultV6, StrategyParameterValueV6, TelemetryEntryV6,
+};
 
 type Script = fn(&mut dyn StrategyKernelContext, &mut Vec<String>) -> KernelResult<()>;
 
@@ -64,19 +66,19 @@ impl TransactionKernelFactory for ServicesFactory {
             version: 1,
         })
     }
-    fn create(&self, _context: &DecisionContextV5) -> Result<Self::Kernel, KernelTransactionError> {
+    fn create(&self, _context: &DecisionContextV6) -> Result<Self::Kernel, KernelTransactionError> {
         Ok(self.0.clone())
     }
     fn restore(
         &self,
-        _context: &DecisionContextV5,
-        _checkpoint: &strategy_core_v3::decision_v5::KernelCheckpointV5,
+        _context: &DecisionContextV6,
+        _checkpoint: &strategy_core_v3::decision_v6::KernelCheckpointV6,
     ) -> Result<Self::Kernel, KernelTransactionError> {
         Ok(self.0.clone())
     }
 }
 
-fn run_script(context: &DecisionContextV5, script: Script) -> (Vec<String>, DecisionResultV5) {
+fn run_script(context: &DecisionContextV6, script: Script) -> (Vec<String>, DecisionResultV6) {
     let seen = Rc::new(RefCell::new(Vec::new()));
     let factory = ServicesFactory(ServicesKernel {
         script,
@@ -91,22 +93,23 @@ fn run_script(context: &DecisionContextV5, script: Script) -> (Vec<String>, Deci
 fn kernels_read_exact_parameters_and_the_granted_capabilities() {
     let mut context = observation_context(Some("22.8"), Some("73"));
     context.strategy.parameters = vec![
-        ("enabled".to_owned(), StrategyParameterValueV5::Bool(true)),
+        ("enabled".to_owned(), StrategyParameterValueV6::Bool(true)),
         (
             "max_price".to_owned(),
-            StrategyParameterValueV5::Decimal {
+            StrategyParameterValueV6::Decimal {
                 coefficient: 4_250,
                 scale: 4,
             },
         ),
         (
             "mode".to_owned(),
-            StrategyParameterValueV5::String("fast".to_owned()),
+            StrategyParameterValueV6::String("fast".to_owned()),
         ),
-        ("offset".to_owned(), StrategyParameterValueV5::I64(-3)),
-        ("unset".to_owned(), StrategyParameterValueV5::Null),
-        ("window".to_owned(), StrategyParameterValueV5::U64(90)),
+        ("offset".to_owned(), StrategyParameterValueV6::I64(-3)),
+        ("unset".to_owned(), StrategyParameterValueV6::Null),
+        ("window".to_owned(), StrategyParameterValueV6::U64(90)),
     ];
+    context.capabilities.external_requests = vec!["weather.lookup".to_owned()];
     let (seen, result) = run_script(&context, |context, seen| {
         let parameters = context.parameters();
         seen.push(format!(
@@ -150,17 +153,20 @@ fn kernels_read_exact_parameters_and_the_granted_capabilities() {
         assert!(parameters.get("absent").is_none());
 
         let capabilities = context.capabilities();
-        assert_eq!(capabilities.mode, None, "V5 contexts do not carry the mode");
+        assert_eq!(capabilities.mode, Some(RuntimeMode::Paper));
         assert!(capabilities.timers);
+        assert!(capabilities.timer_handles);
+        assert_eq!(capabilities.external_requests, ["weather.lookup"]);
+        assert_eq!(context.contributor_stations(), [STATION]);
         seen.push(format!("capabilities={capabilities:?}"));
         Ok(())
     });
-    assert_eq!(result.disposition, DecisionDispositionV5::Completed);
+    assert_eq!(result.disposition, DecisionDispositionV6::Completed);
     assert_eq!(
         seen[0],
         r#"keys=["enabled", "max_price", "mode", "offset", "unset", "window"]"#
     );
-    let json = strategy_core_v3::kernel_v5::strategy_parameters_json(&context).unwrap();
+    let json = strategy_core_v3::kernel_v6::strategy_parameters_json(&context).unwrap();
     assert_eq!(
         json["max_price"],
         serde_json::json!(0.425),
@@ -189,47 +195,53 @@ fn gauges_and_annotations_are_recorded_in_order_beside_counters() {
         }))?;
         Ok(())
     });
-    assert_eq!(result.disposition, DecisionDispositionV5::Completed);
+    assert_eq!(result.disposition, DecisionDispositionV6::Completed);
     assert!(result.commands.is_empty());
+    let fields = |pairs: &[(&str, &str)]| {
+        pairs
+            .iter()
+            .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+            .collect::<Vec<_>>()
+    };
+    let annotation = |name: &str, value, pairs: &[(&str, &str)]| TelemetryEntryV6::Annotation {
+        name: name.to_owned(),
+        value,
+        fields: fields(pairs),
+    };
+    assert_eq!(
+        result.telemetry,
+        [
+            TelemetryEntryV6::Counter {
+                name: "orders_considered".to_owned(),
+                value_bits: 1.0_f64.to_bits(),
+                fields: vec![],
+            },
+            TelemetryEntryV6::Gauge {
+                name: "buying_power".to_owned(),
+                value_bits: 12.5_f64.to_bits(),
+                fields: fields(&[("sleeve", "a")]),
+            },
+            annotation(
+                "gate",
+                AnnotationValueV6::Text("price_moved".to_owned()),
+                &[]
+            ),
+            annotation("attempt", AnnotationValueV6::Integer(-2), &[]),
+            annotation(
+                "edge",
+                AnnotationValueV6::FloatBits(0.1_f64.to_bits()),
+                &[("unit", "dollars")]
+            ),
+            annotation("armed", AnnotationValueV6::Bool(false), &[]),
+            annotation("reason", AnnotationValueV6::Null, &[]),
+        ]
+    );
     let rows = result
         .diagnostics
         .iter()
         .map(|diagnostic| (diagnostic.code.as_str(), diagnostic.message.as_str()))
         .collect::<Vec<_>>();
-    assert_eq!(
-        rows,
-        [
-            (
-                "kernel_telemetry",
-                r#"{"fields":[],"name":"orders_considered","value":1.0,"value_bits":"3ff0000000000000"}"#
-            ),
-            (
-                "kernel_gauge",
-                r#"{"fields":[["sleeve","a"]],"name":"buying_power","value":12.5,"value_bits":"4029000000000000"}"#
-            ),
-            (
-                "kernel_annotation",
-                r#"{"fields":[],"name":"gate","value":"price_moved"}"#
-            ),
-            (
-                "kernel_annotation",
-                r#"{"fields":[],"name":"attempt","value":-2}"#
-            ),
-            (
-                "kernel_annotation",
-                r#"{"fields":[["unit","dollars"]],"name":"edge","value":{"bits":"3fb999999999999a","float":0.1}}"#
-            ),
-            (
-                "kernel_annotation",
-                r#"{"fields":[],"name":"armed","value":false}"#
-            ),
-            (
-                "kernel_annotation",
-                r#"{"fields":[],"name":"reason","value":null}"#
-            ),
-            ("kernel_log", "after"),
-        ]
-    );
+    assert_eq!(rows, [("kernel_log", "after")]);
 }
 
 #[test]
@@ -242,13 +254,57 @@ fn a_rejected_decision_keeps_its_gauges_and_annotations() {
             .annotate("why", AnnotationValue::Text("no_edge"), &[])?;
         Err(strategy_core_kernel::KernelError::new("fixture failure"))
     });
-    assert_eq!(result.disposition, DecisionDispositionV5::Rejected);
+    assert_eq!(result.disposition, DecisionDispositionV6::Rejected);
+    assert!(result.commands.is_empty());
+    assert_eq!(result.kernel_checkpoint, context.kernel_checkpoint);
     let codes = result
         .diagnostics
         .iter()
         .map(|diagnostic| diagnostic.code.as_str())
         .collect::<Vec<_>>();
-    assert_eq!(codes, ["kernel_error", "kernel_gauge", "kernel_annotation"]);
+    assert_eq!(codes, ["kernel_error"]);
+    assert!(matches!(
+        &result.telemetry[..],
+        [
+            TelemetryEntryV6::Gauge { .. },
+            TelemetryEntryV6::Annotation { .. }
+        ]
+    ));
+}
+
+#[test]
+fn telemetry_is_bounded_with_explicit_overflow_accounting() {
+    let context = observation_context(Some("22.8"), Some("73"));
+    let (_, result) = run_script(&context, |context, _| {
+        let message = serde_json::json!({"reason": "large_evidence", "details": "x".repeat(5000)})
+            .to_string();
+        for _ in 0..80 {
+            context.emit(KernelAction::Log(LogAction {
+                level: "info".to_owned(),
+                message: message.clone(),
+            }))?;
+        }
+        for index in 0..300 {
+            context.telemetry().counter("late", f64::from(index), &[])?;
+        }
+        Ok(())
+    });
+    assert_eq!(result.disposition, DecisionDispositionV6::Completed);
+    let overflow = result
+        .diagnostics
+        .iter()
+        .find(|d| d.code == "kernel_telemetry_overflow")
+        .expect("overflow is accounted");
+    let lost =
+        serde_json::from_str::<serde_json::Value>(&overflow.message).unwrap()["lost_entries"]
+            .as_u64()
+            .unwrap();
+    // 80 logs over the diagnostic bound go to evidence up to its 64 entries; 256 counters fit.
+    assert_eq!(lost, 16 + 44);
+    assert_eq!(result.telemetry.len(), 256);
+    assert!(result.evidence.iter().all(|evidence| {
+        serde_json::from_slice::<serde_json::Value>(&evidence.payload).is_ok()
+    }));
 }
 
 thread_local! {
@@ -263,12 +319,12 @@ fn wake(name: &str) -> WakeAtRequest {
     }
 }
 
-fn timer_commands(result: &DecisionResultV5) -> Vec<(String, String, String, &'static str)> {
+fn timer_commands(result: &DecisionResultV6) -> Vec<(String, String, String, &'static str)> {
     result
         .commands
         .iter()
         .filter_map(|command| match command {
-            StrategyCommandV5::ScheduleTimer {
+            StrategyCommandV6::ScheduleTimer {
                 command_id,
                 key,
                 generation,
@@ -279,7 +335,7 @@ fn timer_commands(result: &DecisionResultV5) -> Vec<(String, String, String, &'s
                 generation.clone(),
                 "schedule",
             )),
-            StrategyCommandV5::CancelTimer {
+            StrategyCommandV6::CancelTimer {
                 command_id,
                 key,
                 generation,
@@ -300,7 +356,7 @@ fn a_timer_handle_cancels_with_the_generation_the_timer_was_scheduled_under() {
     let first = observation_context(Some("22.8"), Some("73"));
     let (_, scheduled) = run_script(&first, |context, _| {
         assert!(context.capabilities().timer_handles);
-        let handle = context.runtime().schedule_timer(wake("exit.check"))?;
+        let handle = context.runtime().wake_at(wake("exit.check"))?;
         KEPT_HANDLE.with(|kept| *kept.borrow_mut() = Some(handle));
         Ok(())
     });
@@ -345,11 +401,11 @@ fn a_timer_handle_cancels_with_the_generation_the_timer_was_scheduled_under() {
         assert_eq!(pending[0].scheduled_for, ns(EMITTED_NS));
         context.runtime().cancel_timer(&kept)
     });
-    assert_eq!(cancelled.disposition, DecisionDispositionV5::Completed);
+    assert_eq!(cancelled.disposition, DecisionDispositionV6::Completed);
     assert_eq!(
         timer_commands(&cancelled),
         [(
-            "command.delivery.daily.2.100".to_owned(),
+            cid(2, 0),
             "exit.check".to_owned(),
             "timer.delivery.daily.1".to_owned(),
             "cancel"
@@ -363,28 +419,21 @@ fn a_decision_carries_at_most_one_timer_operation_per_key() {
     let context = observation_context(Some("22.8"), Some("73"));
     let (_, result) = run_script(&context, |context, seen| {
         let runtime = context.runtime();
-        let handle = runtime.schedule_timer(wake("a"))?;
+        let handle = runtime.wake_at(wake("a"))?;
         seen.push("scheduled".to_owned());
         assert!(
             runtime.cancel_timer(&handle).is_err(),
             "schedule then cancel"
         );
-        assert!(runtime.schedule_timer(wake("a")).is_err(), "two schedules");
+        assert!(runtime.wake_at(wake("a")).is_err(), "two schedules");
         runtime.wake_at(wake("b"))?;
-        assert!(
-            runtime.schedule_timer(wake("b")).is_err(),
-            "wake_at then schedule"
-        );
         let other = TimerHandle {
             key: "c".to_owned(),
             generation: "timer.delivery.daily.0".to_owned(),
         };
         runtime.cancel_timer(&other)?;
         assert!(runtime.cancel_timer(&other).is_err(), "two cancels");
-        assert!(
-            runtime.schedule_timer(wake("c")).is_err(),
-            "cancel then schedule"
-        );
+        assert!(runtime.wake_at(wake("c")).is_err(), "cancel then schedule");
         assert!(
             runtime
                 .cancel_timer(&TimerHandle {
@@ -393,38 +442,46 @@ fn a_decision_carries_at_most_one_timer_operation_per_key() {
                 })
                 .is_err()
         );
-        assert!(runtime.schedule_timer(wake("")).is_err());
-        let unnamed = runtime.schedule_timer(WakeAtRequest {
+        assert!(runtime.wake_at(wake("")).is_err());
+        let unnamed = runtime.wake_at(WakeAtRequest {
             when: ns(EMITTED_NS),
             name: None,
         })?;
         assert_eq!(unnamed.key, "kernel.wake");
         Ok(())
     });
-    assert_eq!(result.disposition, DecisionDispositionV5::Completed);
+    let mut untimed = context.clone();
+    untimed.capabilities.timers = false;
+    let (_, refused) = run_script(&untimed, |context, _| {
+        assert!(!context.capabilities().timers);
+        assert!(context.runtime().wake_at(wake("a")).is_err());
+        Ok(())
+    });
+    assert!(refused.commands.is_empty(), "no timers without the grant");
+    assert_eq!(result.disposition, DecisionDispositionV6::Completed);
     assert_eq!(
         timer_commands(&result),
         [
             (
-                "command.delivery.daily.1.100".to_owned(),
+                cid(1, 0),
                 "a".to_owned(),
                 "timer.delivery.daily.1".to_owned(),
                 "schedule"
             ),
             (
-                "command.delivery.daily.1.101".to_owned(),
+                cid(1, 1),
                 "b".to_owned(),
                 "timer.delivery.daily.1".to_owned(),
                 "schedule"
             ),
             (
-                "command.delivery.daily.1.102".to_owned(),
+                cid(1, 2),
                 "c".to_owned(),
                 "timer.delivery.daily.0".to_owned(),
                 "cancel"
             ),
             (
-                "command.delivery.daily.1.103".to_owned(),
+                cid(1, 3),
                 "kernel.wake".to_owned(),
                 "timer.delivery.daily.1".to_owned(),
                 "schedule"

@@ -1,18 +1,12 @@
 //! Pure, bounded, runtime-neutral Strategy Core V3 semantics.
 
-pub mod current_v5;
+pub mod current_v6;
 pub mod decision_v4;
-pub mod decision_v5;
+pub mod decision_v6;
 #[cfg(feature = "kernel")]
-pub mod kernel_v5;
-mod supplied_s;
-pub mod supplied_v5;
+pub mod kernel_v6;
+pub mod supplied_v6;
 pub use strategy_core_kernel::{forecast, weather};
-pub mod replay_v5;
-mod wire_d;
-mod wire_e;
-mod wire_supplied;
-mod wire_v4;
 
 use std::fmt;
 

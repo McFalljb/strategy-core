@@ -193,16 +193,6 @@ impl core::fmt::Display for ContractQuantity {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum OrderStatus {
-    Filled,
-    Partial,
-    Pending,
-    Rejected,
-    Cancelled,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PlaceOrderRequest {
     pub ticker: String,
@@ -220,9 +210,20 @@ pub struct PlaceOrderRequest {
     pub client_order_id: Option<String>,
 }
 
+/// The order a cancel names.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CancelTarget {
+    /// An order the Broker reports, by its order id.
+    OrderId(String),
+    /// An order by its client order id, including one placed earlier in the same decision,
+    /// which has no order id yet.
+    ClientOrderId(String),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CancelOrderRequest {
-    pub order_id: String,
+    pub target: CancelTarget,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -230,6 +231,7 @@ pub struct CancelAllOrdersRequest {}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PendingOrderView<'a> {
+    /// Empty for an order placed earlier in this decision.
     pub order_id: &'a str,
     pub ticker: &'a str,
     pub status: &'a str,
@@ -245,11 +247,58 @@ pub struct PendingOrderView<'a> {
     pub updated_at: Option<DateTime<Utc>>,
 }
 
+/// An order's status as the Broker (and, within a decision, the runner's provisional view)
+/// reports it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BrokerOrderStatus {
+    /// Placed earlier in this decision; the Broker has not seen it yet.
+    Submitted,
+    Accepted,
+    Dispatched,
+    Resting,
+    PartiallyFilled,
+    Filled,
+    CancellationRequested,
+    Cancelled,
+    Expired,
+    Rejected,
+    RecoveryRequired,
+}
+
+impl BrokerOrderStatus {
+    /// The status text `PendingOrderView::status` carries.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Submitted => "submitted",
+            Self::Accepted => "accepted",
+            Self::Dispatched => "dispatched",
+            Self::Resting => "pending",
+            Self::PartiallyFilled => "partial",
+            Self::Filled => "filled",
+            Self::CancellationRequested => "cancellation_requested",
+            Self::Cancelled => "cancelled",
+            Self::Expired => "expired",
+            Self::Rejected => "rejected",
+            Self::RecoveryRequired => "recovery_required",
+        }
+    }
+
+    /// The order will not change again.
+    pub const fn is_terminal(self) -> bool {
+        matches!(
+            self,
+            Self::Filled | Self::Cancelled | Self::Expired | Self::Rejected
+        )
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct OrderStatusView<'a> {
+    /// Empty for an order placed earlier in this decision.
     pub order_id: &'a str,
     pub client_order_id: &'a str,
-    pub status: OrderStatus,
+    pub status: BrokerOrderStatus,
     pub requested_quantity: ContractQuantity,
     pub filled_quantity: ContractQuantity,
     pub remaining_quantity: ContractQuantity,
@@ -293,13 +342,86 @@ pub enum KernelAction {
     Stop(StopAction),
 }
 
+/// What `place_order` returns at once: the order's command and client order id. What happens
+/// to the order arrives later as [`OrderUpdate`] events.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OrderTicket {
+    pub command_id: String,
+    pub client_order_id: String,
+}
+
+/// What `cancel_order` and `cancel_all_orders` return at once.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CommandTicket {
+    pub command_id: String,
+}
+
+/// The kind of Broker command an [`OrderUpdate`] reports on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BrokerCommandKind {
+    PlaceOrder,
+    CancelOrder,
+    CancelAllOrders,
+}
+
+/// An order's status in an [`OrderUpdate`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OrderUpdateStatus {
+    Accepted,
+    Resting,
+    PartiallyFilled,
+    Filled,
+    Cancelled,
+    Expired,
+    /// Admission refused the command (price moved, allowance, balance, shutdown, retired, live
+    /// not armed, cancel target final, ...) or the provider rejected the order.
+    Refused {
+        code: String,
+        reason: String,
+    },
+}
+
+impl OrderUpdateStatus {
+    pub const fn is_terminal(&self) -> bool {
+        matches!(
+            self,
+            Self::Filled | Self::Cancelled | Self::Expired | Self::Refused { .. }
+        )
+    }
+}
+
+/// What happened to one of the Strategy's orders or commands since the last update it saw.
+///
+/// A place's updates report its order. A cancel's update is its refusal (`command_kind` is
+/// `CancelOrder`, the order fields describe the target, whose own status is unchanged); an
+/// admitted cancel shows as the target order's `Cancelled` update. A cancel-all's update is its
+/// refusal, with no order: empty `client_order_id` and `ticker`, no `action` or `contract_side`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct OrderResult {
-    pub order_id: String,
-    pub sleeve_id: String,
-    pub status: OrderStatus,
-    pub filled_quantity: ContractQuantity,
-    pub fill_price: f64,
+pub struct OrderUpdate {
+    pub command_kind: BrokerCommandKind,
+    pub command_id: String,
+    pub client_order_id: String,
+    pub order_id: Option<String>,
+    pub ticker: String,
+    pub action: Option<OrderAction>,
+    pub contract_side: Option<ContractSide>,
+    pub status: OrderUpdateStatus,
+    pub requested: ContractQuantity,
+    pub filled: ContractQuantity,
+    pub remaining: ContractQuantity,
+    /// Filled since the last update the Strategy saw for this order.
+    pub newly_filled: ContractQuantity,
+    pub average_fill_price: Option<f64>,
+    /// Execution fees charged so far, in dollars.
     pub fee_cost: f64,
-    pub reason: String,
+    /// No further update follows for this command: its status is terminal, or the order
+    /// vanished.
+    pub is_final: bool,
+    /// The Broker no longer reports the order: `status` is the last one seen, `remaining` is
+    /// zero and `is_final` is true. If the order reappears, its updates continue (the next one
+    /// reports what was filled meanwhile), so a vanished update is final only as far as the
+    /// runner knows.
+    pub vanished: bool,
 }

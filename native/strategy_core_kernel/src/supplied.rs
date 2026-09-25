@@ -2,13 +2,12 @@
 //!
 //! These structs are the originals inside the canonical strategy-facing model: every kernel
 //! view that presents a convenience `f64` also exposes the supplied original it was projected
-//! from. Current Decision Contexts serialize these typed facts directly; historical codecs
-//! use frozen wire shapes. Excluded historical WU evidence is not part of these models. Numbers are exact
-//! decimal digits, times are nanosecond instants,
-//! `Option` is absent-or-null, and strings are present even when empty.
+//! from. Decision Contexts serialize these typed facts directly. Excluded historical WU
+//! evidence is not part of these models. Numbers are exact decimal digits, times are nanosecond
+//! instants, `Option` is absent-or-null, and strings are present even when empty.
 //!
 //! Bounds, ordering and validation of a complete supplied block are owned by the codec that
-//! carries it (`strategy_core_v3::supplied_v5`).
+//! carries it (`strategy_core_v3::supplied_v6`).
 
 use bincode::{Decode, Encode};
 

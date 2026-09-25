@@ -1,12 +1,11 @@
 //! The canonical owned event model: the exact typed event that triggered one invocation.
 
-use std::collections::BTreeMap;
-
 use chrono::{DateTime, Utc};
 
+use crate::actions::OrderUpdate;
 use crate::events::{
-    ForecastUpdatedView, ForecastVersionsView, MarketBracketView, OracleScoresUpdatedView,
-    PriceUpdateView, ShutdownView, StrategyEventView, TimerWakeView,
+    ForecastUpdatedView, MarketBracketView, OracleScoresUpdatedView, PriceUpdateView,
+    StrategyEventView, TimerWakeView,
 };
 use crate::state::{
     EventProvenance, Extreme, MarketState, Observation, OracleTable, Report, WeatherEvent,
@@ -27,13 +26,6 @@ pub struct ForecastUpdated {
     pub station_id: String,
     pub model_id: String,
     pub version: String,
-}
-
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct ForecastVersions {
-    pub provenance: EventProvenance,
-    pub station_id: String,
-    pub versions: BTreeMap<String, String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -60,20 +52,15 @@ pub enum StrategyEvent {
     PriceUpdate(Box<PriceUpdate>),
     Observation(Box<Observation>),
     ForecastUpdated(Box<ForecastUpdated>),
-    /// Not produced by the Decision V5 host; only the legacy v2 bot host produces it. Kept
-    /// while kernels match it; see `StrategyEventView::ForecastVersions`.
-    ForecastVersions(Box<ForecastVersions>),
     OracleScoresUpdated(Box<OracleScoresUpdated>),
     StationReport(Box<Report>),
     WeatherEvent(Box<WeatherEvent>),
     NewHigh(Box<Extreme>),
     NewLow(Box<Extreme>),
     TimerWake(TimerWake),
-    /// Not produced by the Decision V5 host; only the legacy v2 bot host produces it. Kept
-    /// while kernels match it; see `StrategyEventView::Shutdown`.
-    Shutdown {
-        reason: String,
-    },
+    /// A change of one of the Strategy's orders or commands, delivered before the triggering
+    /// event in the same decision.
+    OrderUpdate(OrderUpdate),
     Unknown {
         event_type: String,
         emitted_at: Option<DateTime<Utc>>,
@@ -126,16 +113,6 @@ impl StrategyEvent {
                     version: &event.version,
                 })
             }
-            Self::ForecastVersions(event) => {
-                StrategyEventView::ForecastVersions(ForecastVersionsView {
-                    event_id: event.provenance.event_id.as_deref(),
-                    sequence: event.provenance.sequence,
-                    emitted_at: event.provenance.emitted_at,
-                    slug: &event.provenance.slug,
-                    station_id: &event.station_id,
-                    versions: &event.versions,
-                })
-            }
             Self::OracleScoresUpdated(event) => {
                 StrategyEventView::OracleScoresUpdated(OracleScoresUpdatedView {
                     event_id: event.provenance.event_id.as_deref(),
@@ -159,7 +136,7 @@ impl StrategyEvent {
                 fired_at: event.fired_at,
                 name: &event.name,
             }),
-            Self::Shutdown { reason } => StrategyEventView::Shutdown(ShutdownView { reason }),
+            Self::OrderUpdate(update) => StrategyEventView::OrderUpdate(update),
             Self::Unknown {
                 event_type,
                 emitted_at,

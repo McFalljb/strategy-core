@@ -6,8 +6,9 @@
 
 use bincode::{Decode, Encode};
 
+mod observation_codec;
 #[doc(hidden)]
-pub use crate::wire_v4::{RetainedObservationEncodingV4, RetainedWeatherEncodingV4};
+pub use observation_codec::{RetainedObservationEncodingV4, RetainedWeatherEncodingV4};
 
 pub const DECISION_CONTEXT_V4_MAGIC: &[u8; 8] = b"SDCTXV4\0";
 pub const MAX_DECISION_CONTEXT_V4_BYTES: usize = 16 * 1024 * 1024;
