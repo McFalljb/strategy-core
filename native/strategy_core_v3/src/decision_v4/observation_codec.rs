@@ -1,4 +1,4 @@
-//! Frozen positional observation/weather encodings, shared by standalone V4 and embedded V5.
+//! Frozen positional observation/weather encodings, shared by standalone V4 and embedded V6.
 //!
 //! Excluded historical WU values belong only to this codec. Encoding always takes ordinary
 //! facts from the active owner value, so retained evidence cannot mask changed ordinary data.
@@ -29,8 +29,8 @@ pub struct RetainedWeatherEncodingV4 {
     low: Option<i32>,
 }
 
-// Keep these field orders: V4 uses fixed integers, V5 uses variable integers. The enclosing
-// encoder supplies that configuration; serializing a standalone V4 blob inside V5 is invalid.
+// Keep these field orders: V4 uses fixed integers, V6 uses variable integers. The enclosing
+// encoder supplies that configuration; serializing a standalone V4 blob inside V6 is invalid.
 #[derive(Encode, Decode)]
 struct FrozenObservationV4 {
     station_id: String,

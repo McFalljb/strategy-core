@@ -82,6 +82,10 @@ pub const DECISION_PLAN_ROWS: usize = 4;
 /// Acknowledged receipts are removed with one statement.
 pub const ACKNOWLEDGEMENT_PLAN_ROWS: usize = 1;
 
+/// The capabilities a Decision V6 Strategy executable states in its handshake, sorted.
+/// `broker-continuation` is gone with V5.
+pub const HANDSHAKE_CAPABILITIES_V6: [&str; 3] = ["decision-v6", "kernel-checkpoint", "liveness"];
+
 /// Evidence code of the order updates the runner derived for this decision.
 pub const ORDER_UPDATES_EVIDENCE_CODE: &str = "order_updates";
 

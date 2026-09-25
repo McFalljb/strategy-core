@@ -1410,7 +1410,13 @@ impl NativeKernel for MyKernel {
                     &[("station", update.station_id)],
                 )?;
             }
-            StrategyEventView::Shutdown(_) => {}
+            StrategyEventView::OrderUpdate(update) => {
+                ctx.telemetry().counter(
+                    "order_updates",
+                    1.0,
+                    &[("client_order_id", &update.client_order_id)],
+                )?;
+            }
             _ => {}
         }
         Ok(())
@@ -1418,17 +1424,12 @@ impl NativeKernel for MyKernel {
 }
 ```
 
-Optional lifecycle hooks are `on_start`, `on_event`, and `on_finish`.
-
-Under Decision V5, `on_finish` is never called and the `ForecastVersions` and
-`Shutdown` events are never delivered; only the legacy v2 bot host (and, for
-`on_finish`, the backtester) uses them. `state_read_diagnostics()` is always empty
-there because all state arrives in the context. They stay while kernels still
-match or call them and are removed with the Decision V6 kernel API change.
+Lifecycle hooks are `on_start` (Bootstrap and Recovery) and `on_event`. Decision V6 runs a
+kernel once per event; see [Decision V6](decision-v6.md).
 
 ### Kernel export inventory — migration in progress
 
-**2026-09-12:** the kernel crate owns canonical `StationState`, `MarketState`, `StrategyEvent`, `Decimal` and supplied-input types in addition to the legacy borrowed surfaces below. See `native/strategy_core_kernel/src/lib.rs` for the current exports and [Decision V5](decision-v5.md) for codec/transaction details. Mandatory borrowed canonical access is implemented for the Trader/Core slice; legacy/Backtester host migration and full application qualification remain unfinished. This section does not claim final cross-consumer qualification. Broader Python/legacy models documented elsewhere may retain WU for separate compatibility/research uses; WU is excluded from Trader's active canonical kernel input path.
+**2026-09-12:** the kernel crate owns canonical `StationState`, `MarketState`, `StrategyEvent`, `Decimal` and supplied-input types in addition to the legacy borrowed surfaces below. See `native/strategy_core_kernel/src/lib.rs` for the current exports and [Decision V6](decision-v6.md) for codec/transaction details. Mandatory borrowed canonical access is implemented for the Trader/Core slice; legacy/Backtester host migration and full application qualification remain unfinished. This section does not claim final cross-consumer qualification. Broader Python/legacy models documented elsewhere may retain WU for separate compatibility/research uses; WU is excluded from Trader's active canonical kernel input path.
 
 The legacy export groups are:
 
@@ -1436,8 +1437,8 @@ The legacy export groups are:
 |---|---|
 | Lifecycle and context traits | `NativeKernel`, `StrategyKernelContext`, `StrategyKernelState`, `StrategyKernelData`, `StrategyKernelBroker`, `StrategyKernelRuntime`, `StrategyKernelTelemetry` |
 | Errors | `KernelError`, `KernelResult` |
-| Actions, orders, and action payloads | `KernelAction`, `OrderAction`, `ContractSide`, `OrderType`, `OrderStatus`, `PlaceOrderRequest`, `CancelOrderRequest`, `CancelAllOrdersRequest`, `PendingOrderView`, `OrderResult`, `WakeAtRequest`, `TelemetryAction`, `LogAction`, `StopAction` |
-| Event and state views | `StrategyEventView`, `PriceLevelView`, `MarketBracketView`, `PriceUpdateView`, `ObservationView`, `StationReportView`, `StationWeatherView`, `ForecastHourlySnapshot`, `ForecastModelSnapshot`, `ForecastInputSnapshot`, `OracleModelScoreSnapshot`, `OracleInputSnapshot`, `ForecastUpdatedView`, `ForecastVersionsView`, `OracleScoresUpdatedView`, `WeatherEventSourceView`, `WeatherEventView`, `HighLowView`, `TimerWakeView`, `ShutdownView`, `TickerPriceView` |
+| Actions, orders, and action payloads | `KernelAction`, `OrderAction`, `ContractSide`, `OrderType`, `BrokerOrderStatus`, `PlaceOrderRequest`, `CancelOrderRequest`, `CancelTarget`, `CancelAllOrdersRequest`, `PendingOrderView`, `OrderStatusView`, `OrderTicket`, `CommandTicket`, `OrderUpdate`, `OrderUpdateStatus`, `BrokerCommandKind`, `WakeAtRequest`, `TelemetryAction`, `LogAction`, `StopAction` |
+| Event and state views | `StrategyEventView`, `PriceLevelView`, `MarketBracketView`, `PriceUpdateView`, `ObservationView`, `StationReportView`, `StationWeatherView`, `ForecastHourlySnapshot`, `ForecastModelSnapshot`, `ForecastInputSnapshot`, `OracleModelScoreSnapshot`, `OracleInputSnapshot`, `ForecastUpdatedView`, `OracleScoresUpdatedView`, `WeatherEventSourceView`, `WeatherEventView`, `HighLowView`, `TimerWakeView`, `TickerPriceView` |
 
 `KernelResult<T>` is `Result<T, KernelError>`. `KernelError::new(message)`
 constructs an error and `message()` returns its text.
@@ -1453,60 +1454,66 @@ The native context exposes these exact trait surfaces:
   conveniences `get_price(ticker)`, `get_weather(station_id)`,
   `latest_forecast(station_id)` and
   `latest_oracle_scores(station_id, mode, rank_by, days)` derive from those models.
-  `state_read_diagnostics()` remains a host diagnostic hook. Getters do not fetch
-  provider data.
+  Getters do not fetch provider data.
 - `StrategyKernelContext::parameters() -> &StrategyParameters`: the Strategy's
   configured parameters, read-only, by key (`get`, `iter`); each is a
   `ParameterValue` (`Null`, `Bool`, `I64`, `U64`, exact `Decimal { coefficient,
   scale }`, `String`) with `as_bool`/`as_i64`/`as_u64`/`as_f64`/`as_str`. The
-  Decision V5 host supplies `StrategyScopeV5.parameters`; hosts without them
+  Decision V6 host supplies `StrategyScopeV6.parameters`; hosts without them
   return an empty set.
 - `StrategyKernelContext::capabilities() -> KernelCapabilities`: what the host
   grants: `mode` (`Paper`, `Live`, `Replay`, or `None` when the host does not
-  state it), `timers`, `timer_handles`, `gauges` and `annotations`. The default
-  grants nothing.
-  The Decision V5 host grants the others and states no mode, because V5 contexts
-  do not carry it.
+  state it), `timers`, `timer_handles`, `gauges`, `annotations` and
+  `external_requests` (allowed request names). The default grants nothing.
+  The Decision V6 host states the context's deployment mode, grants timers (and
+  handles) as the context grants them, always records gauges and annotations, and
+  reports the granted request names.
+- `StrategyKernelContext::contributor_stations() -> &[String]`: every station whose
+  data settles the Sleeve's event (the primary station among them), so a kernel
+  need not hard-code them. Hosts that do not state them return none.
 - `StrategyKernelContext::data() -> &dyn StrategyKernelData`: reserved narrow
   data trait; it has no methods today.
 - `StrategyKernelContext::broker() -> &mut dyn StrategyKernelBroker`:
-  `buying_power()`, `position_quantity(ticker, side)`,
-  `position_avg_price(ticker, side)`, `pending_orders()`,
-  `place_order(request)`, `cancel_order(request)`, and `cancel_all_orders()`.
+  `financial_state()`, `buying_power()`, `position_quantity(ticker, side)`,
+  `position_avg_price(ticker, side)`, `pending_orders()`, `order_status(client_order_id)`,
+  `place_order(request) -> KernelResult<OrderTicket>`,
+  `cancel_order(CancelOrderRequest { target }) -> KernelResult<CommandTicket>` and
+  `cancel_all_orders() -> KernelResult<CommandTicket>`. Tickets return at once; `Err`
+  means only a local problem (an invalid request or a bound exceeded). A Broker refusal
+  is never an `Err`: it arrives as an `OrderUpdate` event, as does every later change
+  of the order. Inside a decision the reads are provisional: the decision's own orders
+  are pending with status `submitted` and reserve budget with the Broker's formula,
+  cancels mark their targets `cancellation_requested`, and positions are unchanged.
 - `StrategyKernelContext::runtime() -> &mut dyn StrategyKernelRuntime`:
-  `now()`, `wake_at(WakeAtRequest)`, and, when `capabilities().timer_handles`:
-  `schedule_timer(WakeAtRequest) -> TimerHandle`, `cancel_timer(&TimerHandle)` and
-  `pending_timers() -> Vec<PendingTimer>`. A `TimerHandle` is the timer's key (the
+  `now()`, `wake_at(WakeAtRequest) -> KernelResult<TimerHandle>`,
+  `cancel_timer(&TimerHandle)` and `pending_timers() -> Vec<PendingTimer>`
+  (when `capabilities().timer_handles`). A `TimerHandle` is the timer's key (the
   request name, or `kernel.wake`) and the generation the host scheduled it under;
   it serializes, so a kernel can keep it in its checkpoint and cancel in a later
   decision. A cancel applies only while the pending timer still has that
   generation, so a stale handle never cancels a newer schedule of the same key.
   `pending_timers()` lists the Sleeve's pending timers as delivered with the
-  decision. Under Decision V5 the generation is `timer.<delivery_id>` of the
+  decision. Under Decision V6 the generation is `timer.<delivery_id>` of the
   scheduling decision, a decision may carry one timer operation per key (a second
-  `schedule_timer`/`cancel_timer` for a key is refused; rescheduling a key in a
-  later decision replaces the timer), and a cancel is a `CancelTimer` command.
-  Hosts without handles refuse both calls. `wake_at` keeps returning `()`.
+  `wake_at`/`cancel_timer` for a key is refused; rescheduling a key in a later
+  decision replaces the timer), and a cancel is a `CancelTimer` command. Hosts
+  without handles refuse `cancel_timer`.
 - `StrategyKernelContext::telemetry() -> &mut dyn StrategyKernelTelemetry`:
   `counter(name, value, fields)` where fields are `&[(&str, &str)]`;
   `gauge(name, value, fields)`; and `annotate(name, value, fields)` with an
   `AnnotationValue` (`Text`, `Integer`, `Float`, `Bool`, `Null`). Hosts that do
   not record gauges or annotations (`capabilities().gauges` / `.annotations`
-  false) drop them. The Decision V5 host records them in result diagnostics
-  beside counters, in call order, with codes `kernel_gauge` and
-  `kernel_annotation` (a float annotation carries its value and bit pattern).
+  false) drop them. The Decision V6 host records counters, gauges and annotations
+  as typed telemetry entries in the result, in call order (floats keep their exact
+  bits); logs are result diagnostics.
 - `StrategyKernelContext::emit(KernelAction)`: emit a
   place/cancel/cancel-all/wake/telemetry/log/stop action through the runtime.
-
-`StateReadDiagnostic` fields are `kind`, `key`, `status`, `reason`,
-`host_state_seq`, `source_feed_event_seq`, `source_state_seq`,
-`source_observed_at`, and `source_updated_at`.
 
 ### Kernel event and state views
 
 `StrategyEventView` variants are `PriceUpdate`, `Observation`,
-`ForecastUpdated`, `ForecastVersions`, `OracleScoresUpdated`, `StationReport`,
-`WeatherEvent`, `NewHigh`, `NewLow`, `TimerWake`, `Shutdown`, and `Unknown`.
+`ForecastUpdated`, `OracleScoresUpdated`, `StationReport`, `WeatherEvent`,
+`NewHigh`, `NewLow`, `TimerWake`, `OrderUpdate`, and `Unknown`.
 `event_type()` returns the shared discriminator string. `Unknown` carries
 `event_type` and optional `emitted_at`.
 
@@ -1521,9 +1528,8 @@ The native context exposes these exact trait surfaces:
 | `WeatherEventView` | The same fields as `WeatherEvent` except `type`; its payload `event_type` is named `event_type_name`. |
 | `HighLowView` | The same shared fields as `NewHigh` and `NewLow` except `type`; the enum variant determines high versus low. |
 | `TimerWakeView` | `scheduled_for`, `fired_at`, `name` |
-| `ShutdownView` | `reason` |
+| `OrderUpdate` (borrowed) | `command_kind`, `command_id`, `client_order_id`, `order_id`, `ticker`, `action`, `contract_side`, `status` (`Accepted`, `Resting`, `PartiallyFilled`, `Filled`, `Cancelled`, `Expired`, `Refused { code, reason }`), `requested`, `filled`, `remaining`, `newly_filled`, `average_fill_price`, `fee_cost`, `is_final` |
 | `ForecastUpdatedView` | The same fields as `ForecastUpdated` except `type`. |
-| `ForecastVersionsView` | The same fields as `ForecastVersions` except `type`. |
 | `OracleScoresUpdatedView` | `event_id`, `sequence`, `emitted_at`, `slug`, `station_id`, `modes`, `updated_at`, `overall`, `day_ahead`, `day_of`; mode payloads are `OracleInputSnapshot`. |
 | `TickerPriceView` | The same fields as `TickerPrices`. |
 | `StationWeatherView` | `station_id`, `current_temp`, `running_high`, `running_low`, `last_metar_time`, `temp_min_f`, `temp_max_f`, `temp_min_c`, `temp_max_c`, `preliminary`, `dsm_high`, `dsm_low`, `dsm_high_time`, `dsm_low_time`, `six_hr_high`, `six_hr_low`, `last_dsm_time`, `last_six_hr_time`, `asos_daily_high_f`, `asos_daily_low_f`, `dewpoint`, `heat_index`, `wind_chill`, `relative_humidity`, `wind_speed`, `wind_direction`, `wind_gust`, `text_description`, `lag_seconds`; no WU fields. |
@@ -1546,7 +1552,7 @@ Kernel action variants are:
 | Action | Payload |
 |---|---|
 | `PlaceOrder` | `PlaceOrderRequest { ticker, action, contract_side, order_type, quantity, limit_price, expires_after_ms, reduce_only, signal_type, signal_metadata, client_order_id }` |
-| `CancelOrder` | `CancelOrderRequest { order_id }` |
+| `CancelOrder` | `CancelOrderRequest { target: CancelTarget::OrderId(..) \| CancelTarget::ClientOrderId(..) }` |
 | `CancelAllOrders` | `CancelAllOrdersRequest {}` |
 | `WakeAt` | `WakeAtRequest { when, name }` |
 | `Telemetry` | `TelemetryAction { name, value, fields }` |
@@ -1558,14 +1564,25 @@ Kernel action variants are:
 `remaining_quantity`, `reserved_cost`, `client_order_id`, `created_at`, and
 `updated_at`.
 
-The kernel `OrderResult` fields are `order_id`, `sleeve_id`, `status`,
-`filled_quantity`, `fill_price`, `fee_cost`, and `reason`. `PlaceOrderRequest.quantity`, all pending/status quantities, `OrderResult.filled_quantity`, and `StrategyKernelBroker.position_quantity` use `ContractQuantity`; each value is authoritative hundredths.
+Emitting `PlaceOrder`, `CancelOrder`, `CancelAllOrders` or `WakeAt` is the same as the
+matching broker or runtime call with its ticket or handle discarded.
 
-Kernel order enums are `Buy`/`Sell`, `Yes`/`No`, `Market`/`Limit`, and result
-statuses `Filled`, `Partial`, `Pending`, `Rejected`, `Cancelled`. A place call may return
-`Cancelled` if confirmed cancellation precedes its return. Native V5 replay preserves the
-original request and exact filled/open quantities against the returned cancelled Broker order;
-a pending cancellation is not completion. See [Decision V5](decision-v5.md).
+`OrderTicket` is `{ command_id, client_order_id }` (the kernel's client order id, or the
+one the host derives); `CommandTicket` is `{ command_id }`. `OrderStatusView` fields are
+`order_id` (empty for an order placed earlier in the same decision), `client_order_id`,
+`status` (`BrokerOrderStatus`: `Submitted`, `Accepted`, `Dispatched`, `Resting`,
+`PartiallyFilled`, `Filled`, `CancellationRequested`, `Cancelled`, `Expired`, `Rejected`,
+`RecoveryRequired`; `as_str()` is the `PendingOrderView.status` text), `requested_quantity`,
+`filled_quantity`, `remaining_quantity`, `reason`, and `updated_at`.
+`PlaceOrderRequest.quantity`, all pending/status/update quantities, and
+`StrategyKernelBroker.position_quantity` use `ContractQuantity`; each value is authoritative
+hundredths.
+
+Kernel order enums are `Buy`/`Sell`, `Yes`/`No`, and `Market`/`Limit`. An `OrderUpdate`
+reports a place's order, or the refusal of a cancel (`command_kind` `CancelOrder`, the order
+fields describe the target, whose own status is unchanged) or of a cancel-all (no order:
+empty `client_order_id` and `ticker`, no `action` or `contract_side`). An admitted cancel
+shows as the target order's own `Cancelled` update. See [Decision V6](decision-v6.md).
 The kernel order request intentionally omits broad-only immediate-execution fields such as
 `max_price`, `max_cost`, `execution_style`, `time_policy`, and `post_only`.
 
