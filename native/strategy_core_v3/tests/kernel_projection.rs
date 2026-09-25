@@ -6,6 +6,8 @@
 mod decisions;
 #[path = "kernel_projection/market_strikes.rs"]
 mod market_strikes;
+#[path = "kernel_projection/simulation.rs"]
+mod simulation;
 
 use std::cell::RefCell;
 use std::rc::Rc;

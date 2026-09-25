@@ -101,8 +101,9 @@ pub const MAX_ENCODED_KERNEL_CHECKPOINT_BYTES: usize = MAX_KERNEL_CHECKPOINT_BYT
     + MAX_SHORT_TEXT_BYTES
     + 96;
 
-/// The account plan row limit for one decision (traderv3 `MAX_DECISION_PLAN_ROWS`): 64 places
-/// plus a cancel-all over the Sleeve's 128-order view.
+/// The account plan row limit for one decision (traderv3 `MAX_DECISION_PLAN_ROWS`). The
+/// open-order cap of each mode (`max_open_orders`) keeps a cancel-all over every open order
+/// within it.
 pub const MAX_DECISION_PLAN_ROWS: usize = 512;
 /// Rows of one admitted place: acceptance, outbox, acceptance state, order, intent receipt.
 pub const PLACE_ORDER_PLAN_ROWS: usize = 5;
@@ -276,7 +277,7 @@ impl BrokerPositionV6 {
 
 #[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
 pub struct BrokerOrderV6 {
-    /// The command that placed the order: `command.<delivery_id>.<ordinal>` for V6 orders.
+    /// The command that placed the order ([`command_id_v6`] for V6 orders).
     pub command_id: String,
     pub intent_id: String,
     pub order_id: String,
@@ -827,7 +828,8 @@ pub struct DecisionResultV6 {
     pub disposition: DecisionDispositionV6,
     /// Completed results carry the post-event checkpoint; Rejected results the input one.
     pub kernel_checkpoint: Option<KernelCheckpointV6>,
-    /// In issue order; the command at index `n` is `command.<delivery_id>.<n>`.
+    /// In issue order; the command at index `n` is `command_id_v6(.., n)`, `command.` and the
+    /// first 32 hex digits of its IntentId.
     pub commands: Vec<StrategyCommandV6>,
     /// Receipts and terminal orders in the context whose final outcome the Strategy has seen.
     pub acknowledged_command_ids: Vec<String>,

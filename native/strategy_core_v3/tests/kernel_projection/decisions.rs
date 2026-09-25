@@ -120,7 +120,12 @@ fn nothing(_: &mut dyn StrategyKernelContext, _: &mut Vec<String>) -> KernelResu
     Ok(())
 }
 
-fn limit_buy(client: &str, side: ContractSide, hundredths: i64, price: f64) -> PlaceOrderRequest {
+pub(super) fn limit_buy(
+    client: &str,
+    side: ContractSide,
+    hundredths: i64,
+    price: f64,
+) -> PlaceOrderRequest {
     PlaceOrderRequest {
         ticker: MARKET.to_owned(),
         action: OrderAction::Buy,
@@ -137,7 +142,7 @@ fn limit_buy(client: &str, side: ContractSide, hundredths: i64, price: f64) -> P
 }
 
 /// A Sleeve whose Market carries the Broker's fee authority.
-fn priced_context() -> DecisionContextV6 {
+pub(super) fn priced_context() -> DecisionContextV6 {
     let mut context = base_context();
     let identity = &mut context.owner_state.markets[0].identity;
     identity.fee_type = "quadratic".to_owned();
@@ -204,7 +209,7 @@ fn refused(command_id: &str, kind: BrokerCommandKindV6, code: &str) -> CommandRe
 
 /// The context of a later Broker-state delivery: the previous decision's checkpoint and the
 /// Broker state and receipts the host now reports.
-fn follow_up(
+pub(super) fn follow_up(
     context: &DecisionContextV6,
     checkpoint: Option<&DecisionResultV6>,
     delivery: u32,
@@ -1632,10 +1637,10 @@ fn a_truncated_view_allows_no_cancel_all() {
 }
 
 /// A small deterministic generator for the property test.
-struct Lcg(u64);
+pub(super) struct Lcg(pub(super) u64);
 
 impl Lcg {
-    fn next(&mut self, bound: u64) -> u64 {
+    pub(super) fn next(&mut self, bound: u64) -> u64 {
         self.0 = self
             .0
             .wrapping_mul(6_364_136_223_846_793_005)
