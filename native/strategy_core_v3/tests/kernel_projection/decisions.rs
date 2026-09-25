@@ -1196,45 +1196,43 @@ fn a_cancel_waits_for_its_receipt_through_a_newer_view_without_it() {
 }
 
 #[test]
-fn seeding_waits_for_a_complete_view() {
+fn seeding_covers_a_truncated_view_which_drops_only_terminal_orders() {
     use BrokerOrderStatusV6::*;
     let context = priced_context();
-    let hidden_open = order("command.v5-hidden-open", "v5-hidden-open", Resting, 0, 3);
-    let hidden_done = order("command.v5-hidden-done", "v5-hidden-done", Filled, 300, 3);
+    let open = order("command.v5-open", "v5-open", Resting, 0, 3);
+    let done = order("command.v5-done", "v5-done", Filled, 300, 3);
     let visible = order("command.v5-visible", "v5-visible", Resting, 0, 3);
-    let mut truncated = follow_up(&context, None, 1, vec![visible.clone()], vec![]);
+    // The host truncated the first view: it dropped the terminal order, never an open one.
+    let mut truncated = follow_up(
+        &context,
+        None,
+        1,
+        vec![visible.clone(), open.clone()],
+        vec![],
+    );
     truncated.orders_complete = false;
     truncated.trigger = TriggerV6::Owner(OwnerTriggerV6::Recovery);
     let first = decide(&truncated, nothing);
+    assert!(first.updates.is_empty(), "seeding delivers no updates");
     let runner = &first.result.kernel_checkpoint.as_ref().unwrap().runner;
-    assert!(!runner.seeded && runner.entries.is_empty());
-    assert!(
-        first
-            .result
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.code == "runner_not_seeded")
-    );
+    assert!(runner.seeded);
+    assert_eq!(runner.entries.len(), 2);
     assert!(first.result.acknowledged_command_ids.is_empty());
-    // The first complete view seeds: the hidden open order is recorded as seen and the hidden
-    // terminal one acknowledged.
+    assert!(first.result.diagnostics.is_empty());
+    // A later view shows the terminal order: it is no news, and acknowledged.
     let second = decide(
         &follow_up(
             &context,
             Some(&first.result),
             2,
-            vec![visible.clone(), hidden_done, hidden_open.clone()],
+            vec![visible.clone(), done, open.clone()],
             vec![],
         ),
         nothing,
     );
-    let runner = &second.result.kernel_checkpoint.as_ref().unwrap().runner;
-    assert!(runner.seeded);
-    assert_eq!(runner.entries.len(), 2);
-    assert_eq!(
-        second.result.acknowledged_command_ids,
-        ["command.v5-hidden-done"]
-    );
+    assert!(second.updates.is_empty());
+    assert_eq!(second.result.acknowledged_command_ids, ["command.v5-done"]);
+    let hidden_open = open;
     // Its fill is then reported.
     let mut filled = hidden_open;
     filled.status = Filled;
@@ -1682,6 +1680,9 @@ fn every_fill_is_reported_exactly_once_whatever_the_views() {
         let mut reported_fill = 0;
         let mut filled_updates = 0;
         let mut delivery = 2;
+        // Views here come at rising revisions: once one showed the order final, no later one
+        // shows an older record of it (host invariant).
+        let mut final_shown = false;
         let mut step = |orders: Vec<BrokerOrderV6>,
                         revision: u64,
                         complete: bool,
@@ -1705,7 +1706,11 @@ fn every_fill_is_reported_exactly_once_whatever_the_views() {
                 // A delayed or reordered view of an earlier state.
                 _ => {
                     let earliest = truth.saturating_sub(2);
-                    let shown = earliest + rng.next((truth - earliest + 1) as u64) as usize;
+                    let mut shown = earliest + rng.next((truth - earliest + 1) as u64) as usize;
+                    if final_shown {
+                        shown = history.len() - 1;
+                    }
+                    final_shown |= shown == history.len() - 1;
                     (vec![history[shown].clone()], revision, true)
                 }
             };

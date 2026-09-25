@@ -41,10 +41,15 @@ pub const MAX_COMMAND_RECEIPTS: usize = 256;
 pub const MAX_STRATEGY_COMMANDS: usize = 64;
 /// Every receipt and every terminal order in one context can be acknowledged at once.
 pub const MAX_ACKNOWLEDGED_COMMANDS: usize = MAX_COMMAND_RECEIPTS + MAX_BROKER_ORDERS;
-/// Orders and commands the runner section tracks until their final outcome is seen.
+/// Live orders and commands the runner section may hold when a decision issues a Broker
+/// command: a command that would take it to this many is a local error.
 pub const MAX_RUNNER_ENTRIES: usize = 256;
 /// Tombstones the runner section keeps besides its live entries; the oldest is evicted first.
 pub const MAX_TOMBSTONES: usize = 32;
+/// Entries (live and tombstones) one runner section holds. A tombstone whose order
+/// reappears is live again and an adopted order is live from the start, so the live entries
+/// of a derived section may pass `MAX_RUNNER_ENTRIES`, never this.
+pub const MAX_RUNNER_SECTION_ENTRIES: usize = MAX_RUNNER_ENTRIES + MAX_TOMBSTONES;
 /// Complete views above its vanish revision that must not show a tombstone before it expires.
 pub const TOMBSTONE_EXPIRY_VIEWS: u16 = 16;
 /// Times an order update is delivered to a kernel that returns an error for it before the
@@ -96,7 +101,7 @@ pub const fn max_open_orders(mode: DeploymentModeV6) -> usize {
 }
 /// State, the runner section, three identifiers, the profile digest, and codec overhead.
 pub const MAX_ENCODED_KERNEL_CHECKPOINT_BYTES: usize = MAX_KERNEL_CHECKPOINT_BYTES
-    + (MAX_RUNNER_ENTRIES + MAX_TOMBSTONES) * MAX_ENCODED_RUNNER_ENTRY_BYTES
+    + MAX_RUNNER_SECTION_ENTRIES * MAX_ENCODED_RUNNER_ENTRY_BYTES
     + 3 * MAX_IDENTIFIER_BYTES
     + MAX_SHORT_TEXT_BYTES
     + 96;
@@ -404,7 +409,8 @@ pub struct RunnerEntryV6 {
 }
 
 impl RunnerEntryV6 {
-    /// Counts toward `MAX_RUNNER_ENTRIES` (a tombstone counts toward `MAX_TOMBSTONES`).
+    /// Counts toward `MAX_RUNNER_ENTRIES` when the decision issues a command (a tombstone
+    /// counts toward `MAX_TOMBSTONES`).
     pub const fn is_live(&self) -> bool {
         !self.vanished
     }
@@ -413,9 +419,13 @@ impl RunnerEntryV6 {
 /// The runner's record of the Strategy's orders and commands, in issue order.
 #[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct RunnerSectionV6 {
-    /// False before the first decision over a complete view (and after converting a V5
-    /// checkpoint): that decision records the Broker state as seen without updates.
+    /// False before the first decision (and after converting a V5 checkpoint): that
+    /// decision records the Sleeve's open orders as seen, without updates.
     pub seeded: bool,
+    /// The highest Broker revision of a view the section was compared with. An open order
+    /// the section does not track is adopted only from a newer view: a view at or below it
+    /// may be stale and show an order older than the Strategy was told of.
+    pub newest_view_revision: u64,
     pub entries: Vec<RunnerEntryV6>,
 }
 
@@ -1652,7 +1662,7 @@ fn validate_kernel_checkpoint_shape(
 
 fn validate_runner_section(runner: &RunnerSectionV6) -> Result<(), DecisionV6Error> {
     let tombstones = runner.entries.iter().filter(|entry| entry.vanished).count();
-    if runner.entries.len() - tombstones > MAX_RUNNER_ENTRIES || tombstones > MAX_TOMBSTONES {
+    if runner.entries.len() > MAX_RUNNER_SECTION_ENTRIES || tombstones > MAX_TOMBSTONES {
         return Err(DecisionV6Error::BoundExceeded);
     }
     if runner.entries.iter().any(|entry| {

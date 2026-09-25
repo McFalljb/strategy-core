@@ -8,13 +8,15 @@
 //! absence from a view that may predate its admission or that the host truncated is no news,
 //! and an order (or a cancel's receipt) missing from a complete newer view stays tracked as a
 //! tombstone, so a reappearance reports what it missed. Tombstones are bounded and expire.
+//! An open order of the Sleeve the section does not track (the section is not yet seeded, or
+//! the order's tombstone expired) is adopted from its current status and tracked from then on.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::KernelTransactionError;
 use crate::decision_v6::{
     BrokerCommandKindV6, BrokerOrderStatusV6, BrokerOrderV6, CommandOutcomeV6, DecisionContextV6,
-    MAX_DELIVERY_ATTEMPTS, MAX_REJECTION_REASON_BYTES, MAX_RUNNER_ENTRIES, MAX_TOMBSTONES,
+    MAX_DELIVERY_ATTEMPTS, MAX_REJECTION_REASON_BYTES, MAX_RUNNER_SECTION_ENTRIES, MAX_TOMBSTONES,
     OrderUpdateRecordV6, OrderUpdateStatusV6, RunnerEntryV6, TOMBSTONE_EXPIRY_VIEWS,
 };
 
@@ -61,10 +63,10 @@ pub(super) struct Step {
 
 /// The comparison's outcome, before the updates are delivered.
 pub(super) struct Derived {
-    /// In issue order; orders recorded by seeding come last.
+    /// In issue order; adopted orders come last.
     pub steps: Vec<Step>,
-    /// The section is seeded after this decision.
-    pub seeded: bool,
+    /// The section's `newest_view_revision` after this decision.
+    pub newest_view_revision: u64,
     pub notes: Vec<Note>,
 }
 
@@ -323,53 +325,63 @@ pub(super) fn derive(context: &DecisionContextV6) -> Result<Derived, KernelTrans
         });
     }
 
-    let mut seeded = section.seeded;
-    if !seeded {
-        if complete {
-            // The first decision over a complete view (or the first after converting a V5
-            // checkpoint) records open orders as seen, from their current status, without
-            // updates. The result acknowledges terminal ones.
-            let tracked = steps
-                .iter()
-                .filter_map(|step| step.next.as_ref())
-                .map(|entry| entry.command_id.clone())
-                .collect::<BTreeSet<_>>();
-            for order in orders {
-                if !order.status.is_terminal() && !tracked.contains(&order.command_id) {
-                    steps.push(Step {
-                        previous: None,
-                        next: Some(adopted(order, revision)),
-                        update: None,
-                    });
-                }
-            }
-            seeded = true;
-        } else {
-            notes.push(Note::new("runner_not_seeded", String::new()));
-        }
-    }
-    let live = steps
+    // Every open order of the Sleeve is tracked. The host's view, even truncated, holds every
+    // open order (it drops terminal ones only), so the first decision (or the first after
+    // converting a V5 checkpoint) records them as seen, from their current status, without
+    // updates, and the result acknowledges the terminal ones. Later, an open order the section
+    // does not track (its tombstone expired or was evicted) is adopted the same way, and
+    // reported, from a view newer than any the section has seen: an older one may show an
+    // order the Strategy already saw further along, even final.
+    let fresh = !section.seeded || revision > section.newest_view_revision;
+    let tracked = steps
         .iter()
-        .filter(|step| step.next.as_ref().is_some_and(RunnerEntryV6::is_live))
+        .flat_map(|step| step.previous.iter().chain(step.next.iter()))
+        .map(|entry| entry.command_id.clone())
+        .collect::<BTreeSet<_>>();
+    // Entries the section may hold after delivery: a pruned entry comes back when its update
+    // fails.
+    let mut held = steps
+        .iter()
+        .filter(|step| step.next.is_some() || step.update.is_some())
         .count();
-    if live > MAX_RUNNER_ENTRIES {
+    if held > MAX_RUNNER_SECTION_ENTRIES {
         return Err(KernelTransactionError::RunnerSectionFull);
+    }
+    for order in orders.iter().filter(|_| fresh) {
+        if order.status.is_terminal() || tracked.contains(&order.command_id) {
+            continue;
+        }
+        if held >= MAX_RUNNER_SECTION_ENTRIES {
+            notes.push(Note::new(
+                "runner_order_not_adopted",
+                order.command_id.clone(),
+            ));
+            continue;
+        }
+        if section.seeded {
+            notes.push(Note::new("runner_order_adopted", order.command_id.clone()));
+        }
+        held += 1;
+        steps.push(Step {
+            previous: None,
+            next: Some(adopted(order, revision)),
+            update: None,
+        });
     }
     Ok(Derived {
         steps,
-        seeded,
+        newest_view_revision: section.newest_view_revision.max(revision),
         notes,
     })
 }
 
-/// The receipts and terminal orders a result acknowledges: every receipt the runner section
-/// no longer tracks (an entry is pruned only once its outcome was delivered), and, once the
-/// section is seeded, every terminal order it no longer tracks (it is no Strategy news: the
-/// section tracks each of the Strategy's orders until its final update was delivered).
+/// The receipts and terminal orders a result acknowledges: every one the runner section no
+/// longer tracks. An entry is pruned only once its outcome was delivered (or abandoned), and
+/// the section, seeded by every decision, tracks each open order of the Sleeve until its final
+/// update: a terminal order it does not track is no Strategy news.
 pub(super) fn acknowledgements(
     context: &DecisionContextV6,
     entries: &[RunnerEntryV6],
-    seeded: bool,
 ) -> Vec<String> {
     let tracked = entries
         .iter()
@@ -385,7 +397,7 @@ pub(super) fn acknowledgements(
                 .broker
                 .orders
                 .iter()
-                .filter(|order| seeded && order.status.is_terminal())
+                .filter(|order| order.status.is_terminal())
                 .map(|order| order.command_id.as_str())
                 .filter(|command_id| !tracked.contains(command_id)),
         )

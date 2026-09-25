@@ -85,7 +85,7 @@ pub enum KernelTransactionError {
     InvalidTime,
     InvalidQuantity,
     Kernel(String),
-    /// The runner section would track more than `MAX_RUNNER_ENTRIES` orders and commands.
+    /// The checkpoint's runner section holds more than `MAX_RUNNER_SECTION_ENTRIES` entries.
     RunnerSectionFull,
 }
 
@@ -280,9 +280,9 @@ pub fn run_transaction<F: TransactionKernelFactory>(
     match outcome {
         Ok(()) => {
             let issued = host.runner.split_off(issued_from);
-            let seeded = derived.seeded;
+            let newest_view_revision = derived.newest_view_revision;
             let (entries, notes) = derived.finalize(&failed, issued);
-            result.acknowledged_command_ids = updates::acknowledgements(context, &entries, seeded);
+            result.acknowledged_command_ids = updates::acknowledgements(context, &entries);
             let sequence = context
                 .kernel_checkpoint
                 .as_ref()
@@ -302,7 +302,11 @@ pub fn run_transaction<F: TransactionKernelFactory>(
                         .clone(),
                     sequence,
                     state: kernel.encode_checkpoint_state()?,
-                    runner: RunnerSectionV6 { seeded, entries },
+                    runner: RunnerSectionV6 {
+                        seeded: true,
+                        newest_view_revision,
+                        entries,
+                    },
                     state_sha256: [0; 32],
                 }
                 .seal(),

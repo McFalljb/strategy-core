@@ -213,6 +213,7 @@ fn order_updates_result(context: &DecisionContextV6) -> DecisionResultV6 {
             b"after-updates",
             RunnerSectionV6 {
                 seeded: true,
+                newest_view_revision: 0,
                 entries: previous.runner.entries[..1].to_vec(),
             },
         )),
@@ -281,6 +282,7 @@ fn converted_result(context: &DecisionContextV6) -> DecisionResultV6 {
                 sequence: previous.sequence + 1,
                 runner: RunnerSectionV6 {
                     seeded: true,
+                    newest_view_revision: 0,
                     entries: vec![adopted],
                 },
                 ..previous.clone()
@@ -440,7 +442,7 @@ fn invalid_contexts() -> Vec<(&'static str, DecisionV6Error, ContextMutation)> {
             |context| {
                 let mut checkpoint = context.kernel_checkpoint.take().unwrap();
                 let entry = checkpoint.runner.entries[0].clone();
-                checkpoint.runner.entries = (0..=MAX_RUNNER_ENTRIES)
+                checkpoint.runner.entries = (0..=MAX_RUNNER_SECTION_ENTRIES)
                     .map(|index| RunnerEntryV6 {
                         command_id: format!("command.old.{index}"),
                         client_order_id: Some(format!("client.old.{index}")),
@@ -612,6 +614,7 @@ fn invalid_results() -> Vec<(&'static str, &'static str, DecisionV6Error, Result
                 let previous = context.kernel_checkpoint.as_ref().unwrap();
                 let runner = RunnerSectionV6 {
                     seeded: true,
+                    newest_view_revision: 0,
                     entries: previous.runner.entries[..2].to_vec(),
                 };
                 result.kernel_checkpoint = Some(

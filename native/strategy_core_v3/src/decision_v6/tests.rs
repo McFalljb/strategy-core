@@ -10,6 +10,7 @@ pub(super) const DIGEST: &str = "profile-calculator-digest";
 pub(super) fn seeded(entries: Vec<RunnerEntryV6>) -> RunnerSectionV6 {
     RunnerSectionV6 {
         seeded: true,
+        newest_view_revision: 0,
         entries,
     }
 }
@@ -178,6 +179,7 @@ pub(super) fn context() -> DecisionContextV6 {
             b"durable-kernel-state",
             RunnerSectionV6 {
                 seeded: true,
+                newest_view_revision: 0,
                 entries: vec![RunnerEntryV6 {
                     command_id: "command.delivery.daily.0.0".to_owned(),
                     kind: BrokerCommandKindV6::PlaceOrder,
@@ -786,7 +788,8 @@ fn runner_section_entries_are_bounded_and_never_terminal() {
     let entry = context.kernel_checkpoint.unwrap().runner.entries[0].clone();
     let full = RunnerSectionV6 {
         seeded: true,
-        entries: (0..=MAX_RUNNER_ENTRIES)
+        newest_view_revision: 0,
+        entries: (0..=MAX_RUNNER_SECTION_ENTRIES)
             .map(|index| RunnerEntryV6 {
                 command_id: format!("command.{index}"),
                 client_order_id: Some(format!("client.{index}")),
