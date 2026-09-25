@@ -7,6 +7,14 @@ use crate::decision_v4::{
 pub(super) const MARKET: &str = "KXHIGHTSEA-26AUG30-T80";
 pub(super) const DIGEST: &str = "profile-calculator-digest";
 
+pub(super) fn seeded(entries: Vec<RunnerEntryV6>) -> RunnerSectionV6 {
+    RunnerSectionV6 {
+        seeded: true,
+        entries,
+        reported: vec![],
+    }
+}
+
 pub(super) fn checkpoint(
     sequence: u64,
     state: &[u8],
@@ -163,11 +171,14 @@ pub(super) fn context() -> DecisionContextV6 {
             orders: vec![resting_order()],
         },
         command_receipts: Vec::new(),
+        orders_complete: true,
         trigger: TriggerV6::Owner(OwnerTriggerV6::Recovery),
         kernel_checkpoint: Some(checkpoint(
             1,
             b"durable-kernel-state",
             RunnerSectionV6 {
+                seeded: true,
+                reported: vec![],
                 entries: vec![RunnerEntryV6 {
                     command_id: "command.delivery.daily.0.0".to_owned(),
                     kind: BrokerCommandKindV6::PlaceOrder,
@@ -180,6 +191,8 @@ pub(super) fn context() -> DecisionContextV6 {
                     last_status: Some(OrderUpdateStatusV6::PartiallyFilled),
                     filled_quantity_hundredths: 200,
                     order_revision: 2,
+                    issued_broker_revision: 0,
+                    vanished: false,
                 }],
             },
         )),
@@ -232,6 +245,8 @@ pub(super) fn place_entry(command: &StrategyCommandV6) -> RunnerEntryV6 {
         last_status: None,
         filled_quantity_hundredths: 0,
         order_revision: 0,
+        issued_broker_revision: 0,
+        vanished: false,
     }
 }
 
@@ -248,6 +263,8 @@ pub(super) fn command_entry(command: &StrategyCommandV6) -> RunnerEntryV6 {
         last_status: None,
         filled_quantity_hundredths: 0,
         order_revision: 0,
+        issued_broker_revision: 0,
+        vanished: false,
     }
 }
 
@@ -291,7 +308,7 @@ pub(super) fn multi_order_result(context: &DecisionContextV6) -> DecisionResultV
         kernel_checkpoint: Some(checkpoint(
             previous.sequence + 1,
             b"post-event-kernel-state",
-            RunnerSectionV6 { entries },
+            seeded(entries),
         )),
         commands: vec![yes, no, cancel_same, cancel_resting, timer],
         acknowledged_command_ids: vec![],
@@ -473,7 +490,7 @@ fn a_rejected_decision_keeps_the_checkpoint_and_acknowledges_nothing() {
     result.kernel_checkpoint = context.kernel_checkpoint.clone();
     validate_decision_result_v6(&context, &result).unwrap();
 
-    result.kernel_checkpoint = Some(checkpoint(2, b"changed", RunnerSectionV6::default()));
+    result.kernel_checkpoint = Some(checkpoint(2, b"changed", seeded(vec![])));
     assert_eq!(
         validate_decision_result_v6(&context, &result),
         Err(DecisionV6Error::InvalidContract)
@@ -659,7 +676,7 @@ pub(super) fn row_limit_case() -> (DecisionContextV6, DecisionResultV6) {
     context.broker.reserved_cash_micros = 1_280_000;
     context.owner_state.broker.locally_reserved_cash = 1_280_000;
     context.owner_state.broker.current_commitment = 1_200_000 + 1_280_000;
-    context.kernel_checkpoint = Some(checkpoint(1, b"state", RunnerSectionV6::default()));
+    context.kernel_checkpoint = Some(checkpoint(1, b"state", seeded(vec![])));
     context.validate().unwrap();
 
     let mut commands = (0..63)
@@ -688,7 +705,7 @@ pub(super) fn row_limit_case() -> (DecisionContextV6, DecisionResultV6) {
         state_fence: hex_digest(&decision_fence_v6_sha256(&context).unwrap()),
         expected_broker_revision: 9,
         disposition: DecisionDispositionV6::Completed,
-        kernel_checkpoint: Some(checkpoint(2, b"state", RunnerSectionV6 { entries })),
+        kernel_checkpoint: Some(checkpoint(2, b"state", seeded(entries))),
         commands,
         acknowledged_command_ids: vec![],
         evidence: vec![],
@@ -760,6 +777,8 @@ fn runner_section_entries_are_bounded_and_never_terminal() {
     );
     let entry = context.kernel_checkpoint.unwrap().runner.entries[0].clone();
     let full = RunnerSectionV6 {
+        seeded: true,
+        reported: vec![],
         entries: (0..=MAX_RUNNER_ENTRIES)
             .map(|index| RunnerEntryV6 {
                 command_id: format!("command.{index}"),

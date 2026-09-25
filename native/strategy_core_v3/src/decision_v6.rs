@@ -58,10 +58,15 @@ pub const MAX_PRICE_MICROS: u64 = 1_000_000;
 /// change when they arrive.
 pub const MAX_EXTERNAL_REQUEST_GRANTS: usize = 32;
 /// Upper bound of one encoded runner entry: four bounded identifiers and fixed-width fields.
-pub const MAX_ENCODED_RUNNER_ENTRY_BYTES: usize = 4 * (MAX_IDENTIFIER_BYTES + 3) + 64;
+pub const MAX_ENCODED_RUNNER_ENTRY_BYTES: usize = 4 * (MAX_IDENTIFIER_BYTES + 3) + 80;
+/// Open orders one Sleeve may hold: open context orders plus the decision's own places. The
+/// Sleeve's order view holds `MAX_BROKER_ORDERS`; the rest is room for terminal orders whose
+/// outcome the Strategy has not yet acknowledged.
+pub const MAX_OPEN_ORDERS: usize = 192;
 /// State, the runner section, three identifiers, the profile digest, and codec overhead.
 pub const MAX_ENCODED_KERNEL_CHECKPOINT_BYTES: usize = MAX_KERNEL_CHECKPOINT_BYTES
     + MAX_RUNNER_ENTRIES * MAX_ENCODED_RUNNER_ENTRY_BYTES
+    + MAX_BROKER_ORDERS * (MAX_IDENTIFIER_BYTES + 3)
     + 3 * MAX_IDENTIFIER_BYTES
     + MAX_SHORT_TEXT_BYTES
     + 96;
@@ -340,13 +345,27 @@ pub struct RunnerEntryV6 {
     /// entry is pruned once its terminal status is seen.
     pub last_status: Option<OrderUpdateStatusV6>,
     pub filled_quantity_hundredths: u64,
+    /// The order revision last reported; an older record of the order is stale.
     pub order_revision: u64,
+    /// The Broker revision of the context the command was issued (or adopted) in. A context
+    /// at or below it may predate the command's admission, so its absence there is no news.
+    pub issued_broker_revision: u64,
+    /// The order went missing from a complete, newer view and was reported final once. The
+    /// entry stays as a tombstone: if the order reappears, its real update follows, with
+    /// `newly_filled` counted from this entry.
+    pub vanished: bool,
 }
 
 /// The runner's record of the Strategy's orders and commands, in issue order.
 #[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct RunnerSectionV6 {
+    /// False only before the first decision (and after converting a V5 checkpoint): that
+    /// decision records the Broker state as seen without updates.
+    pub seeded: bool,
     pub entries: Vec<RunnerEntryV6>,
+    /// Command ids of terminal orders whose final update the Strategy has seen, acknowledged
+    /// in every result until the order leaves a complete view.
+    pub reported: Vec<String>,
 }
 
 /// Bounded, versioned private kernel state owned by one exact Strategy profile, plus the runner
@@ -722,6 +741,10 @@ pub struct DecisionContextV6 {
     pub deployment_mode: DeploymentModeV6,
     pub capabilities: CapabilityGrantV6,
     pub broker: BrokerDetailV6,
+    /// True when `broker.orders` holds every order of the Sleeve the host keeps; false when the
+    /// host had to truncate the view. A truncated view never reports an order as vanished and
+    /// allows no cancel-all.
+    pub orders_complete: bool,
     /// Outcomes of recent commands without an order record, strictly sorted by command id.
     pub command_receipts: Vec<CommandReceiptV6>,
     pub trigger: TriggerV6,
@@ -1569,10 +1592,21 @@ fn validate_kernel_checkpoint_shape(
 }
 
 fn validate_runner_section(runner: &RunnerSectionV6) -> Result<(), DecisionV6Error> {
-    if runner.entries.len() > MAX_RUNNER_ENTRIES {
+    if runner.entries.len() > MAX_RUNNER_ENTRIES || runner.reported.len() > MAX_BROKER_ORDERS {
         return Err(DecisionV6Error::BoundExceeded);
     }
-    unique(runner.entries.iter().map(|entry| entry.command_id.as_str()))?;
+    if !runner.seeded && (!runner.entries.is_empty() || !runner.reported.is_empty())
+        || runner.reported.iter().any(|id| !valid_identifier(id))
+    {
+        return Err(DecisionV6Error::InvalidContract);
+    }
+    unique(
+        runner
+            .entries
+            .iter()
+            .map(|entry| entry.command_id.as_str())
+            .chain(runner.reported.iter().map(String::as_str)),
+    )?;
     unique(runner.entries.iter().filter_map(|entry| {
         (entry.kind == BrokerCommandKindV6::PlaceOrder)
             .then_some(entry.client_order_id.as_deref())
@@ -1596,9 +1630,10 @@ fn validate_runner_section(runner: &RunnerSectionV6) -> Result<(), DecisionV6Err
                         .as_ref()
                         .is_none_or(|status| !status.is_terminal())
             }
-            BrokerCommandKindV6::CancelOrder => entry.last_status.is_none(),
+            BrokerCommandKindV6::CancelOrder => entry.last_status.is_none() && !entry.vanished,
             BrokerCommandKindV6::CancelAllOrders => {
                 entry.last_status.is_none()
+                    && !entry.vanished
                     && entry.client_order_id.is_none()
                     && entry.order_id.is_none()
                     && entry.market_id.is_none()
@@ -1724,12 +1759,14 @@ impl DecisionResultV6 {
                     .collect::<BTreeSet<_>>();
                 // Every Broker command is tracked until its outcome is seen, and nothing
                 // tracked is acknowledged.
-                if self.commands.iter().any(|command| {
-                    command.broker_kind().is_some() && !tracked.contains(command.command_id())
-                }) || self
-                    .acknowledged_command_ids
-                    .iter()
-                    .any(|id| tracked.contains(id.as_str()))
+                if !runner.seeded
+                    || self.commands.iter().any(|command| {
+                        command.broker_kind().is_some() && !tracked.contains(command.command_id())
+                    })
+                    || self
+                        .acknowledged_command_ids
+                        .iter()
+                        .any(|id| tracked.contains(id.as_str()))
                 {
                     return Err(DecisionV6Error::InvalidContract);
                 }
@@ -1794,6 +1831,9 @@ pub fn validate_decision_result_v6(
             {
                 return Err(DecisionV6Error::InvalidContract);
             }
+            StrategyCommandV6::CancelAllOrders { .. } if !context.orders_complete => {
+                return Err(DecisionV6Error::InvalidContract);
+            }
             _ => {}
         }
     }
@@ -1818,6 +1858,14 @@ pub fn validate_decision_result_v6(
         return Err(DecisionV6Error::InvalidContract);
     }
     if decision_plan_rows_v6(context, result) > MAX_DECISION_PLAN_ROWS {
+        return Err(DecisionV6Error::BoundExceeded);
+    }
+    let places = result
+        .commands
+        .iter()
+        .filter(|command| matches!(command, StrategyCommandV6::PlaceOrder(_)))
+        .count();
+    if places > 0 && open_orders(&context.broker) + places > MAX_OPEN_ORDERS {
         return Err(DecisionV6Error::BoundExceeded);
     }
     Ok(())
@@ -2021,6 +2069,15 @@ impl DecisionPlanRows {
         self.broker_commands += 1;
         self.rows += rows;
     }
+}
+
+/// The context's open (non-terminal) orders.
+pub fn open_orders(broker: &BrokerDetailV6) -> usize {
+    broker
+        .orders
+        .iter()
+        .filter(|order| !order.status.is_terminal())
+        .count()
 }
 
 /// The account plan rows of a result's Broker commands (zero without one).

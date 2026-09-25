@@ -59,6 +59,8 @@ use crate::decision_v6::{
     StrategyParameterValueV6, TelemetryEntryV6,
 };
 
+/// Prefix of the client order ids the host derives; a kernel's own ids may not use it.
+pub const DERIVED_CLIENT_ID_PREFIX: &str = "tv3";
 /// Key of a timer scheduled without a name.
 pub const DEFAULT_TIMER_KEY: &str = "kernel.wake";
 /// `TimerRecoveryV4::admission_state` of a timer that is scheduled and not yet delivered.
@@ -197,7 +199,9 @@ pub fn run_transaction<F: TransactionKernelFactory>(
                     sequence,
                     state: kernel.encode_checkpoint_state()?,
                     runner: RunnerSectionV6 {
+                        seeded: true,
                         entries: std::mem::take(&mut host.runner),
+                        reported: derived.reported.clone(),
                     },
                     state_sha256: [0; 32],
                 }
@@ -579,7 +583,16 @@ impl<'a> KernelHost<'a> {
             0
         };
         let context = self.context;
+        if self.open_orders() >= wire::MAX_OPEN_ORDERS {
+            return Err(KernelError::new(format!(
+                "a Sleeve holds at most {} open orders",
+                wire::MAX_OPEN_ORDERS
+            )));
+        }
         let provider_client_id = match &request.client_order_id {
+            Some(client) if client.starts_with(DERIVED_CLIENT_ID_PREFIX) => {
+                return invalid("client order ids starting with \"tv3\" are reserved for the host");
+            }
             Some(client) => client.clone(),
             None => wire::derive_provider_client_id_v6(
                 context.deployment_mode,
@@ -644,6 +657,8 @@ impl<'a> KernelHost<'a> {
             last_status: None,
             filled_quantity_hundredths: 0,
             order_revision: 0,
+            issued_broker_revision: self.context.broker.revision,
+            vanished: false,
         };
         self.issue_broker_command(command, entry)?;
         self.finances.current_commitment_micros = self
@@ -726,6 +741,8 @@ impl<'a> KernelHost<'a> {
             last_status: None,
             filled_quantity_hundredths: filled,
             order_revision: 0,
+            issued_broker_revision: self.context.broker.revision,
+            vanished: false,
         };
         let (target, entry) = match (target, provisional, order) {
             (Some(target), Some(index), _) => {
@@ -783,6 +800,11 @@ impl<'a> KernelHost<'a> {
     }
 
     fn cancel_all(&mut self) -> KernelResult<CommandTicket> {
+        if !self.context.orders_complete {
+            return Err(KernelError::new(
+                "invalid cancel-all: the host's order view is truncated",
+            ));
+        }
         let ordinal = self.next_ordinal()?;
         let command_id = self.context.command_id(ordinal);
         let command = StrategyCommandV6::CancelAllOrders {
@@ -800,6 +822,8 @@ impl<'a> KernelHost<'a> {
             last_status: None,
             filled_quantity_hundredths: 0,
             order_revision: 0,
+            issued_broker_revision: self.context.broker.revision,
+            vanished: false,
         };
         self.issue_broker_command(command, entry)?;
         for order in &self.context.broker.orders {
@@ -811,6 +835,11 @@ impl<'a> KernelHost<'a> {
             order.cancellation_requested = true;
         }
         Ok(CommandTicket { command_id })
+    }
+
+    /// Open context orders plus this decision's places.
+    fn open_orders(&self) -> usize {
+        wire::open_orders(&self.context.broker) + self.provisional.len()
     }
 
     fn view_status(&self, order: &BrokerOrderV6) -> BrokerOrderStatus {

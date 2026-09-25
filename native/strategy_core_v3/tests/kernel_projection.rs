@@ -189,6 +189,7 @@ fn base_context() -> DecisionContextV6 {
             external_requests: Vec::new(),
         },
         command_receipts: Vec::new(),
+        orders_complete: true,
         owner_state,
         strategy: StrategyScopeV6 {
             strategy_id: "fixture".to_owned(),

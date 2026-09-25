@@ -138,6 +138,12 @@ fn live_context() -> DecisionContextV6 {
     context
 }
 
+fn truncated_context() -> DecisionContextV6 {
+    let mut context = context();
+    context.orders_complete = false;
+    context
+}
+
 fn valid_contexts() -> Vec<(&'static str, DecisionContextV6)> {
     vec![
         ("daily-high-recovery", context()),
@@ -146,6 +152,7 @@ fn valid_contexts() -> Vec<(&'static str, DecisionContextV6)> {
         ("converted-v5-checkpoint", converted_context()),
         ("live-request-grants", live_context()),
         ("row-limit-view", row_limit_case().0),
+        ("truncated-order-view", truncated_context()),
     ]
 }
 
@@ -182,6 +189,8 @@ fn order_updates_result(context: &DecisionContextV6) -> DecisionResultV6 {
             previous.sequence + 1,
             b"after-updates",
             RunnerSectionV6 {
+                seeded: true,
+                reported: vec![],
                 entries: previous.runner.entries[..1].to_vec(),
             },
         )),
@@ -233,6 +242,8 @@ fn converted_result(context: &DecisionContextV6) -> DecisionResultV6 {
         last_status: Some(OrderUpdateStatusV6::PartiallyFilled),
         filled_quantity_hundredths: order.filled_quantity_hundredths,
         order_revision: order.revision,
+        issued_broker_revision: 0,
+        vanished: false,
     };
     DecisionResultV6 {
         delivery_id: context.owner_state.delivery_id.clone(),
@@ -244,6 +255,8 @@ fn converted_result(context: &DecisionContextV6) -> DecisionResultV6 {
             KernelCheckpointV6 {
                 sequence: previous.sequence + 1,
                 runner: RunnerSectionV6 {
+                    seeded: true,
+                    reported: vec![],
                     entries: vec![adopted],
                 },
                 ..previous.clone()
@@ -337,6 +350,15 @@ fn invalid_contexts() -> Vec<(&'static str, DecisionV6Error, ContextMutation)> {
             |context| {
                 let mut checkpoint = context.kernel_checkpoint.take().unwrap();
                 checkpoint.runner.entries[0].last_status = Some(OrderUpdateStatusV6::Filled);
+                context.kernel_checkpoint = Some(checkpoint.seal());
+            },
+        ),
+        (
+            "unseeded-runner-section-with-entries",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                let mut checkpoint = context.kernel_checkpoint.take().unwrap();
+                checkpoint.runner.seeded = false;
                 context.kernel_checkpoint = Some(checkpoint.seal());
             },
         ),
@@ -517,8 +539,31 @@ fn invalid_results() -> Vec<(&'static str, &'static str, DecisionV6Error, Result
                 let checkpoint = result.kernel_checkpoint.take().unwrap();
                 let previous = context.kernel_checkpoint.as_ref().unwrap();
                 let runner = RunnerSectionV6 {
+                    seeded: true,
+                    reported: vec![],
                     entries: previous.runner.entries[..2].to_vec(),
                 };
+                result.kernel_checkpoint = Some(
+                    KernelCheckpointV6 {
+                        runner,
+                        ..checkpoint
+                    }
+                    .seal(),
+                );
+            },
+        ),
+        (
+            "cancel-all-over-a-truncated-view",
+            "truncated-order-view",
+            DecisionV6Error::InvalidContract,
+            |context, result| {
+                let command = StrategyCommandV6::CancelAllOrders {
+                    command_id: context.command_id(4),
+                };
+                result.commands[4] = command.clone();
+                let checkpoint = result.kernel_checkpoint.take().unwrap();
+                let mut runner = checkpoint.runner.clone();
+                runner.entries.push(command_entry(&command));
                 result.kernel_checkpoint = Some(
                     KernelCheckpointV6 {
                         runner,
@@ -842,7 +887,7 @@ fn v6_corpus_is_current_and_every_vector_decodes_to_its_verdict() {
         }
     }
     let invalid = recorded["invalid"].as_array().unwrap();
-    assert_eq!(invalid.len(), 31);
+    assert_eq!(invalid.len(), 33);
     for entry in invalid {
         let id = entry["id"].as_str().unwrap();
         let bytes = bytes(entry);

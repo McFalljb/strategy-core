@@ -9,7 +9,7 @@ use strategy_core_kernel::{
 use strategy_core_v3::decision_v6::{
     BrokerCommandKindV6, BrokerOrderStatusV6, BrokerOrderV6, CancelTargetV6, CommandOutcomeV6,
     CommandReceiptV6, ContractSideV6, DecisionResultV6, KernelCheckpointV5Layout,
-    MAX_BROKER_ORDERS, MAX_DECISION_PLAN_ROWS, MAX_STRATEGY_COMMANDS, OrderActionV6, OrderTypeV6,
+    MAX_DECISION_PLAN_ROWS, MAX_STRATEGY_COMMANDS, OrderActionV6, OrderTypeV6,
     convert_v5_kernel_checkpoint, validate_decision_result_v6,
 };
 
@@ -503,7 +503,9 @@ fn refusals_rejections_and_vanished_orders_arrive_as_final_updates() {
             .orders
             .iter()
             .any(|order| !order.status.is_terminal());
-        assert_eq!(tracked, usize::from(order_open), "{name}");
+        // A vanished order stays as a tombstone in case it reappears.
+        let tombstone = usize::from(name.contains("vanished"));
+        assert_eq!(tracked, usize::from(order_open) + tombstone, "{name}");
     }
 
     // A refused place has no order record, only its receipt.
@@ -869,8 +871,56 @@ fn a_decision_carries_at_most_64_commands() {
 }
 
 #[test]
+fn a_sleeve_holds_at_most_192_open_orders() {
+    let context = crowded_context(129);
+    let decision = decide(&context, |context, seen| {
+        for index in 0..63 {
+            context.broker().place_order(limit_buy(
+                &format!("new-{index}"),
+                ContractSide::Yes,
+                100,
+                0.01,
+            ))?;
+        }
+        seen.push(
+            context
+                .broker()
+                .place_order(limit_buy("one-more", ContractSide::Yes, 100, 0.01))
+                .unwrap_err()
+                .to_string(),
+        );
+        Ok(())
+    });
+    assert_eq!(decision.seen, ["a Sleeve holds at most 192 open orders"]);
+    let tracked = decision
+        .result
+        .kernel_checkpoint
+        .unwrap()
+        .runner
+        .entries
+        .len();
+    assert_eq!(tracked, 192, "the 129 open orders and the 63 places");
+}
+
+#[test]
 fn the_runner_tracks_at_most_256_orders_and_commands() {
-    let context = crowded_context(MAX_BROKER_ORDERS);
+    // 191 open orders, plus 65 tombstones of orders that vanished: 256 entries.
+    let crowded = crowded_context(191);
+    let seeded = decide(&crowded, nothing).result;
+    let mut checkpoint = seeded.kernel_checkpoint.clone().unwrap();
+    let template = checkpoint.runner.entries[0].clone();
+    checkpoint.runner.entries.extend((0..65).map(|index| {
+        strategy_core_v3::decision_v6::RunnerEntryV6 {
+            command_id: format!("command.gone.{index:03}"),
+            client_order_id: Some(format!("gone-{index:03}")),
+            order_id: None,
+            vanished: true,
+            ..template.clone()
+        }
+    }));
+    let mut context = crowded.clone();
+    context.kernel_checkpoint = Some(checkpoint.seal());
+    context.validate().unwrap();
     let decision = decide(&context, |context, seen| {
         seen.push(
             context
@@ -884,17 +934,6 @@ fn the_runner_tracks_at_most_256_orders_and_commands() {
     assert_eq!(
         decision.seen,
         ["the runner tracks at most 256 orders and commands"]
-    );
-    assert_eq!(
-        decision
-            .result
-            .kernel_checkpoint
-            .unwrap()
-            .runner
-            .entries
-            .len(),
-        MAX_BROKER_ORDERS,
-        "every open order is tracked"
     );
 }
 
@@ -1066,4 +1105,305 @@ fn events_come_from_the_contributor_station_that_triggered_them() {
     );
     assert!(decision.seen[0].contains("temperature_f: Some(66.2)"));
     assert_eq!(decision.seen[1], r#"["KBFI", "KSEA"]"#);
+}
+
+/// A context of the fixture Sleeve at Broker revision `revision`: the previous decision's
+/// checkpoint and the orders the host reports, complete or truncated.
+fn view(
+    context: &DecisionContextV6,
+    previous: &DecisionResultV6,
+    delivery: u32,
+    revision: u64,
+    orders: Vec<BrokerOrderV6>,
+    complete: bool,
+) -> DecisionContextV6 {
+    let mut next = follow_up(context, Some(previous), delivery, orders, vec![]);
+    next.broker.revision = revision;
+    next.owner_state.broker.revision = revision;
+    next.owner_state.fence.broker_revision = revision;
+    next.trigger = TriggerV6::BrokerState {
+        broker_revision: revision,
+    };
+    next.orders_complete = complete;
+    next.validate().unwrap();
+    next
+}
+
+#[test]
+fn an_order_missing_from_a_view_is_no_news_until_a_complete_newer_view() {
+    use BrokerOrderStatusV6::*;
+    let issuing = view(
+        &priced_context(),
+        &decide(&priced_context(), nothing).result,
+        1,
+        100,
+        vec![],
+        true,
+    );
+    let placed = decide(&issuing, place_yes);
+    let command_id = cid(1, 0);
+    let resting = vec![order(&command_id, "yes-1", Resting, 0, 1)];
+    let first = decide(
+        &view(&issuing, &placed.result, 2, 101, resting.clone(), true),
+        nothing,
+    );
+    assert_eq!(first.updates.len(), 1);
+    for (name, revision, complete) in [
+        ("a view that may predate the command's admission", 100, true),
+        ("an older view", 90, true),
+        ("a truncated view", 150, false),
+    ] {
+        let missing = decide(
+            &view(&issuing, &first.result, 3, revision, vec![], complete),
+            nothing,
+        );
+        assert!(missing.updates.is_empty(), "{name}");
+        assert_eq!(
+            missing
+                .result
+                .kernel_checkpoint
+                .as_ref()
+                .unwrap()
+                .runner
+                .entries,
+            first
+                .result
+                .kernel_checkpoint
+                .as_ref()
+                .unwrap()
+                .runner
+                .entries,
+            "{name}: the entry is kept as it was"
+        );
+    }
+    // An older record of the order than the one last reported is stale.
+    let partial = vec![order(&command_id, "yes-1", PartiallyFilled, 100, 5)];
+    let filled_some = decide(
+        &view(&issuing, &first.result, 3, 102, partial, true),
+        nothing,
+    );
+    let older = decide(
+        &view(&issuing, &filled_some.result, 4, 103, resting, true),
+        nothing,
+    );
+    assert!(older.updates.is_empty(), "an older order record is ignored");
+}
+
+#[test]
+fn a_vanished_order_that_reappears_reports_what_it_missed() {
+    use BrokerOrderStatusV6::*;
+    let context = priced_context();
+    let placed = decide(&context, place_yes);
+    let command_id = cid(1, 0);
+    let command = command_id.as_str();
+    // D2: resting.
+    let d2 = follow_up(
+        &context,
+        Some(&placed.result),
+        2,
+        vec![order(command, "yes-1", Resting, 0, 1)],
+        vec![],
+    );
+    let r2 = decide(&d2, nothing);
+    // D3: a complete, newer view no longer shows the order: reported final once.
+    let r3 = decide(
+        &follow_up(&context, Some(&r2.result), 3, vec![], vec![]),
+        nothing,
+    );
+    assert_eq!(
+        r3.updates.iter().map(summary).collect::<Vec<_>>(),
+        [(OrderUpdateStatus::Resting, 0, 0, true)]
+    );
+    let r3b = decide(
+        &follow_up(&context, Some(&r3.result), 4, vec![], vec![]),
+        nothing,
+    );
+    assert!(r3b.updates.is_empty(), "reported once");
+    // D5: it is back, filled: the fill is reported against the tombstone, never swallowed.
+    let d5 = follow_up(
+        &context,
+        Some(&r3b.result),
+        5,
+        vec![order(command, "yes-1", Filled, 300, 4)],
+        vec![],
+    );
+    let r5 = decide(&d5, nothing);
+    assert_eq!(
+        r5.updates.iter().map(summary).collect::<Vec<_>>(),
+        [(OrderUpdateStatus::Filled, 300, 0, true)]
+    );
+    assert_eq!(r5.result.acknowledged_command_ids, [command]);
+}
+
+#[test]
+fn a_refused_place_is_reported_even_when_its_client_id_matches_an_old_order() {
+    use BrokerOrderStatusV6::*;
+    let context = priced_context();
+    let placed = decide(&context, place_yes);
+    let old = cid(1, 0);
+    let d2 = follow_up(
+        &context,
+        Some(&placed.result),
+        2,
+        vec![order(&old, "yes-1", Filled, 300, 2)],
+        vec![],
+    );
+    let r2 = decide(&d2, nothing);
+    // The acknowledged order left the view; the kernel reuses its client id.
+    let r3 = decide(
+        &follow_up(&context, Some(&r2.result), 3, vec![], vec![]),
+        place_yes,
+    );
+    let new = cid(3, 0);
+    assert_eq!(r3.result.commands[0].command_id(), new);
+    // The Broker refused the duplicate; the old order is back in the view.
+    let d4 = follow_up(
+        &context,
+        Some(&r3.result),
+        4,
+        vec![order(&old, "yes-1", Filled, 300, 2)],
+        vec![refused(
+            &new,
+            BrokerCommandKindV6::PlaceOrder,
+            "duplicate_client_order_id",
+        )],
+    );
+    let r4 = decide(&d4, nothing);
+    assert_eq!(r4.updates.len(), 1);
+    assert_eq!(r4.updates[0].command_id, new);
+    assert!(matches!(
+        r4.updates[0].status,
+        OrderUpdateStatus::Refused { .. }
+    ));
+}
+
+#[test]
+fn kernel_client_ids_may_not_use_the_derived_prefix() {
+    let decision = decide(&priced_context(), |context, seen| {
+        seen.push(
+            context
+                .broker()
+                .place_order(limit_buy("tv3paper_mine", ContractSide::Yes, 100, 0.4))
+                .unwrap_err()
+                .to_string(),
+        );
+        Ok(())
+    });
+    assert!(decision.seen[0].contains("reserved"), "{:?}", decision.seen);
+    assert!(decision.result.commands.is_empty());
+}
+
+#[test]
+fn a_truncated_view_allows_no_cancel_all() {
+    let mut context = priced_context();
+    context.orders_complete = false;
+    let decision = decide(&context, |context, seen| {
+        seen.push(
+            context
+                .broker()
+                .cancel_all_orders()
+                .unwrap_err()
+                .to_string(),
+        );
+        Ok(())
+    });
+    assert!(
+        decision.seen[0].contains("truncated"),
+        "{:?}",
+        decision.seen
+    );
+}
+
+/// A small deterministic generator for the property test.
+struct Lcg(u64);
+
+impl Lcg {
+    fn next(&mut self, bound: u64) -> u64 {
+        self.0 = self
+            .0
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        (self.0 >> 33) % bound
+    }
+}
+
+#[test]
+fn every_fill_is_reported_exactly_once_whatever_the_views() {
+    use BrokerOrderStatusV6::*;
+    for seed in 0..150 {
+        let mut rng = Lcg(seed);
+        let base = priced_context();
+        let seeded = decide(&base, nothing).result;
+        let issuing = view(&base, &seeded, 1, 100, vec![], true);
+        let placed = decide(&issuing, place_yes);
+        let command_id = cid(1, 0);
+
+        // The order's true history: filled grows to 300, each state a newer order revision.
+        let mut history = vec![order(&command_id, "yes-1", DurablyAccepted, 0, 1)];
+        let mut filled = 0;
+        while filled < 300 {
+            filled = (filled + 25 * (1 + rng.next(4))).min(300);
+            let status = if filled == 300 {
+                Filled
+            } else if rng.next(2) == 0 {
+                PartiallyFilled
+            } else {
+                CancellationRequested
+            };
+            let revision = history.len() as u64 + 1;
+            history.push(order(&command_id, "yes-1", status, filled, revision));
+        }
+
+        let mut previous = placed.result;
+        let mut truth = 0;
+        let mut revision = 100;
+        let mut reported_fill = 0;
+        let mut filled_updates = 0;
+        let mut delivery = 2;
+        let mut step = |orders: Vec<BrokerOrderV6>,
+                        revision: u64,
+                        complete: bool,
+                        previous: &mut DecisionResultV6| {
+            let context = view(&issuing, previous, delivery, revision, orders, complete);
+            delivery += 1;
+            let decision = decide(&context, nothing);
+            *previous = decision.result;
+            decision.updates
+        };
+        for _ in 0..(history.len() * 3) {
+            truth = (truth + rng.next(2) as usize).min(history.len() - 1);
+            revision += 1 + rng.next(3);
+            let (orders, at, complete) = match rng.next(10) {
+                // A view that may predate the admission, or is older still.
+                0 | 1 => (vec![], 100 - rng.next(20), true),
+                // A truncated view without the order.
+                2 | 3 => (vec![], revision, false),
+                // A complete view without it (the order vanished for now).
+                4 => (vec![], revision, true),
+                // A delayed or reordered view of an earlier state.
+                _ => {
+                    let earliest = truth.saturating_sub(2);
+                    let shown = earliest + rng.next((truth - earliest + 1) as u64) as usize;
+                    (vec![history[shown].clone()], revision, true)
+                }
+            };
+            for update in step(orders, at, complete, &mut previous) {
+                reported_fill += update.newly_filled.hundredths();
+                filled_updates += usize::from(update.status == OrderUpdateStatus::Filled);
+            }
+        }
+        // Eventually the host shows the final state.
+        revision += 1;
+        for update in step(
+            vec![history.last().unwrap().clone()],
+            revision,
+            true,
+            &mut previous,
+        ) {
+            reported_fill += update.newly_filled.hundredths();
+            filled_updates += usize::from(update.status == OrderUpdateStatus::Filled);
+        }
+        assert_eq!(reported_fill, 300, "seed {seed}: every fill exactly once");
+        assert_eq!(filled_updates, 1, "seed {seed}: one Filled update");
+    }
 }
