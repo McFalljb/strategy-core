@@ -1452,14 +1452,24 @@ fn with_deferred_cancel(
     checkpoint.seal()
 }
 
+/// How a cancel's refusal came to count as seen.
+struct Seen {
+    /// The decision its entry went in.
+    delivery: u32,
+    /// Its (failures, deferrals) after each earlier decision.
+    pending: Vec<(u8, u8)>,
+    /// It was abandoned rather than delivered.
+    abandoned: bool,
+}
+
 /// Runs decisions 2.. over `view(delivery)` with the cancel's refusal receipt until the
-/// cancel's entry is gone; returns the decision it went in and its failures on the way.
+/// cancel's entry is gone.
 fn run_until_cancel_is_seen(
     factory: &ScriptedFactory,
     checkpoint: KernelCheckpointV6,
     kind: BrokerCommandKindV6,
     view: impl Fn(u32) -> Vec<BrokerOrderV6>,
-) -> (u32, Vec<(u8, u8)>) {
+) -> Seen {
     let context = priced_context();
     let receipt = || {
         vec![CommandReceiptV6 {
@@ -1496,8 +1506,17 @@ fn run_until_cancel_is_seen(
         history.push((result, cancel));
         if cancel.is_none() {
             assert!(seen, "the refusal's receipt is acknowledged once seen");
-            let failures = history.iter().filter_map(|(_, cancel)| *cancel).collect();
-            return (delivery, failures);
+            let (last, _) = history.last().unwrap();
+            let abandoned = last.diagnostics.iter().any(|diagnostic| {
+                diagnostic.code == "order_update_abandoned"
+                    && diagnostic.message.contains("command.cancel")
+            });
+            let pending = history.iter().filter_map(|(_, cancel)| *cancel).collect();
+            return Seen {
+                delivery,
+                pending,
+                abandoned,
+            };
         }
     }
     panic!("the cancel's refusal never counted as seen");
@@ -1508,12 +1527,13 @@ fn history_result(history: &[(DecisionResultV6, Option<(u8, u8)>)]) -> &Decision
 }
 
 #[test]
-fn a_deferred_cancel_shares_its_room_with_the_target_pulled_before_it() {
+fn a_deferred_cancel_whose_unit_never_fits_is_abandoned_after_three_counted_failures() {
     use BrokerOrderStatusV6::*;
     // Every update of `t` (the cancel's refusal names `t` too) places 40 orders: its fill
     // pulled before the deferred cancel takes 40 of the 64 commands. They are one delivery
-    // unit, so the cancel's refusal for the room counts and it is seen within three
-    // counted failures, not deferred until abandoned.
+    // unit that needs 80 commands and never fits, so the cancel's refusal for the room
+    // counts, and it is abandoned (by design) after three counted failures instead of being
+    // deferred until the deferral bound.
     const FORTY_T: &[Act] = &[Act {
         client: "t",
         issue: place_unique,
@@ -1526,21 +1546,54 @@ fn a_deferred_cancel_shares_its_room_with_the_target_pulled_before_it() {
         vec![order("command.t", "t", PartiallyFilled, filled, filled + 1)]
     };
     let checkpoint = with_deferred_cancel(&factory, view(1), Some("t"));
-    let (seen_in, failures) =
+    let seen =
         run_until_cancel_is_seen(&factory, checkpoint, BrokerCommandKindV6::CancelOrder, view);
-    assert!(seen_in <= 7, "seen in decision {seen_in}: {failures:?}");
+    assert!(seen.abandoned, "an 80-command unit never fits: abandoned");
     assert!(
-        failures.iter().all(|(_, deferrals)| *deferrals <= 1),
-        "never deferred twice in a row: {failures:?}"
+        seen.delivery <= 7,
+        "seen in decision {}: {:?}",
+        seen.delivery,
+        seen.pending
+    );
+    assert!(
+        seen.pending.iter().all(|(_, deferrals)| *deferrals <= 1),
+        "never deferred twice in a row: {:?}",
+        seen.pending
     );
 }
 
 #[test]
-fn a_deferred_cancel_all_shares_its_room_with_every_earlier_order_pulled_before_it() {
+fn a_deferred_cancel_is_delivered_once_its_target_stops_moving() {
+    use BrokerOrderStatusV6::*;
+    const FORTY_T: &[Act] = &[Act {
+        client: "t",
+        issue: place_unique,
+        count: 40,
+        on_refusal: OnRefusal::Return,
+    }];
+    let factory = ScriptedFactory(FORTY_T);
+    // `t` moves in decisions 2 and 3, then stays.
+    let view = |delivery: u32| {
+        let filled = u64::from(delivery.min(3));
+        vec![order("command.t", "t", PartiallyFilled, filled, filled + 1)]
+    };
+    let checkpoint = with_deferred_cancel(&factory, view(1), Some("t"));
+    let seen =
+        run_until_cancel_is_seen(&factory, checkpoint, BrokerCommandKindV6::CancelOrder, view);
+    assert!(!seen.abandoned, "delivered: {:?}", seen.pending);
+    assert_eq!(
+        seen.delivery, 4,
+        "the first decision without a move of its target"
+    );
+}
+
+#[test]
+fn a_deferred_cancel_all_whose_unit_never_fits_is_abandoned_after_three_counted_failures() {
     use BrokerOrderStatusV6::*;
     // Three orders move every decision and each update places 20 orders; a deferred
     // cancel-all pulls all three before it (60 commands), then its own refusal update tries
-    // 20 more.
+    // 20 more: an 80-command unit that never fits, so it is abandoned (by design) after
+    // three counted failures.
     const TWENTY: &[Act] = &[
         Act {
             client: "a",
@@ -1584,15 +1637,85 @@ fn a_deferred_cancel_all_shares_its_room_with_every_earlier_order_pulled_before_
             .collect::<Vec<_>>()
     };
     let checkpoint = with_deferred_cancel(&factory, view(1), None);
-    let (seen_in, failures) = run_until_cancel_is_seen(
+    let seen = run_until_cancel_is_seen(
         &factory,
         checkpoint,
         BrokerCommandKindV6::CancelAllOrders,
         view,
     );
-    assert!(seen_in <= 7, "seen in decision {seen_in}: {failures:?}");
+    assert!(seen.abandoned, "an 80-command unit never fits: abandoned");
     assert!(
-        failures.iter().all(|(_, deferrals)| *deferrals <= 1),
-        "never deferred twice in a row: {failures:?}"
+        seen.delivery <= 7,
+        "seen in decision {}: {:?}",
+        seen.delivery,
+        seen.pending
     );
+    assert!(
+        seen.pending.iter().all(|(_, deferrals)| *deferrals <= 1),
+        "never deferred twice in a row: {:?}",
+        seen.pending
+    );
+}
+
+#[test]
+fn a_deferred_cancel_all_waits_for_a_target_whose_update_failed() {
+    use BrokerOrderStatusV6::*;
+    // a and b place 30 orders each, c 30 more: in the cancel-all's unit, c's update is
+    // refused for room (counted). The cancel-all is not delivered in that decision; it
+    // follows c's update in the next.
+    const THIRTIES: &[Act] = &[
+        Act {
+            client: "a",
+            issue: place_unique,
+            count: 30,
+            on_refusal: OnRefusal::Return,
+        },
+        Act {
+            client: "b",
+            issue: place_unique,
+            count: 30,
+            on_refusal: OnRefusal::Return,
+        },
+        Act {
+            client: "c",
+            issue: place_unique,
+            count: 30,
+            on_refusal: OnRefusal::Return,
+        },
+        Act {
+            client: "",
+            issue: place_unique,
+            count: 4,
+            on_refusal: OnRefusal::Return,
+        },
+    ];
+    let factory = ScriptedFactory(THIRTIES);
+    // Every order moves in decision 2, then stays.
+    let view = |delivery: u32| {
+        let filled = u64::from(delivery.min(2));
+        ["a", "b", "c"]
+            .into_iter()
+            .map(|client| {
+                order(
+                    &format!("command.{client}"),
+                    client,
+                    PartiallyFilled,
+                    filled,
+                    filled + 1,
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let checkpoint = with_deferred_cancel(&factory, view(1), None);
+    let seen = run_until_cancel_is_seen(
+        &factory,
+        checkpoint,
+        BrokerCommandKindV6::CancelAllOrders,
+        view,
+    );
+    // Decision 2: held, as it was (no failure, no further deferral).
+    assert_eq!(seen.pending, [(0, 1)]);
+    // Decision 3: c's update, then the cancel-all's.
+    assert_eq!(seen.delivery, 3);
+    assert!(!seen.abandoned);
 }

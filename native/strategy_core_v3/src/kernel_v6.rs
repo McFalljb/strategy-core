@@ -191,21 +191,39 @@ pub fn run_transaction<F: TransactionKernelFactory>(
     // still delivered.
     let mut failed = BTreeMap::new();
     let mut start = Some(host.save());
+    // (first of its unit, the cancel closing a unit of pulled targets, step index)
     let units = delivery_order.iter().flat_map(|unit| {
+        let len = unit.len();
         unit.iter()
             .enumerate()
-            .map(move |(position, index)| (position == 0, *index))
+            .map(move |(position, index)| (position == 0, len > 1 && position + 1 == len, *index))
     });
-    // What the decision had issued when the current delivery unit began.
+    // What the decision had issued when the current delivery unit began, and whether an
+    // update of the unit failed.
     let mut unit_start = None;
-    for (first_of_unit, index) in units {
+    let mut unit_failed = false;
+    for (first_of_unit, closes_unit, index) in units {
         if first_of_unit {
             unit_start = None;
+            unit_failed = false;
         }
         let step = &derived.steps[index];
         let Some(record) = &step.update else {
             continue;
         };
+        // A unit is all or nothing for its cancel: when an update of a target failed, the
+        // cancel's waits, as it was, to follow the target's in a later decision.
+        if closes_unit && unit_failed {
+            failed.insert(index, Failure::RolledBack);
+            host.outputs.push(HostOutput::UpdateError(
+                format!(
+                    "order update of {} held: an update of its target failed in this decision",
+                    record.command_id
+                ),
+                Failure::RolledBack,
+            ));
+            continue;
+        }
         let describe = |failure: Failure, error: &dyn std::fmt::Display| {
             let attempt = match failure {
                 Failure::Deferred => format!(
@@ -229,6 +247,7 @@ pub fn run_transaction<F: TransactionKernelFactory>(
         let snapshot = match kernel.encode_checkpoint_state() {
             Ok(state) => snapshot_checkpoint(context, &codec, state),
             Err(error) => {
+                unit_failed = true;
                 failed.insert(index, Failure::Counted);
                 host.outputs.push(describe(
                     Failure::Counted,
@@ -245,6 +264,7 @@ pub fn run_transaction<F: TransactionKernelFactory>(
         let Err(error) = delivered else {
             continue;
         };
+        unit_failed = true;
         host.restore(saved);
         match factory.restore(context, &snapshot) {
             Ok(restored) => {
