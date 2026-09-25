@@ -91,6 +91,17 @@ fn provenance(event_id: &str, sequence: u64) -> ProvenanceV4 {
     }
 }
 
+/// The id of the fixture Sleeve's command at `ordinal` in delivery `delivery.daily.<delivery>`.
+fn cid(delivery: u32, ordinal: u32) -> String {
+    strategy_core_v3::decision_v6::command_id_v6(
+        &derive_sleeve_identity_v6("fixture", "binding.daily", "kalshi", OPPORTUNITY),
+        1,
+        &format!("delivery.daily.{delivery}"),
+        ordinal,
+    )
+    .unwrap()
+}
+
 fn base_context() -> DecisionContextV6 {
     let owner_state = DecisionContextV4 {
         delivery_id: "delivery.daily.1".to_owned(),
@@ -1085,13 +1096,16 @@ fn transaction_runner_presents_the_event_over_supplied_state_and_bridges_the_bro
     let StrategyCommandV6::PlaceOrder(command) = &placed.commands[0] else {
         panic!("expected place order");
     };
-    assert_eq!(command.command_id, "command.delivery.daily.1.0");
+    assert_eq!(command.command_id, cid(1, 0));
     assert_eq!(command.provider_client_id, "client.fixture.1");
     assert_eq!(command.quantity_hundredths, 300);
     assert_eq!(command.limit_price_micros, Some(400_000));
     assert!(
         seen.iter().any(|line| line
-            == r#"placed=OrderTicket { command_id: "command.delivery.daily.1.0", client_order_id: "client.fixture.1" }"#),
+            == &format!(
+                r#"placed=OrderTicket {{ command_id: "{}", client_order_id: "client.fixture.1" }}"#,
+                cid(1, 0)
+            )),
         "{seen:?}"
     );
     let runner = &placed.kernel_checkpoint.as_ref().unwrap().runner;

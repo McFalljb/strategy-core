@@ -260,9 +260,13 @@ fn order_updates_report_each_transition_once_and_again_after_a_checkpoint_regres
     let placed = decide(&context, place_yes);
     assert_eq!(
         placed.seen,
-        [r#"OrderTicket { command_id: "command.delivery.daily.1.0", client_order_id: "yes-1" }"#]
+        [format!(
+            r#"OrderTicket {{ command_id: "{}", client_order_id: "yes-1" }}"#,
+            cid(1, 0)
+        )]
     );
-    let command = "command.delivery.daily.1.0";
+    let command_id = cid(1, 0);
+    let command = command_id.as_str();
 
     let steps = [
         (DurablyAccepted, 0, Some((Seen::Accepted, 0, 300, false))),
@@ -352,7 +356,8 @@ fn refusals_rejections_and_vanished_orders_arrive_as_final_updates() {
     use BrokerCommandKindV6::*;
     let context = priced_context();
     let placed = decide(&context, place_yes);
-    let command = "command.delivery.daily.1.0";
+    let command_id = cid(1, 0);
+    let command = command_id.as_str();
     let accepted = follow_up(
         &context,
         Some(&placed.result),
@@ -394,16 +399,8 @@ fn refusals_rejections_and_vanished_orders_arrive_as_final_updates() {
             "a refused cancel and cancel-all leave the order tracked",
             vec![order(command, "yes-1", BrokerOrderStatusV6::Resting, 0, 1)],
             vec![
-                refused(
-                    "command.delivery.daily.2.0",
-                    CancelOrder,
-                    "stale_order_revision",
-                ),
-                refused(
-                    "command.delivery.daily.2.1",
-                    CancelAllOrders,
-                    "live_dispatch_unarmed",
-                ),
+                refused(&cid(2, 0), CancelOrder, "stale_order_revision"),
+                refused(&cid(2, 1), CancelAllOrders, "live_dispatch_unarmed"),
             ],
             vec![
                 (
@@ -429,12 +426,12 @@ fn refusals_rejections_and_vanished_orders_arrive_as_final_updates() {
             )],
             vec![
                 CommandReceiptV6 {
-                    command_id: "command.delivery.daily.2.0".to_owned(),
+                    command_id: cid(2, 0),
                     kind: CancelOrder,
                     outcome: CommandOutcomeV6::Accepted,
                 },
                 CommandReceiptV6 {
-                    command_id: "command.delivery.daily.2.1".to_owned(),
+                    command_id: cid(2, 1),
                     kind: CancelAllOrders,
                     outcome: CommandOutcomeV6::Accepted,
                 },
@@ -588,7 +585,7 @@ fn a_kernel_error_in_an_update_rejects_the_decision_and_the_update_comes_again()
         Some(&placed.result),
         2,
         vec![order(
-            "command.delivery.daily.1.0",
+            &cid(1, 0),
             "yes-1",
             BrokerOrderStatusV6::Resting,
             0,
@@ -707,11 +704,11 @@ fn a_same_decision_cancel_names_the_client_order_and_marks_it() {
         }
         Ok(())
     });
-    assert_eq!(decision.seen, ["command.delivery.daily.1.1"]);
+    assert_eq!(decision.seen, [cid(1, 1)]);
     assert_eq!(
         decision.result.commands[1],
         StrategyCommandV6::CancelOrder {
-            command_id: "command.delivery.daily.1.1".to_owned(),
+            command_id: cid(1, 1),
             target: CancelTargetV6::SameDecision {
                 provider_client_id: "yes-1".to_owned(),
             },
@@ -737,14 +734,14 @@ fn a_same_decision_cancel_names_the_client_order_and_marks_it() {
         Some(&decision.result),
         2,
         vec![order(
-            "command.delivery.daily.1.0",
+            &cid(1, 0),
             "yes-1",
             BrokerOrderStatusV6::Cancelled,
             0,
             1,
         )],
         vec![CommandReceiptV6 {
-            command_id: "command.delivery.daily.1.1".to_owned(),
+            command_id: cid(1, 1),
             kind: BrokerCommandKindV6::CancelOrder,
             outcome: CommandOutcomeV6::Accepted,
         }],
@@ -868,10 +865,7 @@ fn a_decision_carries_at_most_64_commands() {
     });
     assert_eq!(decision.seen, ["a decision carries at most 64 commands"; 2]);
     assert_eq!(decision.result.commands.len(), MAX_STRATEGY_COMMANDS);
-    assert_eq!(
-        decision.result.commands[63].command_id(),
-        "command.delivery.daily.1.63"
-    );
+    assert_eq!(decision.result.commands[63].command_id(), cid(1, 63));
 }
 
 #[test]

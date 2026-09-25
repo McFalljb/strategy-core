@@ -810,15 +810,58 @@ impl DecisionContextV6 {
         format!("timer.{}", self.owner_state.delivery_id)
     }
 
-    /// The id of the decision's command at `ordinal`.
+    /// The id of the decision's command at `ordinal` ([`command_id_v6`]).
     pub fn command_id(&self, ordinal: usize) -> String {
-        command_id_v6(&self.owner_state.delivery_id, ordinal)
+        let sleeve = &self.owner_state.sleeve;
+        u32::try_from(ordinal)
+            .ok()
+            .and_then(|ordinal| {
+                command_id_v6(
+                    &sleeve.sleeve_id,
+                    sleeve.incarnation,
+                    &self.owner_state.delivery_id,
+                    ordinal,
+                )
+            })
+            .expect("a validated context has a digest Sleeve id and a bounded ordinal")
     }
 }
 
-/// `command.<delivery_id>.<ordinal>`.
-pub fn command_id_v6(delivery_id: &str, ordinal: usize) -> String {
-    format!("command.{delivery_id}.{ordinal}")
+/// The IntentId of a decision's command at `ordinal`, as traderv3 derives it:
+/// `sha256(INTENT_DOMAIN, DecisionId, ordinal)` with `DecisionId = sha256(DECISION_DOMAIN,
+/// Sleeve id, incarnation, delivery id)`. The ordinal is the command's index in the result,
+/// timer and stop commands included. `None` when the Sleeve id is not a 64-hex digest.
+pub fn intent_id_v6(
+    sleeve_id: &str,
+    incarnation: u64,
+    delivery_id: &str,
+    ordinal: u32,
+) -> Option<[u8; 32]> {
+    let sleeve = parse_hex_digest(sleeve_id)?;
+    let length = u16::try_from(delivery_id.len()).ok()?;
+    let mut decision = Sha256::new();
+    decision.update(DECISION_ID_DOMAIN);
+    decision.update(sleeve);
+    decision.update(incarnation.to_be_bytes());
+    decision.update(length.to_be_bytes());
+    decision.update(delivery_id.as_bytes());
+    let mut intent = Sha256::new();
+    intent.update(INTENT_ID_DOMAIN);
+    intent.update(decision.finalize());
+    intent.update(ordinal.to_be_bytes());
+    Some(intent.finalize().into())
+}
+
+/// `command.<first 32 hex digits of the command's IntentId>`: deterministic, and unique across
+/// Sleeves, incarnations and deliveries because the IntentId binds all three.
+pub fn command_id_v6(
+    sleeve_id: &str,
+    incarnation: u64,
+    delivery_id: &str,
+    ordinal: u32,
+) -> Option<String> {
+    let intent = intent_id_v6(sleeve_id, incarnation, delivery_id, ordinal)?;
+    Some(format!("command.{}", &hex_digest(&intent)[..32]))
 }
 
 fn validate_market_strikes(context: &DecisionContextV6) -> Result<(), DecisionV6Error> {
@@ -1634,10 +1677,7 @@ impl DecisionResultV6 {
         let generation = format!("timer.{}", self.delivery_id);
         let mut client_ids = BTreeSet::new();
         let mut timer_keys = BTreeSet::new();
-        for (ordinal, command) in self.commands.iter().enumerate() {
-            if command.command_id() != command_id_v6(&self.delivery_id, ordinal) {
-                return Err(DecisionV6Error::InvalidContract);
-            }
+        for command in &self.commands {
             validate_command(command)?;
             match command {
                 StrategyCommandV6::PlaceOrder(order) => {
@@ -1682,10 +1722,15 @@ impl DecisionResultV6 {
                     .iter()
                     .map(|entry| entry.command_id.as_str())
                     .collect::<BTreeSet<_>>();
-                // Every Broker command is tracked until its outcome is seen.
+                // Every Broker command is tracked until its outcome is seen, and nothing
+                // tracked is acknowledged.
                 if self.commands.iter().any(|command| {
                     command.broker_kind().is_some() && !tracked.contains(command.command_id())
-                }) {
+                }) || self
+                    .acknowledged_command_ids
+                    .iter()
+                    .any(|id| tracked.contains(id.as_str()))
+                {
                     return Err(DecisionV6Error::InvalidContract);
                 }
                 Ok(())
@@ -1715,6 +1760,11 @@ pub fn validate_decision_result_v6(
         return Err(DecisionV6Error::InvalidContract);
     }
     validate_checkpoint_transition(context, result)?;
+    for (ordinal, command) in result.commands.iter().enumerate() {
+        if command.command_id() != context.command_id(ordinal) {
+            return Err(DecisionV6Error::InvalidContract);
+        }
+    }
     for command in &result.commands {
         match command {
             StrategyCommandV6::PlaceOrder(order)
@@ -2014,20 +2064,12 @@ pub fn derive_provider_client_id_v6(
     delivery_id: &str,
     ordinal: u32,
 ) -> Option<String> {
-    let sleeve = parse_hex_digest(sleeve_id)?;
-    let length = u16::try_from(delivery_id.len()).ok()?;
-    let mut decision = Sha256::new();
-    decision.update(DECISION_ID_DOMAIN);
-    decision.update(sleeve);
-    decision.update(incarnation.to_be_bytes());
-    decision.update(length.to_be_bytes());
-    decision.update(delivery_id.as_bytes());
-    let mut intent = Sha256::new();
-    intent.update(INTENT_ID_DOMAIN);
-    intent.update(decision.finalize());
-    intent.update(ordinal.to_be_bytes());
-    let intent = hex_digest(&intent.finalize());
-    Some(format!("tv3{}_{}", mode.as_str(), &intent[..24]))
+    let intent = intent_id_v6(sleeve_id, incarnation, delivery_id, ordinal)?;
+    Some(format!(
+        "tv3{}_{}",
+        mode.as_str(),
+        &hex_digest(&intent)[..24]
+    ))
 }
 
 fn parse_hex_digest(value: &str) -> Option<[u8; 32]> {

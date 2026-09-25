@@ -394,10 +394,10 @@ fn invalid_results() -> Vec<(&'static str, &'static str, DecisionV6Error, Result
             "same-decision-cancel-before-its-place",
             "daily-high-recovery",
             DecisionV6Error::InvalidContract,
-            |_, result| {
+            |context, result| {
                 result.commands.swap(0, 2);
                 for (ordinal, command) in result.commands.iter_mut().enumerate() {
-                    let id = command_id_v6(&result.delivery_id, ordinal);
+                    let id = context.command_id(ordinal);
                     match command {
                         StrategyCommandV6::PlaceOrder(order) => order.command_id = id,
                         StrategyCommandV6::CancelOrder { command_id, .. }
@@ -507,6 +507,26 @@ fn invalid_results() -> Vec<(&'static str, &'static str, DecisionV6Error, Result
             "row-limit-view",
             DecisionV6Error::BoundExceeded,
             |_, result| *result = row_limit_case().1,
+        ),
+        (
+            "acknowledges-a-tracked-command",
+            "receipts-broker-state",
+            DecisionV6Error::InvalidContract,
+            |context, result| {
+                *result = order_updates_result(context);
+                let checkpoint = result.kernel_checkpoint.take().unwrap();
+                let previous = context.kernel_checkpoint.as_ref().unwrap();
+                let runner = RunnerSectionV6 {
+                    entries: previous.runner.entries[..2].to_vec(),
+                };
+                result.kernel_checkpoint = Some(
+                    KernelCheckpointV6 {
+                        runner,
+                        ..checkpoint
+                    }
+                    .seal(),
+                );
+            },
         ),
         (
             "timer-without-the-timer-grant",
@@ -822,7 +842,7 @@ fn v6_corpus_is_current_and_every_vector_decodes_to_its_verdict() {
         }
     }
     let invalid = recorded["invalid"].as_array().unwrap();
-    assert_eq!(invalid.len(), 30);
+    assert_eq!(invalid.len(), 31);
     for entry in invalid {
         let id = entry["id"].as_str().unwrap();
         let bytes = bytes(entry);

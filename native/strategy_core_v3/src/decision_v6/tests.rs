@@ -929,3 +929,44 @@ fn terminal_orders_that_stopped_early_may_report_nothing_remaining() {
         "a host can quarantine a record before building the context"
     );
 }
+
+#[test]
+fn command_ids_are_the_intent_ids_and_unique_across_sleeves() {
+    let context = context();
+    let sleeve = &context.owner_state.sleeve;
+    let intent = intent_id_v6(
+        &sleeve.sleeve_id,
+        sleeve.incarnation,
+        &context.owner_state.delivery_id,
+        3,
+    )
+    .unwrap();
+    assert_eq!(
+        context.command_id(3),
+        format!("command.{}", &hex_digest(&intent)[..32])
+    );
+    let other_sleeve =
+        derive_sleeve_identity_v6("other", "binding", "kalshi", "KXHIGHTSEA-26AUG30");
+    let variants = [
+        command_id_v6(&sleeve.sleeve_id, 1, "delivery.daily.1", 0),
+        command_id_v6(&other_sleeve, 1, "delivery.daily.1", 0),
+        command_id_v6(&sleeve.sleeve_id, 2, "delivery.daily.1", 0),
+        command_id_v6(&sleeve.sleeve_id, 1, "delivery.daily.2", 0),
+        command_id_v6(&sleeve.sleeve_id, 1, "delivery.daily.1", 1),
+    ];
+    assert_eq!(
+        variants.iter().collect::<BTreeSet<_>>().len(),
+        variants.len(),
+        "Sleeve, incarnation, delivery and ordinal all separate command ids"
+    );
+    // The derived client order id is the same IntentId's prefix.
+    let client = derive_provider_client_id_v6(
+        DeploymentModeV6::Paper,
+        &sleeve.sleeve_id,
+        1,
+        "delivery.daily.1",
+        3,
+    )
+    .unwrap();
+    assert_eq!(client, format!("tv3paper_{}", &hex_digest(&intent)[..24]));
+}

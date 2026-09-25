@@ -405,7 +405,7 @@ fn a_timer_handle_cancels_with_the_generation_the_timer_was_scheduled_under() {
     assert_eq!(
         timer_commands(&cancelled),
         [(
-            "command.delivery.daily.2.0".to_owned(),
+            cid(2, 0),
             "exit.check".to_owned(),
             "timer.delivery.daily.1".to_owned(),
             "cancel"
@@ -463,25 +463,25 @@ fn a_decision_carries_at_most_one_timer_operation_per_key() {
         timer_commands(&result),
         [
             (
-                "command.delivery.daily.1.0".to_owned(),
+                cid(1, 0),
                 "a".to_owned(),
                 "timer.delivery.daily.1".to_owned(),
                 "schedule"
             ),
             (
-                "command.delivery.daily.1.1".to_owned(),
+                cid(1, 1),
                 "b".to_owned(),
                 "timer.delivery.daily.1".to_owned(),
                 "schedule"
             ),
             (
-                "command.delivery.daily.1.2".to_owned(),
+                cid(1, 2),
                 "c".to_owned(),
                 "timer.delivery.daily.0".to_owned(),
                 "cancel"
             ),
             (
-                "command.delivery.daily.1.3".to_owned(),
+                cid(1, 3),
                 "kernel.wake".to_owned(),
                 "timer.delivery.daily.1".to_owned(),
                 "schedule"
