@@ -26,10 +26,14 @@ V6 context (owner projection, scope, Broker state, command receipts, checkpoint,
 - `Rejected` (the kernel returned an error for the trigger) carries no commands and no
   acknowledgements and keeps the checkpoint unchanged, so the next decision derives the same
   updates again.
-- A kernel error on one order update does not reject the decision: the kernel and the
-  decision's commands go back to how they were before that update, a `kernel_error`
-  diagnostic names it, the update counts as seen, and the remaining updates and the trigger
-  are delivered.
+- A kernel error on one order update does not reject the decision. The runner snapshots the
+  kernel with its own checkpoint codec before each update; on an error it restores the
+  kernel through the factory, undoes the commands and telemetry of that update (its logs
+  stay), records a `kernel_error` diagnostic naming the update and its attempt, and goes on
+  with the remaining updates and the trigger. The entry stays as it was and the update is
+  delivered again in the next decisions, up to `MAX_DELIVERY_ATTEMPTS = 3`; then it counts
+  as seen (`order_update_abandoned`). Until then its receipt or terminal order is not
+  acknowledged.
 - The host validates with `validate_decision_result_v6(context, result)`, which binds the
   delivery, Sleeve, state fence (`decision_fence_v6_sha256`), Broker revision, Market scope,
   cancel targets, timer capability, acknowledgements and the plan row limit.
@@ -44,9 +48,11 @@ V6 context (owner projection, scope, Broker state, command receipts, checkpoint,
 
 Decoding claims every length prefix (and every decoded integer at its full width) against
 the bound of its magic before allocating, so a corrupt prefix is a `Decode` error, never an
-allocation abort. Encoding checks the bytes decode within that limit. The runner keeps a
-result within `RESULT_ENCODED_BUDGET_BYTES` (896 KiB), which leaves room for the decoder's
-integer accounting.
+allocation abort. Encoding checks the bytes decode within that limit. The runner admits
+commands and telemetry against `RESULT_ENCODED_BUDGET_BYTES` (896 KiB), leaving room for the
+decoder's integer accounting, then checks the result decodes under its bound and sheds
+telemetry, then logs, until it does (`kernel_telemetry_overflow` counts them). Commands, the
+checkpoint and order updates are never shed; `run_transaction` does not fail for size.
 
 `DecisionContextV6` is the V5 context without `continuation`, `broker_replay` or the
 frozen-encoding evidence, plus:
@@ -56,15 +62,17 @@ frozen-encoding evidence, plus:
   until Phase 4 grants any).
 - `orders_complete`: true when `broker.orders` holds every order of the Sleeve the host
   keeps. The host sets it false when it had to truncate the view; a truncated view never
-  reports an order as vanished and allows no cancel-all.
+  reports an order as vanished, never seeds the runner section and allows no cancel-all.
 - `command_receipts`: the outcome of each recent command without an order record (a refused
   place, a cancel, a cancel-all), strictly sorted by command id, at most 256. A place receipt
   is always a refusal: an admitted place has an order record. A command never has both.
 
 The Sleeve's order view holds at most `MAX_BROKER_ORDERS = 256` orders. A Sleeve holds at
-most `MAX_OPEN_ORDERS = 192` open orders (open context orders plus the decision's places),
-which leaves 64 slots for terminal orders whose outcome the Strategy has not yet
-acknowledged; the host keeps those ahead of acknowledged ones. `validate_broker_order_v6`
+most `max_open_orders(mode)` open orders (open context orders plus the decision's places):
+192 in paper, 168 in live (`(512 - 5 - 3) / 3`), so a cancel-all over every open order
+always fits the decision plan in either mode. That leaves at least 64 slots for terminal
+orders whose outcome the Strategy has not yet acknowledged; the host keeps those ahead of
+acknowledged ones. `validate_broker_order_v6`
 checks one order record on its own, so a host can quarantine a bad record before building
 the context. `Cancelled`, `Expired` and `Rejected` orders may report no remaining quantity
 with less than their whole quantity filled.
@@ -73,8 +81,8 @@ Contributor stations are the owner projection's `opportunity.contributor_station
 requires them to be exactly the owner projection's stations (at most `MAX_STATIONS = 5`). The
 multi-station owner projection is unchanged. `BrokerOrderV6` adds `fees_micros`, the
 execution fees charged for the order's fills so far, and `rejection_reason`, the provider's
-rejection text of a `Rejected` order when it gave one (non-empty, at most 512 bytes, only on
-a `Rejected` order).
+rejection text of a `Rejected` order when it gave one (at most 4 KiB; empty is the same as
+none; ignored on other statuses). The host writes the reason with the status, atomically.
 
 `TriggerV6` is `Owner(OwnerTriggerV6)` or `BrokerState { broker_revision }`, valid on its own
 (not only under Recovery). `BrokerOutcome` is gone.
@@ -111,19 +119,23 @@ telemetry }`.
   diagnostic.
 - `evidence` carries the order updates the runner delivered, as `order_updates` entries
   (`decode_order_update_evidence`), each at most 64 KiB, in delivery order; a refusal reason
-  there is cut to 512 bytes (the kernel sees all of it).
+  there is cut to 512 bytes.
+- `diagnostics` also carry what the order-update comparison did: `runner_not_seeded`,
+  `runner_tombstone_evicted`, `runner_tombstone_expired` and `order_update_abandoned`, one
+  per kind with a count and up to 8 command ids.
 
 `KernelCheckpointV6` is the V5 checkpoint plus the runner section, sealed under
 `strategy-core/decision-v6/checkpoint/v1`. The kernel's private state stays at most 128 KiB
 and its codec stays the kernel's. The runner section is bounded separately: whether it is
-seeded, at most 256 entries of bounded identifiers, and at most 256 reported terminal
-orders.
+seeded, at most `MAX_RUNNER_ENTRIES = 256` live entries of bounded identifiers, and at most
+`MAX_TOMBSTONES = 32` tombstones.
 
 ## Plan rows
 
 The host admits a decision's Broker commands in one account plan limited to
 `MAX_DECISION_PLAN_ROWS = 512`. The runner counts the rows as the kernel issues commands:
-4 per decision, 5 per place, 3 per cancel (1 when the target is already final, which the
+4 per decision, 5 per place (6 for a live Market sell, which the Broker refuses with a
+receipt), 3 per cancel (1 when the target is already final, which the
 Broker refuses), for a cancel-all in paper 3 plus one per order open when it is issued (every
 open context order and every place issued before it), in live (where the Broker expands a
 cancel-all into per-order cancels on the priority lane) 3 per open context order plus 1 per
@@ -138,41 +150,59 @@ checks it is at least the owner's); validation rejects a result over the limit.
 The runner section records, for each order and command the Strategy has issued and not yet
 seen finish: the command id and kind, the client order id, the order id once known, Market,
 action, side, requested quantity, the last status, filled quantity and order revision the
-Strategy was shown, the Broker revision it was issued at, and whether it vanished. Orders are
-matched to entries by command id only. Before the trigger, for each entry in issue order:
+Strategy was shown, the Broker revision it was issued at, whether it is a tombstone (and
+since which revision, for how many views), and how often the kernel failed on its pending
+update. Orders are matched to entries by command id only. Before the trigger, for each
+entry in issue order:
 
 | Context shows | Update | Entry |
 |---|---|---|
-| The order, with a new status or filled quantity | status, `newly_filled` since the last update | kept, or pruned (and recorded as reported) when terminal |
+| The order, with a new status or filled quantity | status, `newly_filled` since the last update | kept, or pruned when terminal |
 | The order, unchanged, or an older revision of it than the one last reported | none | kept |
 | A refusal receipt for the place | `Refused { code, reason }`, final | pruned |
 | Neither, in a view at or below the entry's issue revision, or a truncated view | none | kept |
-| Neither, in a complete newer view | the last status seen (`Accepted` if none), `remaining = 0`, final, once | kept as a tombstone |
+| Neither, in a complete newer view | `vanished`: the last status seen (`Accepted` if none), `remaining = 0`, final | kept as a tombstone |
 | A vanished order again | its real update, `newly_filled` counted from the tombstone | kept, or pruned when terminal |
 | A refusal receipt for a cancel or cancel-all | `Refused`, final, `command_kind` names the cancel | pruned |
 | An accepted cancel receipt | none: the target's own update reports the cancel | pruned |
-| No receipt for a cancel (in a newer view) | none: it was acknowledged earlier | pruned |
+| No receipt for a cancel whose target is shown final | none | pruned |
+| No receipt for a cancel otherwise, in a complete newer view | none | kept as a tombstone until its receipt comes |
+
+An update with `vanished` set is final only as far as the runner knows: if the order
+reappears, its updates continue, the next one reporting what was filled meanwhile. A kernel
+that keeps a vanished order in its books counts every fill.
+
+Tombstones do not count toward the 256 live entries a Broker command is checked against, so
+they never keep a Strategy from cancelling. At most 32 are kept (the oldest is evicted), and
+one expires after `TOMBSTONE_EXPIRY_VIEWS = 16` complete views above its vanish revision that
+do not show it; an evicted or expired order that later returns final is acknowledged without
+an update.
 
 Broker statuses map to update statuses: accepted and dispatched are `Accepted`, resting
 `Resting`, partially filled `PartiallyFilled`, filled `Filled`, cancelled `Cancelled`, expired
 `Expired`, rejected `Refused { code: "provider_rejected", reason }` where `reason` is the
-order's `rejection_reason`, or "the provider rejected the order" when the provider gave
-none. Kernels classify transient rejections by that text. A cancellation request or a
-recovery hold is not news of its own: the order keeps its last status (`PartiallyFilled`
-once anything filled).
+order's `rejection_reason` cut to 512 bytes on a character boundary, or "the provider
+rejected the order" when the provider gave none. Kernels classify transient rejections by
+that text. A cancellation request or a recovery hold is not news of its own: the order keeps
+its last status (`PartiallyFilled` once anything filled).
+
+Seeding: a Sleeve's first decision over a complete view (or the first after
+`convert_v5_kernel_checkpoint`, which keeps the kernel's bytes and starts an unseeded
+section) records open orders as seen, from their current status, without updates, so no
+Strategy receives a burst of updates for old orders. Over a truncated view the section stays
+unseeded (`runner_not_seeded`). A section that would exceed 256 live entries fails the
+decision before the kernel runs; a place or cancel that would need live entry 257 is a local
+`Err`.
 
 Acknowledgements: every receipt the section no longer tracks (an entry is pruned only once
-its outcome was reported), and every terminal order the section recorded as reported, until
-a complete view no longer shows it. Only the seeding decision acknowledges other terminal
-orders: a Sleeve's first decision, or the first after `convert_v5_kernel_checkpoint` (which
-keeps the kernel's bytes and starts an unseeded section). It also records open orders as
-seen, from their current status, without updates, so no Strategy receives a burst of updates
-for old orders. A section that would exceed 256 entries fails the decision before the kernel
-runs; a place or cancel that would need entry 257 is a local `Err`.
+its outcome was delivered) and, once the section is seeded, every terminal order it no
+longer tracks (the section tracks each of the Strategy's orders until its final update was
+delivered, so such an order is no news). Untracked open orders are ignored.
 
 Because nothing is queued, a checkpoint that goes back (a crash between durable writes)
 produces the same updates again, and a dropped, coalesced, stale, truncated or reordered view
-loses nothing: every fill is reported exactly once in `newly_filled`.
+loses nothing: every fill is reported exactly once in `newly_filled` (short of an evicted or
+expired tombstone, or an update abandoned after three failed deliveries).
 
 ## Provisional view
 
@@ -195,12 +225,13 @@ sees `Refused`.
 Local errors from a Broker call: a Market outside the Sleeve's scope, an invalid quantity or
 price, a Market without valid fee terms, a client order id that is invalid, longer than 128
 bytes, starts with `tv3`, or is already used by an order in the context, the runner section
-or this decision; a Market sell in live (the Broker refuses one outside paper until Phase 5;
-validation rejects it too); the 193rd open order; a cancel naming no order the context or
+or this decision; an open order past `max_open_orders(mode)`; a cancel naming no order the context or
 the decision knows; a cancel-all over a truncated view; the 65th command; the plan row
 limit; the runner section bound; a command that would take the result past its size budget
 (the budget assumes the kernel's state at its 128 KiB bound). Timers need the timer
-capability. Logs and telemetry fill only the room the checkpoint, commands and update
+capability. A live Market sell is not a local error: the Broker refuses it per command
+(`market_sell_unsupported`, until Phase 5) and the kernel sees a `Refused` update;
+`capabilities().market_sell` is false in live so a kernel can exit with a limit sell. Logs and telemetry fill only the room the checkpoint, commands and update
 evidence leave; the rest is counted in a `kernel_telemetry_overflow` diagnostic.
 
 ## Kernel runner
@@ -209,7 +240,8 @@ With the `kernel` feature, `strategy_core_v3::kernel_v6` presents a context to a
 `strategy_core_kernel::NativeKernel` and assembles the result. Strategy executables supply
 kernel construction, restore and checkpoint codecs through `TransactionKernelFactory`, and
 `TransactionKernel::market_buy_price_cap_micros`, which the runner asks once, when the kernel
-places a Market buy, of the kernel as restored for the decision.
+places a Market buy, of the kernel as restored for the decision. `TransactionKernel` needs no
+`Clone`: the runner restores kernels only through the factory and the kernel's codec.
 
 The context is projected once into the kernel crate's owned model (`StationState`,
 `MarketState`, `StrategyEvent`): supplied originals first, the V4 owner projection otherwise,

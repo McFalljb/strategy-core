@@ -1463,8 +1463,9 @@ The native context exposes these exact trait surfaces:
   return an empty set.
 - `StrategyKernelContext::capabilities() -> KernelCapabilities`: what the host
   grants: `mode` (`Paper`, `Live`, `Replay`, or `None` when the host does not
-  state it), `timers`, `timer_handles`, `gauges`, `annotations` and
-  `external_requests` (allowed request names). The default grants nothing.
+  state it), `timers`, `timer_handles`, `gauges`, `annotations`,
+  `external_requests` (allowed request names) and `market_sell` (the Broker admits Market
+  sells; false in live until Phase 5). The default grants nothing.
   The Decision V6 host states the context's deployment mode, grants timers (and
   handles) as the context grants them, always records gauges and annotations, and
   reports the granted request names.
@@ -1483,7 +1484,8 @@ The native context exposes these exact trait surfaces:
   is never an `Err`: it arrives as an `OrderUpdate` event, as does every later change
   of the order. A kernel's own `client_order_id` may not start with `tv3` (reserved for ids
   the host derives) and must be unique for the account's lifetime. A kernel error while
-  handling an `OrderUpdate` is recorded and the update counts as seen; the decision goes on.
+  handling an `OrderUpdate` is undone and recorded, the decision goes on, and the update is
+  delivered again in the next decisions (up to three attempts).
   Inside a decision the reads are provisional: the decision's own orders
   are pending with status `submitted` and reserve budget with the Broker's formula,
   cancels mark their targets `cancellation_requested`, and positions are unchanged.
@@ -1531,7 +1533,7 @@ The native context exposes these exact trait surfaces:
 | `WeatherEventView` | The same fields as `WeatherEvent` except `type`; its payload `event_type` is named `event_type_name`. |
 | `HighLowView` | The same shared fields as `NewHigh` and `NewLow` except `type`; the enum variant determines high versus low. |
 | `TimerWakeView` | `scheduled_for`, `fired_at`, `name` |
-| `OrderUpdate` (borrowed) | `command_kind`, `command_id`, `client_order_id`, `order_id`, `ticker`, `action`, `contract_side`, `status` (`Accepted`, `Resting`, `PartiallyFilled`, `Filled`, `Cancelled`, `Expired`, `Refused { code, reason }`), `requested`, `filled`, `remaining`, `newly_filled`, `average_fill_price`, `fee_cost`, `is_final` |
+| `OrderUpdate` (borrowed) | `command_kind`, `command_id`, `client_order_id`, `order_id`, `ticker`, `action`, `contract_side`, `status` (`Accepted`, `Resting`, `PartiallyFilled`, `Filled`, `Cancelled`, `Expired`, `Refused { code, reason }`), `requested`, `filled`, `remaining`, `newly_filled`, `average_fill_price`, `fee_cost`, `is_final`, `vanished` (the Broker no longer reports the order; updates follow if it reappears) |
 | `ForecastUpdatedView` | The same fields as `ForecastUpdated` except `type`. |
 | `OracleScoresUpdatedView` | `event_id`, `sequence`, `emitted_at`, `slug`, `station_id`, `modes`, `updated_at`, `overall`, `day_ahead`, `day_of`; mode payloads are `OracleInputSnapshot`. |
 | `TickerPriceView` | The same fields as `TickerPrices`. |
