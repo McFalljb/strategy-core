@@ -5,7 +5,7 @@ use crate::decision_v4::{
 };
 
 pub(super) const MARKET: &str = "KXHIGHTSEA-26AUG30-T80";
-const DIGEST: &str = "profile-calculator-digest";
+pub(super) const DIGEST: &str = "profile-calculator-digest";
 
 pub(super) fn checkpoint(
     sequence: u64,
@@ -26,7 +26,7 @@ pub(super) fn checkpoint(
     .seal()
 }
 
-fn station(station_id: &str) -> StationV4 {
+pub(super) fn station(station_id: &str) -> StationV4 {
     StationV4 {
         climate_event_date: "2026-08-30".to_owned(),
         climate_day_start_utc_unix_ms: 1,
@@ -480,7 +480,11 @@ fn a_rejected_decision_keeps_the_checkpoint_and_acknowledges_nothing() {
     );
 }
 
-fn receipt(command_id: &str, kind: BrokerCommandKindV6, refused: bool) -> CommandReceiptV6 {
+pub(super) fn receipt(
+    command_id: &str,
+    kind: BrokerCommandKindV6,
+    refused: bool,
+) -> CommandReceiptV6 {
     CommandReceiptV6 {
         command_id: command_id.to_owned(),
         kind,
@@ -629,8 +633,8 @@ fn plan_rows_count_places_cancels_and_cancel_all_over_the_view() {
     );
 }
 
-#[test]
-fn a_result_over_the_decision_row_limit_is_rejected() {
+/// 128 resting orders, then 63 places and a cancel-all over all 191 orders: 513 rows.
+pub(super) fn row_limit_case() -> (DecisionContextV6, DecisionResultV6) {
     let mut context = context();
     // 64 places cost 4 + 320 rows; a cancel-all over them and 128 resting orders costs more.
     let orders = (0..128)
@@ -691,6 +695,12 @@ fn a_result_over_the_decision_row_limit_is_rejected() {
         diagnostics: vec![],
         telemetry: vec![],
     };
+    (context, result)
+}
+
+#[test]
+fn a_result_over_the_decision_row_limit_is_rejected() {
+    let (context, result) = row_limit_case();
     assert_eq!(
         decision_plan_rows_v6(&context, &result),
         4 + 63 * 5 + 3 + 128 + 63

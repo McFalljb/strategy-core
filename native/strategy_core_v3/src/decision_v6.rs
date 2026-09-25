@@ -2358,3 +2358,7 @@ pub fn receipts_by_command(receipts: &[CommandReceiptV6]) -> BTreeMap<&str, &Com
 #[cfg(test)]
 #[path = "decision_v6/tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "decision_v6/corpus_tests.rs"]
+mod corpus_tests;
