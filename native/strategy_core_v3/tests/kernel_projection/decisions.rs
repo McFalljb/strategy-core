@@ -532,34 +532,51 @@ fn refusal_rejected() -> OrderUpdateStatus {
 }
 
 #[test]
-fn a_kernel_error_in_an_update_rejects_the_decision_and_the_update_comes_again() {
+fn a_kernel_error_on_one_update_is_recorded_and_the_decision_goes_on() {
+    /// Places an order and then fails on a refused cancel-all; handles everything else.
     #[derive(Clone)]
-    struct Failing;
-    impl NativeKernel for Failing {
+    struct FailsOnCancelAllRefusal {
+        seen: Rc<RefCell<Vec<String>>>,
+    }
+    impl NativeKernel for FailsOnCancelAllRefusal {
         fn name(&self) -> &str {
-            "failing"
+            "fails-on-cancel-all-refusal"
+        }
+        fn on_start(&mut self, context: &mut dyn StrategyKernelContext) -> KernelResult<()> {
+            context
+                .broker()
+                .place_order(limit_buy("yes-1", ContractSide::Yes, 300, 0.4))?;
+            context.broker().cancel_all_orders()?;
+            Ok(())
         }
         fn on_event(
             &mut self,
             event: StrategyEventView<'_>,
-            _context: &mut dyn StrategyKernelContext,
+            context: &mut dyn StrategyKernelContext,
         ) -> KernelResult<()> {
-            match event {
-                StrategyEventView::OrderUpdate(_) => {
-                    Err(strategy_core_kernel::KernelError::new("cannot handle it"))
+            if let StrategyEventView::OrderUpdate(update) = &event {
+                if update.command_kind == BrokerCommandKind::CancelAllOrders {
+                    context.broker().place_order(limit_buy(
+                        "retry",
+                        ContractSide::Yes,
+                        100,
+                        0.4,
+                    ))?;
+                    return Err(strategy_core_kernel::KernelError::new("cannot handle it"));
                 }
-                _ => Ok(()),
             }
+            self.seen.borrow_mut().push(event.event_type().to_owned());
+            Ok(())
         }
     }
-    impl TransactionKernel for Failing {
+    impl TransactionKernel for FailsOnCancelAllRefusal {
         fn encode_checkpoint_state(&self) -> Result<Vec<u8>, KernelTransactionError> {
-            Ok(b"failing".to_vec())
+            Ok(format!("seen={}", self.seen.borrow().len()).into_bytes())
         }
     }
-    struct FailingFactory;
-    impl TransactionKernelFactory for FailingFactory {
-        type Kernel = Failing;
+    struct Factory(FailsOnCancelAllRefusal);
+    impl TransactionKernelFactory for Factory {
+        type Kernel = FailsOnCancelAllRefusal;
         fn checkpoint_codec(
             &self,
             _strategy_id: &str,
@@ -569,22 +586,27 @@ fn a_kernel_error_in_an_update_rejects_the_decision_and_the_update_comes_again()
                 version: 1,
             })
         }
-        fn create(&self, _: &DecisionContextV6) -> Result<Failing, KernelTransactionError> {
-            Ok(Failing)
+        fn create(&self, _: &DecisionContextV6) -> Result<Self::Kernel, KernelTransactionError> {
+            Ok(self.0.clone())
         }
         fn restore(
             &self,
             _: &DecisionContextV6,
             _: &strategy_core_v3::decision_v6::KernelCheckpointV6,
-        ) -> Result<Failing, KernelTransactionError> {
-            Ok(Failing)
+        ) -> Result<Self::Kernel, KernelTransactionError> {
+            Ok(self.0.clone())
         }
     }
+    let seen = Rc::new(RefCell::new(Vec::new()));
+    let factory = Factory(FailsOnCancelAllRefusal {
+        seen: Rc::clone(&seen),
+    });
     let context = priced_context();
-    let placed = decide(&context, place_yes);
+    let issued = run_transaction(&factory, &context).unwrap();
+    assert_eq!(issued.commands.len(), 2);
     let next = follow_up(
         &context,
-        Some(&placed.result),
+        Some(&issued),
         2,
         vec![order(
             &cid(1, 0),
@@ -593,20 +615,47 @@ fn a_kernel_error_in_an_update_rejects_the_decision_and_the_update_comes_again()
             0,
             1,
         )],
-        vec![],
+        vec![refused(
+            &cid(1, 1),
+            BrokerCommandKindV6::CancelAllOrders,
+            "live_dispatch_unarmed",
+        )],
     );
-    let rejected = run_transaction(&FailingFactory, &next).unwrap();
-    assert_eq!(rejected.disposition, DecisionDispositionV6::Rejected);
+    let result = run_transaction(&factory, &next).unwrap();
+    validate_decision_result_v6(&next, &result).unwrap();
+    assert_eq!(result.disposition, DecisionDispositionV6::Completed);
     assert_eq!(
-        rejected.kernel_checkpoint, next.kernel_checkpoint,
-        "nothing is marked seen"
+        *seen.borrow(),
+        ["order_update", "broker_state"],
+        "the other update and the trigger are still delivered"
     );
-    assert!(rejected.acknowledged_command_ids.is_empty());
-    assert_eq!(
-        decide(&next, nothing).updates.len(),
-        1,
-        "the next run sees it again"
+    assert!(
+        result.commands.is_empty(),
+        "the failed handler's order is discarded"
     );
+    let errors = result
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.code == "kernel_error")
+        .collect::<Vec<_>>();
+    assert_eq!(errors.len(), 1);
+    assert!(
+        errors[0].message.contains(&cid(1, 1)),
+        "{}",
+        errors[0].message
+    );
+    // The failed update counts as seen: the next decision does not deliver it again.
+    let mut again = next.clone();
+    again.kernel_checkpoint = result.kernel_checkpoint.clone();
+    seen.borrow_mut().clear();
+    let later = run_transaction(&factory, &again).unwrap();
+    assert!(
+        later
+            .diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.code != "kernel_error")
+    );
+    assert_eq!(*seen.borrow(), ["broker_state"]);
 }
 
 #[test]

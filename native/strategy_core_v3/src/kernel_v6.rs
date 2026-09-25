@@ -152,17 +152,24 @@ pub fn run_transaction<F: TransactionKernelFactory>(
     let mut host = KernelHost::new(context, derived.entries, !derived.acknowledged.is_empty())?;
     host.market_buy_cap = Some(&market_buy_cap);
 
-    let mut outcome = Ok(());
+    // Each update is delivered on its own: when the kernel fails on one, the kernel and the
+    // decision go back to how they were before it, the failure is recorded, and the update
+    // counts as seen, so one update the kernel cannot handle never stalls the Sleeve.
     for record in &derived.updates {
-        outcome = StrategyEvent::OrderUpdate(order_update(record))
+        let before = (kernel.clone(), host.save());
+        let delivered = StrategyEvent::OrderUpdate(order_update(record))
             .with_view(|view| kernel.on_event(view, &mut host));
-        if outcome.is_err() {
-            break;
+        if let Err(error) = delivered {
+            let (restored, saved) = before;
+            kernel = restored;
+            host.restore(saved);
+            host.outputs.push(HostOutput::UpdateError(format!(
+                "order update of {}: {error}",
+                record.command_id
+            )));
         }
     }
-    if outcome.is_ok() {
-        outcome = event.run(&mut kernel, &mut host);
-    }
+    let outcome = event.run(&mut kernel, &mut host);
 
     let mut result = DecisionResultV6 {
         delivery_id: context.owner_state.delivery_id.clone(),
@@ -442,10 +449,22 @@ struct ProvisionalOrder {
     cancellation_requested: bool,
 }
 
-/// One kernel log or telemetry entry, in the order the kernel produced it.
+/// One kernel log or telemetry entry, or a failed order update, in the order produced.
 enum HostOutput {
     Log(LogAction),
     Telemetry(TelemetryEntryV6),
+    UpdateError(String),
+}
+
+/// What a decision has issued so far, saved before each order update.
+struct SavedDecision {
+    finances: BrokerFinancialState,
+    provisional: Vec<ProvisionalOrder>,
+    cancellation_requested: BTreeSet<String>,
+    commands: Vec<StrategyCommandV6>,
+    runner: Vec<RunnerEntryV6>,
+    rows: DecisionPlanRows,
+    timer_keys: BTreeSet<String>,
 }
 
 type MarketBuyCap<'a> =
@@ -499,6 +518,28 @@ impl<'a> KernelHost<'a> {
     /// The commands issued so far, in issue order.
     pub fn commands(&self) -> &[StrategyCommandV6] {
         &self.commands
+    }
+
+    fn save(&self) -> SavedDecision {
+        SavedDecision {
+            finances: self.finances,
+            provisional: self.provisional.clone(),
+            cancellation_requested: self.cancellation_requested.clone(),
+            commands: self.commands.clone(),
+            runner: self.runner.clone(),
+            rows: self.rows.clone(),
+            timer_keys: self.timer_keys.clone(),
+        }
+    }
+
+    fn restore(&mut self, saved: SavedDecision) {
+        self.finances = saved.finances;
+        self.provisional = saved.provisional;
+        self.cancellation_requested = saved.cancellation_requested;
+        self.commands = saved.commands;
+        self.runner = saved.runner;
+        self.rows = saved.rows;
+        self.timer_keys = saved.timer_keys;
     }
 
     fn broker_detail(&self) -> &BrokerDetailV6 {
@@ -1250,6 +1291,20 @@ fn append_outputs(
                     result.evidence.push(ResultEvidenceV6 {
                         code: "kernel_log".to_owned(),
                         payload: message.into_bytes(),
+                    });
+                } else {
+                    lost += 1;
+                    lost_bytes += message.len();
+                }
+            }
+            HostOutput::UpdateError(message) => {
+                let mut message = message.clone();
+                truncate_utf8(&mut message, wire::MAX_RESULT_DIAGNOSTIC_BYTES);
+                if result.diagnostics.len() < diagnostic_room {
+                    result.diagnostics.push(ResultDiagnosticV6 {
+                        severity: "error".to_owned(),
+                        code: "kernel_error".to_owned(),
+                        message,
                     });
                 } else {
                     lost += 1;
