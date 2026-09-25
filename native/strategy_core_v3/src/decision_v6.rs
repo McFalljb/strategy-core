@@ -2101,40 +2101,52 @@ pub fn decision_result_v6_sha256(result: &DecisionResultV6) -> Result<[u8; 32], 
 // Codecs
 // ---------------------------------------------------------------------------------------------
 
+/// Encodes a valid context. The bytes are checked to decode within the decoder's allocation
+/// limit, so a context the host builds is one every reader accepts.
 pub fn encode_decision_context_v6(context: &DecisionContextV6) -> Result<Vec<u8>, DecisionV6Error> {
     context.validate()?;
-    encode_bounded(
+    let bytes = encode_bounded(
         DECISION_CONTEXT_V6_MAGIC,
         context,
         MAX_DECISION_CONTEXT_V6_BYTES,
+    )?;
+    decode_bounded::<DecisionContextV6, MAX_DECISION_CONTEXT_V6_BYTES>(
+        DECISION_CONTEXT_V6_MAGIC,
+        &bytes,
     )
+    .map_err(|_| DecisionV6Error::BoundExceeded)?;
+    Ok(bytes)
 }
 
+/// Decodes a context. The decoder claims every length prefix against the context bound before
+/// allocating, so a corrupt prefix is a `Decode` error, never an allocation abort.
 pub fn decode_decision_context_v6(bytes: &[u8]) -> Result<DecisionContextV6, DecisionV6Error> {
-    let context: DecisionContextV6 = decode_bounded(
-        DECISION_CONTEXT_V6_MAGIC,
-        bytes,
-        MAX_DECISION_CONTEXT_V6_BYTES,
-    )?;
+    let context: DecisionContextV6 =
+        decode_bounded::<_, MAX_DECISION_CONTEXT_V6_BYTES>(DECISION_CONTEXT_V6_MAGIC, bytes)?;
     context.validate()?;
     Ok(context)
 }
 
+/// Encodes a valid result, checked to decode within the decoder's allocation limit.
 pub fn encode_decision_result_v6(result: &DecisionResultV6) -> Result<Vec<u8>, DecisionV6Error> {
     result.validate()?;
-    encode_bounded(
+    let bytes = encode_bounded(
         DECISION_RESULT_V6_MAGIC,
         result,
         MAX_DECISION_RESULT_V6_BYTES,
+    )?;
+    decode_bounded::<DecisionResultV6, MAX_DECISION_RESULT_V6_BYTES>(
+        DECISION_RESULT_V6_MAGIC,
+        &bytes,
     )
+    .map_err(|_| DecisionV6Error::BoundExceeded)?;
+    Ok(bytes)
 }
 
+/// Decodes a result with the same allocation limit as a context.
 pub fn decode_decision_result_v6(bytes: &[u8]) -> Result<DecisionResultV6, DecisionV6Error> {
-    let result: DecisionResultV6 = decode_bounded(
-        DECISION_RESULT_V6_MAGIC,
-        bytes,
-        MAX_DECISION_RESULT_V6_BYTES,
-    )?;
+    let result: DecisionResultV6 =
+        decode_bounded::<_, MAX_DECISION_RESULT_V6_BYTES>(DECISION_RESULT_V6_MAGIC, bytes)?;
     result.validate()?;
     Ok(result)
 }
@@ -2273,16 +2285,18 @@ fn encode_bounded<T: Encode>(
     Ok(bytes)
 }
 
-fn decode_bounded<T: Decode<()>>(
+/// Decodes under an allocation limit of `LIMIT` bytes: bincode claims every length prefix
+/// (and every decoded primitive) against it before allocating.
+fn decode_bounded<T: Decode<()>, const LIMIT: usize>(
     magic: &[u8; 8],
     bytes: &[u8],
-    max_bytes: usize,
 ) -> Result<T, DecisionV6Error> {
-    if bytes.len() > max_bytes || !bytes.starts_with(magic) {
+    if bytes.len() > LIMIT || !bytes.starts_with(magic) {
         return Err(DecisionV6Error::Decode);
     }
-    let (value, consumed) = bincode::decode_from_slice(&bytes[magic.len()..], wire_config())
-        .map_err(|_| DecisionV6Error::Decode)?;
+    let (value, consumed) =
+        bincode::decode_from_slice(&bytes[magic.len()..], wire_config().with_limit::<LIMIT>())
+            .map_err(|_| DecisionV6Error::Decode)?;
     if consumed != bytes.len() - magic.len() {
         return Err(DecisionV6Error::TrailingBytes);
     }

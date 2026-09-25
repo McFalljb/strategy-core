@@ -876,3 +876,20 @@ fn order_update_evidence_round_trips_in_bounded_chunks() {
         .collect::<Vec<_>>();
     assert_eq!(decoded, records);
 }
+
+#[test]
+fn a_huge_length_prefix_fails_to_decode_without_allocating() {
+    for length in [1_u64 << 62, 1_u64 << 63, u64::MAX] {
+        for magic in [DECISION_RESULT_V6_MAGIC, DECISION_CONTEXT_V6_MAGIC] {
+            let mut bytes = magic.to_vec();
+            bytes.push(0xFD);
+            bytes.extend_from_slice(&length.to_be_bytes());
+            let error = if magic == DECISION_RESULT_V6_MAGIC {
+                decode_decision_result_v6(&bytes).unwrap_err()
+            } else {
+                decode_decision_context_v6(&bytes).unwrap_err()
+            };
+            assert_eq!(error, DecisionV6Error::Decode, "{length}");
+        }
+    }
+}

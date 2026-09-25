@@ -517,6 +517,117 @@ fn invalid_results() -> Vec<(&'static str, &'static str, DecisionV6Error, Result
     ]
 }
 
+/// Wire bytes whose length prefix at some level claims 2^62 elements. Each must fail to decode
+/// with `Decode` within the decoder's allocation limit, never abort allocating.
+fn oversized_lengths() -> Vec<(&'static str, &'static str, Vec<u8>)> {
+    const HUGE: u64 = 1 << 62;
+    fn put<T: Encode>(bytes: &mut Vec<u8>, value: &T) {
+        bytes.extend(bincode::encode_to_vec(value, wire_config()).unwrap());
+    }
+    let context = context();
+    let result = multi_order_result(&context);
+    let result_head = |bytes: &mut Vec<u8>| {
+        put(bytes, &result.delivery_id);
+        put(bytes, &result.sleeve_identity);
+        put(bytes, &result.state_fence);
+        put(bytes, &result.expected_broker_revision);
+        put(bytes, &result.disposition);
+    };
+    let result_vector = |fill: &dyn Fn(&mut Vec<u8>)| {
+        let mut bytes = DECISION_RESULT_V6_MAGIC.to_vec();
+        fill(&mut bytes);
+        put(&mut bytes, &HUGE);
+        bytes
+    };
+    let context_vector = |fill: &dyn Fn(&mut Vec<u8>)| {
+        let mut bytes = DECISION_CONTEXT_V6_MAGIC.to_vec();
+        fill(&mut bytes);
+        put(&mut bytes, &HUGE);
+        bytes
+    };
+    let owner = &context.owner_state;
+    vec![
+        (
+            "result-delivery-id-length-2-62",
+            "decision_result_v6",
+            result_vector(&|_| {}),
+        ),
+        (
+            "result-checkpoint-state-length-2-62",
+            "decision_result_v6",
+            result_vector(&|bytes| {
+                result_head(bytes);
+                put(bytes, &1_u8);
+                let checkpoint = result.kernel_checkpoint.as_ref().unwrap();
+                put(bytes, &checkpoint.codec_profile);
+                put(bytes, &checkpoint.codec_version);
+                put(bytes, &checkpoint.strategy_id);
+                put(bytes, &checkpoint.strategy_profile);
+                put(bytes, &checkpoint.profile_and_calculator_digest);
+                put(bytes, &checkpoint.sequence);
+            }),
+        ),
+        (
+            "result-command-list-length-2-62",
+            "decision_result_v6",
+            result_vector(&|bytes| {
+                result_head(bytes);
+                put(bytes, &0_u8);
+            }),
+        ),
+        (
+            "result-place-market-id-length-2-62",
+            "decision_result_v6",
+            result_vector(&|bytes| {
+                result_head(bytes);
+                put(bytes, &0_u8);
+                put(bytes, &1_u64);
+                put(bytes, &0_u32);
+                put(bytes, &result.commands[0].command_id().to_owned());
+            }),
+        ),
+        (
+            "result-evidence-payload-length-2-62",
+            "decision_result_v6",
+            result_vector(&|bytes| {
+                result_head(bytes);
+                put(bytes, &0_u8);
+                put(bytes, &0_u64);
+                put(bytes, &0_u64);
+                put(bytes, &1_u64);
+                put(bytes, &ORDER_UPDATES_EVIDENCE_CODE.to_owned());
+            }),
+        ),
+        (
+            "context-delivery-id-length-2-62",
+            "decision_context_v6",
+            context_vector(&|_| {}),
+        ),
+        (
+            "context-station-list-length-2-62",
+            "decision_context_v6",
+            context_vector(&|bytes| {
+                put(bytes, &owner.delivery_id);
+                put(bytes, &owner.sleeve);
+                put(bytes, &owner.trigger);
+                put(bytes, &owner.fence);
+                put(bytes, &owner.config);
+            }),
+        ),
+        (
+            "context-receipt-list-length-2-62",
+            "decision_context_v6",
+            context_vector(&|bytes| {
+                put(bytes, &context.owner_state);
+                put(bytes, &context.strategy);
+                put(bytes, &context.deployment_mode);
+                put(bytes, &context.capabilities);
+                put(bytes, &context.broker);
+            }),
+        ),
+    ]
+}
+
 /// The provisional budget of successive buys: each commitment is the Broker's reservation.
 fn overlay_vectors() -> Vec<Value> {
     let start = BrokerFinancialState {
@@ -650,6 +761,12 @@ fn corpus() -> Value {
         entry.insert("category".to_owned(), json!(category(&error)));
         invalid.push(Value::Object(entry));
     }
+    for (id, kind, bytes) in oversized_lengths() {
+        let mut entry = measured(id, &bytes);
+        entry.insert("kind".to_owned(), json!(kind));
+        entry.insert("category".to_owned(), json!("decode"));
+        invalid.push(Value::Object(entry));
+    }
     json!({
         "schema": SCHEMA,
         "encoding": "8-byte magic, then bincode 2 (standard, big-endian, variable integers)",
@@ -705,7 +822,7 @@ fn v6_corpus_is_current_and_every_vector_decodes_to_its_verdict() {
         }
     }
     let invalid = recorded["invalid"].as_array().unwrap();
-    assert_eq!(invalid.len(), 22);
+    assert_eq!(invalid.len(), 30);
     for entry in invalid {
         let id = entry["id"].as_str().unwrap();
         let bytes = bytes(entry);
