@@ -86,41 +86,46 @@ traderv3 and strategies must build to these choices or change them here first.
     Broker-state trigger delivers `Unknown { event_type: "broker_state" }` after its
     updates, as V5 did. A kernel error in an update handler rejects the decision; nothing
     after it is delivered.
-20. **Order view size.** The note bounds the Sleeve's order view at 128 orders and the
+20. **Failed commits.** When a decision's durable write fails as a whole (stale fence,
+    storage error), the host must discard that result, its checkpoint included, and resume
+    from the last saved checkpoint with `Recovery` (as the note's crash table says). Running
+    the next decision on the failed result's checkpoint would report its never-admitted
+    places as vanished (`Accepted`, final).
+21. **Order view size.** The note bounds the Sleeve's order view at 128 orders and the
     runner section at 256 entries. An open order missing from a truncated view would be
     reported as vanished, so traderv3 must never drop an open order from the view.
 
 ## Provisional view and local errors
 
-21. **Cancels keep the reservation.** A cancel marks its target `cancellation_requested`
+22. **Cancels keep the reservation.** A cancel marks its target `cancellation_requested`
     but the overlay keeps its reservation until the Broker releases it (the conservative
     estimate).
-22. **Market buys** reserve at the kernel's price cap, else one dollar. The cap is asked
+23. **Market buys** reserve at the kernel's price cap, else one dollar. The cap is asked
     once, when the kernel places the order, of the kernel as restored for the decision (the
     kernel cannot be called while it runs).
-23. **Local errors** (not Broker refusals): a Market outside scope; a bad quantity or
+24. **Local errors** (not Broker refusals): a Market outside scope; a bad quantity or
     price; a Market without valid fee terms (no reservation can be computed); a client order
     id that is invalid, over 128 bytes (the Broker's bound) or already used by an order in
     the context, the runner section or the decision; a cancel naming no order the context or
     the decision knows (V5 failed the whole transaction); the 65th command; the row limit;
     entry 257.
-24. **Cancel targets.** `CancelTarget::ClientOrderId` naming an order the context already
+25. **Cancel targets.** `CancelTarget::ClientOrderId` naming an order the context already
     reports is sent as an `Order` target with that order's revision; only an order placed
     in the same decision goes on the wire by client id.
-25. **Row counts.** A cancel of an order the context shows as final counts 1 row (the
+26. **Row counts.** A cancel of an order the context shows as final counts 1 row (the
     Broker refuses it). A cancel-all counts every open context order and every place of the
     decision, including ones already marked (an upper bound). Acknowledgements add 1 row
     whenever there are any.
 
 ## Kernel API
 
-26. `BrokerOrderStatus` (for `order_status`) replaces the V5 `OrderStatus`; `as_str` keeps
+27. `BrokerOrderStatus` (for `order_status`) replaces the V5 `OrderStatus`; `as_str` keeps
     the V5 pending-order texts (`pending` for resting, `partial`) and adds `submitted`.
-27. `cancel_order` and `cancel_all_orders` default to an error (they returned `Ok(false)` /
+28. `cancel_order` and `cancel_all_orders` default to an error (they returned `Ok(false)` /
     `Ok(0)`); every host implements them.
-28. Emitting `PlaceOrder`, `CancelOrder`, `CancelAllOrders` or `WakeAt` is the matching call
+29. Emitting `PlaceOrder`, `CancelOrder`, `CancelAllOrders` or `WakeAt` is the matching call
     with its ticket or handle discarded (so emitted timers follow the per-key rule and the
     grant).
-29. The factory's `gate_telemetry_code` is gone: logs and telemetry never take a command
+30. The factory's `gate_telemetry_code` is gone: logs and telemetry never take a command
     ordinal, so nothing needs exempting.
-30. Extreme events from a non-primary station use that station's climate date.
+31. Extreme events from a non-primary station use that station's climate date.
