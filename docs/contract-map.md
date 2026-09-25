@@ -63,7 +63,8 @@ The conformance inventory in
 | Native-unavailability error names | 2 | 2 | None |
 | Native fallback callable alias | 1 | 0 | Python names it `FallbackHandler`; Rust represents the same callback as a generic closure/future. |
 | Rust representation support | 0 | 14 | Rust-only enums, aliases, and error/result carriers needed to express Python unions and exceptions safely. |
-| Borrowed native-kernel contract | 0 | 0 | 45 additional names exist only in the kernel crate; they are not part of broad Python/Rust parity. |
+| Rust exact fee helpers | 0 | 5 | Rust-only hundredths and direct-member exact-unit fee helpers for native execution hosts; not part of broad Python/Rust parity. |
+| Native-kernel contract | 0 | 0 | 115 additional names exist only in the kernel crate (58 borrowed actions, views, errors and traits; 57 canonical state, event, supplied-input, decimal and weather types); they are not part of broad Python/Rust parity. |
 
 The first five rows are the parity surface: names match one-for-one. Additional
 Rust root exports are `DateLike`, `EventDelivery`, `JsonObject`, `JsonValue`,
@@ -71,7 +72,12 @@ Rust root exports are `DateLike`, `EventDelivery`, `JsonObject`, `JsonValue`,
 `OracleScoreDays`, `ClimateDayError`, `FeeError`, `FeeResult`,
 `NativeKernelRunError`, and `StationError`. They do not add Rust-only strategy
 features: some give a Rust name to a module-local Python alias or union, and the
-rest are typed Rust carriers for Python exception behavior.
+rest are typed Rust carriers for Python exception behavior. The Rust exact fee
+helpers (`FeeCalculationMicros`, `calculate_fill_fee_hundredths`,
+`calculate_direct_member_fill_fee_hundredths`,
+`calculate_direct_member_fill_fee_micros`, and
+`reserve_direct_member_buy_fee_micros`) are classified as consumer-owned host
+arithmetic rather than parity surfaces.
 
 ### Type mapping
 

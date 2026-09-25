@@ -274,7 +274,7 @@
     },
     "kernel-borrowed-contract": {
       "mechanism": "trait-test",
-      "reference": "native/strategy_core_kernel/tests/contract.rs",
+      "reference": "native/strategy_core_kernel/tests/contract.rs, native/strategy_core_kernel/tests/fees.rs and the strategy-core-v3 Decision V6 kernel host tests",
       "dimensions": {
         "non_default_round_trip": {
           "applicable": false,
@@ -299,6 +299,48 @@
         "timestamp_formatting": {
           "applicable": false,
           "rationale": "Kernel timestamps are borrowed numeric/runtime values, not broad JSON strings."
+        },
+        "numeric_boundaries": {
+          "applicable": true
+        },
+        "invalid_input": {
+          "applicable": true
+        },
+        "helper_or_trait_behavior": {
+          "applicable": true
+        },
+        "consumer_boundaries": {
+          "applicable": true
+        }
+      }
+    },
+    "kernel-canonical-model": {
+      "mechanism": "trait-test",
+      "reference": "native/strategy_core_kernel/tests/contract.rs, native/strategy_core_kernel/src/decimal.rs unit tests and native/strategy_core_v3/tests/kernel_projection.rs (Decision V6 supplied-input projection)",
+      "dimensions": {
+        "non_default_round_trip": {
+          "applicable": false,
+          "rationale": "Canonical kernel state is projected by the host from supplied inputs; Trader and Backtester own its codecs, not the broad JSON corpus."
+        },
+        "defaults": {
+          "applicable": false,
+          "rationale": "Canonical state and supplied inputs are constructed by the host projection rather than deserialized defaults."
+        },
+        "omission": {
+          "applicable": false,
+          "rationale": "Optional canonical fields are enforced by Rust types rather than JSON omission."
+        },
+        "explicit_null": {
+          "applicable": false,
+          "rationale": "Canonical optionality is exercised directly in kernel and projection tests."
+        },
+        "enum_values": {
+          "applicable": false,
+          "rationale": "Canonical enum variants are exercised directly rather than through broad fixtures."
+        },
+        "timestamp_formatting": {
+          "applicable": false,
+          "rationale": "Canonical timestamps are numeric runtime values, not broad JSON strings."
         },
         "numeric_boundaries": {
           "applicable": true
@@ -3081,22 +3123,44 @@
       }
     },
     {
+      "id": "rust-exact-direct-member-fee-helpers",
+      "ownership": "consumer-owned",
+      "evidence_profile": "language-specific-exclusion",
+      "rationale": "Rust-only fee arithmetic for native execution hosts: the hundredths-quantity legacy schedule and the direct-member exact-unit charge and buy reservation that the Broker binds to (delegating to strategy_core_kernel::fees). Python exposes only the float fill-fee helpers; these are covered by native/strategy_core/tests/contract.rs and native/strategy_core_kernel/tests/fees.rs vectors and are not part of the strategy-facing Python API.",
+      "surfaces": {
+        "rust_broad": [
+          "FeeCalculationMicros",
+          "calculate_direct_member_fill_fee_hundredths",
+          "calculate_direct_member_fill_fee_micros",
+          "calculate_fill_fee_hundredths",
+          "reserve_direct_member_buy_fee_micros"
+        ]
+      }
+    },
+    {
       "id": "borrowed-native-kernel-contract",
       "ownership": "kernel-only",
       "evidence_profile": "kernel-borrowed-contract",
-      "rationale": "The allocation-sensitive borrowed kernel remains a separate contract whose actions, views, errors, and traits are proven by kernel contract tests rather than broad JSON fixtures. OrderStatusView predated SC-1 but was omitted by inventory drift; SC-1 classifies that unchanged borrowed view here and adds field-preservation contract evidence.",
+      "rationale": "The allocation-sensitive borrowed kernel remains a separate contract whose actions, views, errors, and traits are proven by kernel contract tests rather than broad JSON fixtures. OrderStatusView predated SC-1 but was omitted by inventory drift; SC-1 classifies that unchanged borrowed view here and adds field-preservation contract evidence. Decision V6 (single-run kernel API) adds exact order/command tickets and order updates, parameters, capabilities, runtime mode, timer handles, telemetry annotations and provenance views, and removes the V5 OrderResult, OrderStatus, ForecastVersionsView, ShutdownView and StateReadDiagnostic surfaces.",
       "surfaces": {
         "rust_kernel": [
+          "AnnotationValue",
+          "BrokerCommandKind",
+          "BrokerOrderStatus",
           "CancelAllOrdersRequest",
           "CancelOrderRequest",
+          "CancelTarget",
+          "CommandTicket",
+          "ContractQuantity",
           "ContractSide",
+          "EventProvenanceView",
           "ForecastHourlySnapshot",
           "ForecastInputSnapshot",
           "ForecastModelSnapshot",
           "ForecastUpdatedView",
-          "ForecastVersionsView",
           "HighLowView",
           "KernelAction",
+          "KernelCapabilities",
           "KernelError",
           "KernelResult",
           "LogAction",
@@ -3107,16 +3171,18 @@
           "OracleModelScoreSnapshot",
           "OracleScoresUpdatedView",
           "OrderAction",
-          "OrderResult",
-          "OrderStatus",
           "OrderStatusView",
+          "OrderTicket",
           "OrderType",
+          "OrderUpdate",
+          "OrderUpdateStatus",
+          "ParameterValue",
           "PendingOrderView",
+          "PendingTimer",
           "PlaceOrderRequest",
           "PriceLevelView",
           "PriceUpdateView",
-          "ShutdownView",
-          "StateReadDiagnostic",
+          "RuntimeMode",
           "StationReportView",
           "StationWeatherView",
           "StopAction",
@@ -3127,12 +3193,82 @@
           "StrategyKernelRuntime",
           "StrategyKernelState",
           "StrategyKernelTelemetry",
+          "StrategyParameters",
           "TelemetryAction",
           "TickerPriceView",
+          "TimerHandle",
           "TimerWakeView",
+          "ValueOrigin",
           "WakeAtRequest",
           "WeatherEventSourceView",
           "WeatherEventView"
+        ]
+      }
+    },
+    {
+      "id": "kernel-canonical-state-and-event-model",
+      "ownership": "kernel-only",
+      "evidence_profile": "kernel-canonical-model",
+      "rationale": "The kernel crate owns the canonical strategy-facing state, event, supplied-input, exact decimal and weather fact model that Decision V6 hosts project supplied inputs into. It is a Rust kernel contract with no Python counterpart; hosts own its codecs, and kernel and projection tests prove it rather than broad JSON fixtures.",
+      "surfaces": {
+        "rust_kernel": [
+          "Book",
+          "BookLevel",
+          "BrokerFinancialState",
+          "ClimateDay",
+          "ComponentAuthority",
+          "ComponentMeta",
+          "DailyExtremes",
+          "Decimal",
+          "DecimalError",
+          "EventEnvelope",
+          "EventProvenance",
+          "Extreme",
+          "ExtremeKind",
+          "FinalFact",
+          "Forecast",
+          "ForecastModel",
+          "ForecastPoint",
+          "ForecastUpdated",
+          "LastTrade",
+          "MAX_DECIMAL_SCALE",
+          "MarketComponents",
+          "MarketLifecycle",
+          "MarketState",
+          "Observation",
+          "OracleScore",
+          "OracleScoresUpdated",
+          "OracleTable",
+          "PriceUpdate",
+          "Report",
+          "SUPPLIED_INPUTS_CONTRACT_VERSION",
+          "StationComponents",
+          "StationIdentity",
+          "StationState",
+          "StrategyEvent",
+          "SuppliedDailyExtremes",
+          "SuppliedEvent",
+          "SuppliedExtreme",
+          "SuppliedForecast",
+          "SuppliedForecastModel",
+          "SuppliedForecastPoint",
+          "SuppliedInputs",
+          "SuppliedObservation",
+          "SuppliedOracleScore",
+          "SuppliedOracleTable",
+          "SuppliedReport",
+          "SuppliedStation",
+          "SuppliedWeatherEvent",
+          "SuppliedWeatherEventSource",
+          "TickerQuote",
+          "TimerWake",
+          "WeatherEvent",
+          "WeatherEventSource",
+          "WeatherFact",
+          "WeatherFactProvenance",
+          "WeatherFacts",
+          "WeatherField",
+          "WeatherValue"
         ]
       }
     }
