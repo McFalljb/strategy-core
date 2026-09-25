@@ -86,6 +86,8 @@ pub const PLACE_ORDER_PLAN_ROWS: usize = 5;
 pub const CANCEL_ORDER_PLAN_ROWS: usize = 3;
 /// Fixed rows of a cancel-all, before one row per order it cancels.
 pub const CANCEL_ALL_ORDERS_PLAN_ROWS: usize = 3;
+/// Extra rows, in live, of a place of the same decision that a cancel-all collapses.
+pub const COLLAPSED_PLACE_PLAN_ROWS: usize = 1;
 /// Rows of a refused command: its receipt.
 pub const REFUSED_COMMAND_PLAN_ROWS: usize = 1;
 /// Fixed rows of a decision with Broker commands: cash, shutdown, decision, checkpoint.
@@ -1845,6 +1847,14 @@ pub fn validate_decision_result_v6(
             StrategyCommandV6::CancelAllOrders { .. } if !context.orders_complete => {
                 return Err(DecisionV6Error::InvalidContract);
             }
+            // The Broker refuses a Market sell outside paper (until Phase 5).
+            StrategyCommandV6::PlaceOrder(order)
+                if context.deployment_mode == DeploymentModeV6::Live
+                    && order.action == OrderActionV6::Sell
+                    && order.order_type == OrderTypeV6::Market =>
+            {
+                return Err(DecisionV6Error::InvalidContract);
+            }
             _ => {}
         }
     }
@@ -2007,10 +2017,15 @@ fn valid_place_order_prices(order: &PlaceOrderV6) -> bool {
 /// - 5 per place;
 /// - 3 per cancel, or 1 when its target is already final in the context (the Broker refuses
 ///   it);
-/// - 3 per cancel-all plus 1 per order open at that point: every non-terminal context order
-///   and every place issued before it in the decision (a cancel-all includes the decision's
-///   own earlier orders). Those orders are then being cancelled, so a later cancel-all counts
-///   only places issued after the earlier one.
+/// - in paper, 3 per cancel-all plus 1 per order open at that point: every non-terminal
+///   context order and every place issued before it in the decision (a cancel-all includes the
+///   decision's own earlier orders);
+/// - in live, where the Broker expands a cancel-all into one cancel per order on the priority
+///   lane, 3 per open context order it cancels plus 1 per own place it collapses (at least 1,
+///   for its receipt).
+///
+/// The orders a cancel-all covers are then being cancelled, so a later cancel-all counts only
+/// places issued after the earlier one.
 ///
 /// The count is an upper bound of the Broker's: a command the Broker refuses costs
 /// [`REFUSED_COMMAND_PLAN_ROWS`] instead, and an order already being cancelled is still
@@ -2020,17 +2035,19 @@ pub struct DecisionPlanRows {
     rows: usize,
     broker_commands: usize,
     acknowledgements: bool,
+    mode: DeploymentModeV6,
     /// Orders a cancel-all would cancel: non-terminal context orders and this decision's own.
     active_orders: BTreeSet<String>,
 }
 
 impl DecisionPlanRows {
     /// Starts from the context's orders; `acknowledgements` when the result acknowledges any.
-    pub fn new(broker: &BrokerDetailV6, acknowledgements: bool) -> Self {
+    pub fn new(broker: &BrokerDetailV6, acknowledgements: bool, mode: DeploymentModeV6) -> Self {
         Self {
             rows: 0,
             broker_commands: 0,
             acknowledgements,
+            mode,
             active_orders: broker
                 .orders
                 .iter()
@@ -2084,7 +2101,22 @@ impl DecisionPlanRows {
             }
             StrategyCommandV6::CancelOrder { .. } => CANCEL_ORDER_PLAN_ROWS,
             StrategyCommandV6::CancelAllOrders { .. } => {
-                let rows = CANCEL_ALL_ORDERS_PLAN_ROWS + self.active_orders.len();
+                let rows = match self.mode {
+                    DeploymentModeV6::Paper => {
+                        CANCEL_ALL_ORDERS_PLAN_ROWS + self.active_orders.len()
+                    }
+                    DeploymentModeV6::Live => {
+                        let context_orders = self
+                            .active_orders
+                            .iter()
+                            .filter(|key| key.starts_with("order:"))
+                            .count();
+                        let own_places = self.active_orders.len() - context_orders;
+                        (CANCEL_ORDER_PLAN_ROWS * context_orders
+                            + COLLAPSED_PLACE_PLAN_ROWS * own_places)
+                            .max(REFUSED_COMMAND_PLAN_ROWS)
+                    }
+                };
                 self.active_orders.clear();
                 rows
             }
@@ -2108,8 +2140,11 @@ pub fn open_orders(broker: &BrokerDetailV6) -> usize {
 
 /// The account plan rows of a result's Broker commands (zero without one).
 pub fn decision_plan_rows_v6(context: &DecisionContextV6, result: &DecisionResultV6) -> usize {
-    let mut rows =
-        DecisionPlanRows::new(&context.broker, !result.acknowledged_command_ids.is_empty());
+    let mut rows = DecisionPlanRows::new(
+        &context.broker,
+        !result.acknowledged_command_ids.is_empty(),
+        context.deployment_mode,
+    );
     for command in &result.commands {
         rows.add(command, &context.broker);
     }

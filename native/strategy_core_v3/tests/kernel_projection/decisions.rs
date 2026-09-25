@@ -1542,3 +1542,33 @@ fn a_provider_rejection_carries_the_provider_text() {
         );
     }
 }
+
+#[test]
+fn a_live_market_sell_is_a_local_error() {
+    let mut live = priced_context();
+    live.deployment_mode = DeploymentModeV6::Live;
+    for (context, admitted) in [(priced_context(), true), (live, false)] {
+        let decision = decide(&context, |context, seen| {
+            let mut sell = limit_buy("sell-1", ContractSide::Yes, 100, 0.4);
+            sell.action = OrderAction::Sell;
+            sell.order_type = OrderType::Market;
+            sell.limit_price = None;
+            sell.reduce_only = true;
+            seen.push(match context.broker().place_order(sell) {
+                Ok(_) => "admitted".to_owned(),
+                Err(error) => error.to_string(),
+            });
+            Ok(())
+        });
+        if admitted {
+            assert_eq!(decision.seen, ["admitted"]);
+        } else {
+            assert!(
+                decision.seen[0].contains("not admitted in live"),
+                "{:?}",
+                decision.seen
+            );
+            assert!(decision.result.commands.is_empty());
+        }
+    }
+}

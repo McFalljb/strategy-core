@@ -1058,3 +1058,43 @@ fn a_rejection_reason_belongs_to_a_rejected_order_within_its_bound() {
         );
     }
 }
+
+#[test]
+fn a_live_cancel_all_counts_a_cancel_per_open_order() {
+    let mut context = context();
+    context.deployment_mode = DeploymentModeV6::Live;
+    context.capabilities.timers = false;
+    let base = multi_order_result(&context);
+    let place =
+        |ordinal, client: &str| super::tests::place(&context, ordinal, ContractSideV6::Yes, client);
+    let cancel_all = |ordinal| StrategyCommandV6::CancelAllOrders {
+        command_id: context.command_id(ordinal),
+    };
+    let cases: [(&str, Vec<StrategyCommandV6>, usize); 2] = [
+        (
+            "3 per open context order and 1 per collapsed own place",
+            vec![place(0, "a"), place(1, "b"), cancel_all(2)],
+            4 + 5 + 5 + (3 + 1 + 1),
+        ),
+        (
+            "a cancel-all over nothing still writes its receipt",
+            vec![cancel_all(0), cancel_all(1)],
+            4 + 3 + 1,
+        ),
+    ];
+    for (name, commands, rows) in cases {
+        let result = DecisionResultV6 {
+            commands,
+            ..base.clone()
+        };
+        assert_eq!(decision_plan_rows_v6(&context, &result), rows, "{name}");
+    }
+    let mut paper = context.clone();
+    paper.deployment_mode = DeploymentModeV6::Paper;
+    let result = DecisionResultV6 {
+        commands: vec![place(0, "a"), cancel_all(1)],
+        ..base
+    };
+    assert_eq!(decision_plan_rows_v6(&paper, &result), 4 + 5 + (3 + 1 + 1));
+    assert_eq!(decision_plan_rows_v6(&context, &result), 4 + 5 + (3 + 1));
+}

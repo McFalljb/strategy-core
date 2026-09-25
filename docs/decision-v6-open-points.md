@@ -157,7 +157,8 @@ traderv3 and strategies must build to these choices or change them here first.
     derived ids) or is already used by an order in the context, the runner section or the
     decision; the 193rd open order; a cancel naming no order the context or the decision
     knows (V5 failed the whole transaction); a cancel-all over a truncated view; the 65th
-    command; the row limit; entry 257; the result size budget. Kernel client ids must be
+    command; the row limit; entry 257; the result size budget; a Market sell in live (the
+    Broker refuses it outside paper; Phase 5 adds live Market sells). Kernel client ids must be
     unique for the account's lifetime: the runner cannot see acknowledged orders that left
     the view, and the Broker refuses a reused id.
 30. **Cancel targets.** `CancelTarget::ClientOrderId` naming an order the context already
@@ -167,7 +168,10 @@ traderv3 and strategies must build to these choices or change them here first.
     Broker refuses it). A cancel-all counts every order open when it is issued: every open
     context order and every place issued before it, including ones already marked by a
     cancel (an upper bound); a later cancel-all counts only places issued after the earlier
-    one. Acknowledgements add 1 row whenever there are any: traderv3 removes acknowledged
+    one. In live the Broker expands a cancel-all into per-order cancels on the priority
+    lane, so a live cancel-all counts 3 per open context order it cancels plus 1 per own
+    place it collapses (at least 1, for its receipt); paper keeps 3 plus the open orders.
+    Acknowledgements add 1 row whenever there are any: traderv3 removes acknowledged
     receipts and orders with one statement in dedicated tables, never per-order plan rows.
     `decision_plan_rows_v6` is public for traderv3's parity test (runner count >= owner
     count).

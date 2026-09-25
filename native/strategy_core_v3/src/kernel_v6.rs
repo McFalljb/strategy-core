@@ -541,7 +541,7 @@ impl<'a> KernelHost<'a> {
             cancellation_requested: BTreeSet::new(),
             commands: Vec::new(),
             runner,
-            rows: DecisionPlanRows::new(&context.broker, acknowledgements),
+            rows: DecisionPlanRows::new(&context.broker, acknowledgements, context.deployment_mode),
             timer_keys: BTreeSet::new(),
             outputs: Vec::new(),
             market_buy_cap: None,
@@ -664,6 +664,12 @@ impl<'a> KernelHost<'a> {
             (OrderType::Market, None) => None,
             (OrderType::Market, Some(_)) => return invalid("a market order has no limit price"),
         };
+        if request.action == OrderAction::Sell
+            && request.order_type == OrderType::Market
+            && self.context.deployment_mode == DeploymentModeV6::Live
+        {
+            return invalid("a Market sell is not admitted in live");
+        }
         let market_price_cap_micros = if request.action == OrderAction::Buy
             && request.order_type == OrderType::Market
         {

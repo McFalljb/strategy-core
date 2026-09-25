@@ -316,7 +316,45 @@ fn valid_results() -> Vec<(&'static str, &'static str, DecisionResultV6)> {
             "converted-v5-checkpoint",
             converted_result(&converted_context()),
         ),
+        (
+            "live-cancel-all-expands-per-order",
+            "live-request-grants",
+            live_cancel_all_result(&live_context()),
+        ),
     ]
+}
+
+/// In live a YES place then a cancel-all: 4 + 5 + (3 for the resting order + 1 for the
+/// collapsed place) plan rows.
+fn live_cancel_all_result(context: &DecisionContextV6) -> DecisionResultV6 {
+    let mut result = multi_order_result(context);
+    let cancel_all = StrategyCommandV6::CancelAllOrders {
+        command_id: context.command_id(1),
+    };
+    result.commands = vec![result.commands[0].clone(), cancel_all.clone()];
+    let previous = context.kernel_checkpoint.as_ref().unwrap();
+    let mut entries = previous.runner.entries.clone();
+    entries.push(place_entry(&result.commands[0]));
+    entries.push(command_entry(&cancel_all));
+    result.kernel_checkpoint = Some(checkpoint(
+        previous.sequence + 1,
+        b"post-event-kernel-state",
+        seeded(entries),
+    ));
+    result
+}
+
+/// A live YES place replaced by a Market sell, without the (ungranted) timer.
+fn live_market_sell(context: &DecisionContextV6, result: &mut DecisionResultV6) {
+    result.commands.truncate(4);
+    let StrategyCommandV6::PlaceOrder(order) = &mut result.commands[0] else {
+        unreachable!()
+    };
+    order.action = OrderActionV6::Sell;
+    order.order_type = OrderTypeV6::Market;
+    order.limit_price_micros = None;
+    order.reduce_only = true;
+    result.state_fence = fence(context);
 }
 
 type ContextMutation = fn(&mut DecisionContextV6);
@@ -609,6 +647,12 @@ fn invalid_results() -> Vec<(&'static str, &'static str, DecisionV6Error, Result
                     .seal(),
                 );
             },
+        ),
+        (
+            "live-market-sell",
+            "live-request-grants",
+            DecisionV6Error::InvalidContract,
+            live_market_sell,
         ),
         (
             "timer-without-the-timer-grant",
@@ -924,7 +968,7 @@ fn v6_corpus_is_current_and_every_vector_decodes_to_its_verdict() {
         }
     }
     let invalid = recorded["invalid"].as_array().unwrap();
-    assert_eq!(invalid.len(), 35);
+    assert_eq!(invalid.len(), 36);
     for entry in invalid {
         let id = entry["id"].as_str().unwrap();
         let bytes = bytes(entry);

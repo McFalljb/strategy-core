@@ -124,9 +124,11 @@ orders.
 The host admits a decision's Broker commands in one account plan limited to
 `MAX_DECISION_PLAN_ROWS = 512`. The runner counts the rows as the kernel issues commands:
 4 per decision, 5 per place, 3 per cancel (1 when the target is already final, which the
-Broker refuses), 3 plus one per order open when it is issued for a cancel-all (every open
-context order and every place issued before it; a later cancel-all counts only places issued
-after the earlier one), and 1 when the result acknowledges anything (the host removes
+Broker refuses), for a cancel-all in paper 3 plus one per order open when it is issued (every
+open context order and every place issued before it), in live (where the Broker expands a
+cancel-all into per-order cancels on the priority lane) 3 per open context order plus 1 per
+own earlier place it collapses, at least 1; a later cancel-all counts only places issued
+after the earlier one; and 1 when the result acknowledges anything (the host removes
 acknowledged receipts and orders with one statement). A decision without Broker commands has
 no plan. `decision_plan_rows_v6` gives the same count for a result (traderv3's parity test
 checks it is at least the owner's); validation rejects a result over the limit.
@@ -193,12 +195,13 @@ sees `Refused`.
 Local errors from a Broker call: a Market outside the Sleeve's scope, an invalid quantity or
 price, a Market without valid fee terms, a client order id that is invalid, longer than 128
 bytes, starts with `tv3`, or is already used by an order in the context, the runner section
-or this decision; the 193rd open order; a cancel naming no order the context or the decision
-knows; a cancel-all over a truncated view; the 65th command; the plan row limit; the runner
-section bound; a command that would take the result past its size budget (the budget
-assumes the kernel's state at its 128 KiB bound). Timers need the timer capability. Logs and
-telemetry fill only the room the checkpoint, commands and update evidence leave; the rest is
-counted in a `kernel_telemetry_overflow` diagnostic.
+or this decision; a Market sell in live (the Broker refuses one outside paper until Phase 5;
+validation rejects it too); the 193rd open order; a cancel naming no order the context or
+the decision knows; a cancel-all over a truncated view; the 65th command; the plan row
+limit; the runner section bound; a command that would take the result past its size budget
+(the budget assumes the kernel's state at its 128 KiB bound). Timers need the timer
+capability. Logs and telemetry fill only the room the checkpoint, commands and update
+evidence leave; the rest is counted in a `kernel_telemetry_overflow` diagnostic.
 
 ## Kernel runner
 
