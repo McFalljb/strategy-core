@@ -11,12 +11,13 @@
 //!    (updates the previous decision deferred first, the most deferred first; a cancel's
 //!    update never before its target's).
 //! 3. Deliver the trigger's event (`on_start` for Bootstrap/Recovery).
-//! 4. Broker calls return tickets at once. Inside the decision the kernel sees a provisional
-//!    view: its own new orders are pending (`submitted`) and reserve budget with the Broker's
-//!    formula ([`fees::buy_commitment_micros`]); cancels mark their targets
-//!    `cancellation_requested`; positions are unchanged.
+//! 4. Broker calls and external requests return tickets at once. Inside the decision the
+//!    kernel sees a provisional view: its own new orders are pending (`submitted`) and
+//!    reserve budget with the Broker's formula ([`fees::buy_commitment_micros`]); cancels mark
+//!    their targets `cancellation_requested`; positions are unchanged.
 //! 5. The result carries the post-event checkpoint (advanced by exactly one), every command in
-//!    issue order, and the receipts and terminal orders the Strategy has now seen. A kernel
+//!    issue order, and the receipts, terminal orders and external response the Strategy has
+//!    now seen. A kernel
 //!    error gives a `Rejected` result: no commands, the checkpoint unchanged.
 //!
 //! Projection rules:
@@ -39,16 +40,17 @@ use std::collections::{BTreeMap, BTreeSet};
 use chrono::{DateTime, TimeZone, Utc};
 use strategy_core_kernel::{
     AnnotationValue, BrokerCommandKind, BrokerFinancialState, BrokerOrderStatus,
-    CancelOrderRequest, CancelTarget, CommandTicket, ContractQuantity, ContractSide, KernelAction,
-    KernelCapabilities, KernelError, KernelResult, LogAction, MarketState, NativeKernel,
-    OrderAction, OrderStatusView, OrderTicket, OrderType, OrderUpdate, OrderUpdateStatus,
-    ParameterValue, PendingOrderView, PendingTimer, PlaceOrderRequest, RuntimeMode, StationState,
-    StrategyEvent, StrategyKernelBroker, StrategyKernelContext, StrategyKernelData,
-    StrategyKernelRuntime, StrategyKernelState, StrategyKernelTelemetry, StrategyParameters,
-    TimerHandle, WakeAtRequest, fees,
+    CancelOrderRequest, CancelTarget, CommandRequest, CommandTicket, ContractQuantity,
+    ContractSide, HttpMethod, HttpRequest, KernelAction, KernelCapabilities, KernelError,
+    KernelResult, LogAction, MarketState, NativeKernel, OrderAction, OrderStatusView, OrderTicket,
+    OrderType, OrderUpdate, OrderUpdateStatus, ParameterValue, PendingOrderView, PendingTimer,
+    PlaceOrderRequest, RequestTicket, RuntimeMode, StationState, StrategyEvent,
+    StrategyKernelBroker, StrategyKernelContext, StrategyKernelData, StrategyKernelRuntime,
+    StrategyKernelState, StrategyKernelTelemetry, StrategyParameters, TimerHandle, WakeAtRequest,
+    fees,
 };
 
-pub use self::events::KernelEvent;
+pub use self::events::{KernelEvent, external_response};
 use self::projection::{
     hundredths_quantity, market_state, millis, price, price_micros, station_state,
 };
@@ -57,10 +59,10 @@ pub use self::updates::{PROVIDER_REJECTED_CODE, PROVIDER_REJECTED_REASON};
 use crate::decision_v6::{
     self as wire, AnnotationValueV6, BrokerCommandKindV6, BrokerDetailV6, BrokerOrderStatusV6,
     BrokerOrderV6, CancelTargetV6, ContractSideV6, DecisionContextV6, DecisionDispositionV6,
-    DecisionPlanRows, DecisionResultV6, DecisionV6Error, DeploymentModeV6, KernelCheckpointV6,
-    OrderActionV6, OrderTypeV6, OrderUpdateRecordV6, OrderUpdateStatusV6, PlaceOrderV6,
-    ResultDiagnosticV6, ResultEvidenceV6, RunnerEntryV6, RunnerSectionV6, StrategyCommandV6,
-    StrategyParameterValueV6, TelemetryEntryV6,
+    DecisionPlanRows, DecisionResultV6, DecisionV6Error, DeploymentModeV6, ExternalRequestKindV6,
+    HttpMethodV6, KernelCheckpointV6, OrderActionV6, OrderTypeV6, OrderUpdateRecordV6,
+    OrderUpdateStatusV6, PlaceOrderV6, ResultDiagnosticV6, ResultEvidenceV6, RunnerEntryV6,
+    RunnerSectionV6, StrategyCommandV6, StrategyParameterValueV6, TelemetryEntryV6,
 };
 
 /// Prefix of the client order ids the host derives; a kernel's own ids may not use it.
@@ -1261,6 +1263,76 @@ impl<'a> KernelHost<'a> {
         Ok(())
     }
 
+    /// Issues an external request: granted, within its bounds, at most
+    /// `MAX_OUTSTANDING_EXTERNAL_REQUESTS` in the decision. Its id is its command id.
+    fn request(
+        &mut self,
+        kind: ExternalRequestKindV6,
+        target: String,
+        payload: Vec<u8>,
+        timeout_ms: u32,
+    ) -> KernelResult<RequestTicket> {
+        let invalid = |reason: String| Err(KernelError::new(format!("invalid request: {reason}")));
+        let grant = format!("{}{target}", kind.grant_prefix());
+        if !self.context.capabilities.grants_request(&kind, &target) {
+            return invalid(format!("{grant:?} is not granted to this Sleeve"));
+        }
+        if timeout_ms == 0 || timeout_ms > wire::MAX_EXTERNAL_REQUEST_TIMEOUT_MS {
+            return invalid(format!(
+                "the timeout must be 1 to {} ms",
+                wire::MAX_EXTERNAL_REQUEST_TIMEOUT_MS
+            ));
+        }
+        if matches!(&kind, ExternalRequestKindV6::Http { path, .. } if !wire::valid_http_path(path))
+        {
+            return invalid(format!(
+                "the path must start with one \"/\", have no \".\" or \"..\" segment, \
+                 no \"\\\" or \"#\", and be at most {} visible ASCII bytes",
+                wire::MAX_HTTP_PATH_BYTES
+            ));
+        }
+        if wire::validate_external_request(&kind, &target, &payload, timeout_ms).is_err() {
+            return invalid(format!(
+                "at most {} arguments without NUL, and at most {} bytes of path or arguments \
+                 and payload",
+                wire::MAX_COMMAND_REQUEST_ARGS,
+                wire::MAX_EXTERNAL_REQUEST_BYTES
+            ));
+        }
+        let requests = |commands: &[StrategyCommandV6]| {
+            commands
+                .iter()
+                .filter(|command| matches!(command, StrategyCommandV6::ExternalRequest { .. }))
+                .count()
+        };
+        if requests(&self.commands) >= wire::MAX_OUTSTANDING_EXTERNAL_REQUESTS {
+            return Err(self.capacity_error(
+                format!(
+                    "a decision issues at most {} external requests",
+                    wire::MAX_OUTSTANDING_EXTERNAL_REQUESTS
+                ),
+                |host| {
+                    host.update_start.is_some_and(|start| {
+                        requests(&host.commands[start.commands..])
+                            < wire::MAX_OUTSTANDING_EXTERNAL_REQUESTS
+                    })
+                },
+            ));
+        }
+        let ordinal = self.next_ordinal()?;
+        let command_id = self.context.command_id(ordinal);
+        self.push_command(StrategyCommandV6::ExternalRequest {
+            command_id: command_id.clone(),
+            kind,
+            target,
+            payload,
+            timeout_ms,
+        })?;
+        Ok(RequestTicket {
+            request_id: command_id,
+        })
+    }
+
     fn push_telemetry(&mut self, entry: TelemetryEntryV6) {
         self.outputs.push(HostOutput::Telemetry(entry));
     }
@@ -1504,6 +1576,28 @@ impl StrategyKernelRuntime for KernelHost<'_> {
     }
     fn pending_timers(&self) -> Vec<PendingTimer> {
         self.snapshot.pending_timers.clone()
+    }
+    fn request_http(&mut self, request: HttpRequest) -> KernelResult<RequestTicket> {
+        self.request(
+            ExternalRequestKindV6::Http {
+                method: match request.method {
+                    HttpMethod::Get => HttpMethodV6::Get,
+                    HttpMethod::Post => HttpMethodV6::Post,
+                },
+                path: request.path,
+            },
+            request.endpoint,
+            request.body,
+            request.timeout_ms,
+        )
+    }
+    fn request_command(&mut self, request: CommandRequest) -> KernelResult<RequestTicket> {
+        self.request(
+            ExternalRequestKindV6::Command { args: request.args },
+            request.command,
+            request.stdin,
+            request.timeout_ms,
+        )
     }
 }
 

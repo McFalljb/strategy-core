@@ -133,9 +133,66 @@ fn live_context() -> DecisionContextV6 {
     context.deployment_mode = DeploymentModeV6::Live;
     context.capabilities = CapabilityGrantV6 {
         timers: false,
-        external_requests: vec!["forecast.lookup".to_owned(), "weather.lookup".to_owned()],
+        external_requests: vec![
+            "command:forecast.lookup".to_owned(),
+            "http:weather.lookup".to_owned(),
+        ],
     };
     context
+}
+
+const ANSWERED_REQUEST: &str = "command.00112233445566778899aabbccddeeff";
+
+/// An HTTP answer to a request of an earlier decision, on a Sleeve granted an endpoint and a
+/// command.
+fn external_response_context() -> DecisionContextV6 {
+    let mut context = context();
+    context.capabilities.external_requests = vec!["command:echo".to_owned(), "http:jev".to_owned()];
+    context.trigger = TriggerV6::ExternalResponse {
+        request_id: ANSWERED_REQUEST.to_owned(),
+        outcome: ExternalOutcomeV6::Ok {
+            status: 200,
+            body: br#"{"choice":"T80","p":0.62}"#.to_vec(),
+        },
+    };
+    context
+}
+
+/// After a restart the host answers an in-flight request `Abandoned`.
+fn abandoned_response_context() -> DecisionContextV6 {
+    let mut context = external_response_context();
+    context.trigger = TriggerV6::ExternalResponse {
+        request_id: ANSWERED_REQUEST.to_owned(),
+        outcome: ExternalOutcomeV6::Err {
+            kind: ExternalErrorKindV6::Abandoned,
+            message: "traderd restarted while the request was in flight".to_owned(),
+        },
+    };
+    context
+}
+
+/// The multi-order result plus an HTTP request and a command request, acknowledging the
+/// answered request: 4 + 5 + 5 + 3 + 1 plan rows, none for the requests.
+fn external_requests_result(context: &DecisionContextV6) -> DecisionResultV6 {
+    let mut result = multi_order_result(context);
+    let ordinal = result.commands.len();
+    result.commands.push(external_request(
+        context,
+        ordinal,
+        http_post("/v1/choose"),
+        "jev",
+    ));
+    result.commands.push(external_request(
+        context,
+        ordinal + 1,
+        ExternalRequestKindV6::Command {
+            args: vec!["--json".to_owned()],
+        },
+        "echo",
+    ));
+    result.state_fence = fence(context);
+    result.acknowledged_command_ids = vec![ANSWERED_REQUEST.to_owned()];
+    result
 }
 
 /// A second order the provider rejected, with its rejection text.
@@ -175,6 +232,8 @@ fn valid_contexts() -> Vec<(&'static str, DecisionContextV6)> {
         ("row-limit-view", row_limit_case().0),
         ("truncated-order-view", truncated_context()),
         ("provider-rejection-reason", provider_rejection_context()),
+        ("external-response-ok", external_response_context()),
+        ("external-response-abandoned", abandoned_response_context()),
     ]
 }
 
@@ -327,6 +386,11 @@ fn valid_results() -> Vec<(&'static str, &'static str, DecisionResultV6)> {
             live_cancel_all_result(&live_context()),
         ),
         (
+            "external-requests-beside-orders",
+            "external-response-ok",
+            external_requests_result(&external_response_context()),
+        ),
+        (
             "live-market-sell-goes-to-the-broker",
             "live-request-grants",
             {
@@ -471,6 +535,28 @@ fn invalid_contexts() -> Vec<(&'static str, DecisionV6Error, ContextMutation)> {
             |context| {
                 *context = live_context();
                 context.capabilities.external_requests.reverse();
+            },
+        ),
+        (
+            "request-grant-without-its-kind",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = live_context();
+                context.capabilities.external_requests = vec!["weather.lookup".to_owned()];
+            },
+        ),
+        (
+            "external-response-body-over-256-kib",
+            DecisionV6Error::BoundExceeded,
+            |context| {
+                *context = external_response_context();
+                context.trigger = TriggerV6::ExternalResponse {
+                    request_id: ANSWERED_REQUEST.to_owned(),
+                    outcome: ExternalOutcomeV6::Ok {
+                        status: 200,
+                        body: vec![b' '; MAX_EXTERNAL_RESPONSE_BODY_BYTES + 1],
+                    },
+                };
             },
         ),
     ]
@@ -653,6 +739,51 @@ fn invalid_results() -> Vec<(&'static str, &'static str, DecisionV6Error, Result
             "live-request-grants",
             DecisionV6Error::InvalidContract,
             |context, result| result.state_fence = fence(context),
+        ),
+        (
+            "external-request-not-granted",
+            "external-response-ok",
+            DecisionV6Error::InvalidContract,
+            |context, result| {
+                *result = external_requests_result(context);
+                let last = result.commands.len() - 1;
+                result.commands[last] = external_request(
+                    context,
+                    last,
+                    ExternalRequestKindV6::Command { args: vec![] },
+                    "pi-forecast",
+                );
+            },
+        ),
+        (
+            "external-request-timeout-over-two-minutes",
+            "external-response-ok",
+            DecisionV6Error::InvalidContract,
+            |context, result| {
+                *result = external_requests_result(context);
+                let last = result.commands.len() - 1;
+                if let StrategyCommandV6::ExternalRequest { timeout_ms, .. } =
+                    &mut result.commands[last]
+                {
+                    *timeout_ms = MAX_EXTERNAL_REQUEST_TIMEOUT_MS + 1;
+                }
+            },
+        ),
+        (
+            "more-than-8-external-requests",
+            "external-response-ok",
+            DecisionV6Error::BoundExceeded,
+            |context, result| {
+                *result = external_requests_result(context);
+                result.commands = (0..=MAX_OUTSTANDING_EXTERNAL_REQUESTS)
+                    .map(|ordinal| external_request(context, ordinal, http_post("/"), "jev"))
+                    .collect();
+                result.kernel_checkpoint = Some(checkpoint(
+                    context.kernel_checkpoint.as_ref().unwrap().sequence + 1,
+                    b"post-event-kernel-state",
+                    context.kernel_checkpoint.as_ref().unwrap().runner.clone(),
+                ));
+            },
         ),
     ]
 }
@@ -962,7 +1093,7 @@ fn v6_corpus_is_current_and_every_vector_decodes_to_its_verdict() {
         }
     }
     let invalid = recorded["invalid"].as_array().unwrap();
-    assert_eq!(invalid.len(), 33);
+    assert_eq!(invalid.len(), 38);
     for entry in invalid {
         let id = entry["id"].as_str().unwrap();
         let bytes = bytes(entry);

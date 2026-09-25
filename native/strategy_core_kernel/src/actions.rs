@@ -425,3 +425,92 @@ pub struct OrderUpdate {
     /// runner knows.
     pub vanished: bool,
 }
+
+/// The HTTP method of an [`HttpRequest`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HttpMethod {
+    Get,
+    Post,
+}
+
+/// An HTTP call the host makes for the Strategy after the decision is saved.
+///
+/// `endpoint` is a name from the Strategy's allowlist, never a URL: the host owns the base
+/// URL and any credential. `path` (starting with `/`, query included) is appended to the
+/// endpoint's base URL. The answer arrives later as a [`StrategyEvent::ExternalResponse`].
+///
+/// [`StrategyEvent::ExternalResponse`]: crate::StrategyEvent::ExternalResponse
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HttpRequest {
+    pub endpoint: String,
+    pub method: HttpMethod,
+    pub path: String,
+    pub body: Vec<u8>,
+    /// At most two minutes; the host gives up and answers `Timeout` after it.
+    pub timeout_ms: u32,
+}
+
+/// A command the host runs for the Strategy after the decision is saved.
+///
+/// `command` is a name from the Strategy's allowlist, never a path: the host owns the program,
+/// its leading arguments and its environment. `args` follow the configured ones; `stdin` is
+/// written to the program's standard input. Its standard output is the response body.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CommandRequest {
+    pub command: String,
+    pub args: Vec<String>,
+    pub stdin: Vec<u8>,
+    /// At most two minutes; the host kills the program and answers `Timeout` after it.
+    pub timeout_ms: u32,
+}
+
+/// What `request_http` and `request_command` return at once. The answer arrives later as an
+/// [`ExternalResponse`] with the same `request_id`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RequestTicket {
+    pub request_id: String,
+}
+
+/// Why an external request has no answer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExternalErrorKind {
+    /// The host did not send it (not allowed, too many outstanding, shutting down).
+    Refused,
+    /// No answer within the request's timeout; a command was killed.
+    Timeout,
+    /// The call could not be made (connection, TLS, I/O, the program could not start).
+    Transport,
+    /// The HTTP status was not 2xx; `message` carries the start of the body.
+    Status(u16),
+    /// The response body (or a command's output) was larger than the host accepts.
+    TooLarge,
+    /// The response was not a valid HTTP response.
+    Malformed,
+    /// The command exited unsuccessfully; `None` when a signal ended it.
+    Exit(Option<i32>),
+    /// traderd restarted while the request was in flight; it may or may not have been
+    /// performed. Ask again if it still matters.
+    Abandoned,
+}
+
+/// The answer to one external request.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExternalOutcome {
+    /// A 2xx HTTP status and its body, or a command's exit status 0 and its standard output.
+    Ok { status: u16, body: Vec<u8> },
+    Err {
+        kind: ExternalErrorKind,
+        message: String,
+    },
+}
+
+/// The answer to an [`HttpRequest`] or [`CommandRequest`] the Strategy issued in an earlier
+/// decision, delivered as its own event.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExternalResponse {
+    pub request_id: String,
+    pub outcome: ExternalOutcome,
+}

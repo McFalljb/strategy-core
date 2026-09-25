@@ -39,8 +39,9 @@ pub const MAX_BROKER_ORDERS: usize = 256;
 /// Unacknowledged receipts per Sleeve; past this the Broker refuses new commands.
 pub const MAX_COMMAND_RECEIPTS: usize = 256;
 pub const MAX_STRATEGY_COMMANDS: usize = 64;
-/// Every receipt and every terminal order in one context can be acknowledged at once.
-pub const MAX_ACKNOWLEDGED_COMMANDS: usize = MAX_COMMAND_RECEIPTS + MAX_BROKER_ORDERS;
+/// Every receipt and every terminal order in one context, and the external request the
+/// context answers, can be acknowledged at once.
+pub const MAX_ACKNOWLEDGED_COMMANDS: usize = MAX_COMMAND_RECEIPTS + MAX_BROKER_ORDERS + 1;
 /// Live orders and commands the runner section may hold when a decision issues a Broker
 /// command: a command that would take it to this many is a local error.
 pub const MAX_RUNNER_ENTRIES: usize = 256;
@@ -77,9 +78,28 @@ pub const MAX_REASON_BYTES: usize = 4 * 1024;
 /// update's evidence records; the kernel sees the whole reason (at most `MAX_REASON_BYTES`).
 pub const MAX_REJECTION_REASON_BYTES: usize = 512;
 pub const MAX_PRICE_MICROS: u64 = 1_000_000;
-/// Request names the host may allow a Strategy (Phase 4); bounded now so the wire need not
-/// change when they arrive.
+/// External request names the host may allow a Strategy.
 pub const MAX_EXTERNAL_REQUEST_GRANTS: usize = 32;
+/// Prefix of a granted HTTP endpoint in `CapabilityGrantV6::external_requests`.
+pub const HTTP_REQUEST_GRANT_PREFIX: &str = "http:";
+/// Prefix of a granted command in `CapabilityGrantV6::external_requests`.
+pub const COMMAND_REQUEST_GRANT_PREFIX: &str = "command:";
+/// External requests one Sleeve may have outstanding (issued, not yet answered); also the
+/// most one decision may issue. The host refuses a request past it (`Refused`).
+pub const MAX_OUTSTANDING_EXTERNAL_REQUESTS: usize = 8;
+/// Bytes of one external request: the HTTP path or the command arguments plus the payload.
+pub const MAX_EXTERNAL_REQUEST_BYTES: usize = 64 * 1024;
+/// Bytes of one external response body (an HTTP body or a command's standard output).
+pub const MAX_EXTERNAL_RESPONSE_BODY_BYTES: usize = 256 * 1024;
+/// The longest timeout a request may ask for.
+pub const MAX_EXTERNAL_REQUEST_TIMEOUT_MS: u32 = 120_000;
+/// Bytes of an HTTP request path (query included).
+pub const MAX_HTTP_PATH_BYTES: usize = 2 * 1024;
+/// Arguments one command request may add to the configured ones.
+pub const MAX_COMMAND_REQUEST_ARGS: usize = 64;
+/// The handshake capability of a Strategy executable that issues external requests; the host
+/// requires it exactly when it grants the Strategy any.
+pub const EXTERNAL_REQUESTS_CAPABILITY: &str = "external-requests";
 /// Upper bound of one encoded runner entry: four bounded identifiers and fixed-width fields.
 pub const MAX_ENCODED_RUNNER_ENTRY_BYTES: usize = 4 * (MAX_IDENTIFIER_BYTES + 3) + 80;
 /// Open orders one Sleeve may hold in paper: open context orders plus the decision's own
@@ -261,8 +281,19 @@ impl DeploymentModeV6 {
 pub struct CapabilityGrantV6 {
     /// One-shot timers (`ScheduleTimer` / `CancelTimer`).
     pub timers: bool,
-    /// Allowed external request names, strictly sorted. Empty until Phase 4 grants any.
+    /// Allowed external requests, strictly sorted: `http:<endpoint>` and `command:<name>`
+    /// ([`HTTP_REQUEST_GRANT_PREFIX`], [`COMMAND_REQUEST_GRANT_PREFIX`]).
     pub external_requests: Vec<String>,
+}
+
+impl CapabilityGrantV6 {
+    /// Whether a request of `kind` to the allowlist name `target` is granted.
+    pub fn grants_request(&self, kind: &ExternalRequestKindV6, target: &str) -> bool {
+        let prefix = kind.grant_prefix();
+        self.external_requests
+            .iter()
+            .any(|grant| grant.strip_prefix(prefix) == Some(target))
+    }
 }
 
 #[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
@@ -600,6 +631,71 @@ pub enum TriggerV6 {
     BrokerState {
         broker_revision: u64,
     },
+    /// The answer to an external request the Sleeve issued in an earlier decision: the
+    /// `command_id` of its `ExternalRequest` command. The response bytes travel in the
+    /// context, so a recorded decision shows exactly what the Strategy saw.
+    ExternalResponse {
+        request_id: String,
+        outcome: ExternalOutcomeV6,
+    },
+}
+
+/// The HTTP method of an external request.
+#[derive(Clone, Copy, Debug, Encode, Decode, Eq, PartialEq)]
+pub enum HttpMethodV6 {
+    Get,
+    Post,
+}
+
+/// What an external request asks for, besides its target and payload.
+#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+pub enum ExternalRequestKindV6 {
+    /// An HTTP call; `path` (from `/`, query included) follows the endpoint's base URL.
+    Http { method: HttpMethodV6, path: String },
+    /// A command; `args` follow the configured program and arguments.
+    Command { args: Vec<String> },
+}
+
+impl ExternalRequestKindV6 {
+    /// The grant prefix of this kind of request.
+    pub const fn grant_prefix(&self) -> &'static str {
+        match self {
+            Self::Http { .. } => HTTP_REQUEST_GRANT_PREFIX,
+            Self::Command { .. } => COMMAND_REQUEST_GRANT_PREFIX,
+        }
+    }
+}
+
+/// Why an external request has no answer.
+#[derive(Clone, Copy, Debug, Encode, Decode, Eq, PartialEq)]
+pub enum ExternalErrorKindV6 {
+    /// The host did not send it (not allowed, too many outstanding, shutting down).
+    Refused,
+    /// No answer within the request's timeout; a command was killed.
+    Timeout,
+    /// The call could not be made (connection, TLS, I/O, the program could not start).
+    Transport,
+    /// An HTTP status outside 2xx; the message carries the start of the body.
+    Status(u16),
+    /// The body or output was larger than `MAX_EXTERNAL_RESPONSE_BODY_BYTES`.
+    TooLarge,
+    /// Not a valid HTTP response.
+    Malformed,
+    /// The command exited unsuccessfully (`None`: a signal ended it).
+    Exit(Option<i32>),
+    /// The host restarted while the request was in flight.
+    Abandoned,
+}
+
+/// The answer to one external request.
+#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+pub enum ExternalOutcomeV6 {
+    /// A 2xx HTTP status and its body, or exit status 0 and a command's standard output.
+    Ok { status: u16, body: Vec<u8> },
+    Err {
+        kind: ExternalErrorKindV6,
+        message: String,
+    },
 }
 
 #[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
@@ -659,6 +755,18 @@ pub enum StrategyCommandV6 {
         command_id: String,
         reason: String,
     },
+    /// An HTTP call or command the host performs once, after the decision is saved; its
+    /// answer is a later `ExternalResponse` trigger whose `request_id` is this `command_id`.
+    /// It carries no Broker fence and may share a decision with orders.
+    ExternalRequest {
+        command_id: String,
+        kind: ExternalRequestKindV6,
+        /// The allowlist name of the endpoint or command, never a URL or a path.
+        target: String,
+        /// The HTTP body or the command's standard input.
+        payload: Vec<u8>,
+        timeout_ms: u32,
+    },
 }
 
 impl StrategyCommandV6 {
@@ -669,18 +777,28 @@ impl StrategyCommandV6 {
             | Self::CancelAllOrders { command_id }
             | Self::ScheduleTimer { command_id, .. }
             | Self::CancelTimer { command_id, .. }
-            | Self::Stop { command_id, .. } => command_id,
+            | Self::Stop { command_id, .. }
+            | Self::ExternalRequest { command_id, .. } => command_id,
         }
     }
 
-    /// The Broker command kind, or `None` for timer and stop commands.
+    /// The Broker command kind, or `None` for timer, stop and external request commands.
     pub fn broker_kind(&self) -> Option<BrokerCommandKindV6> {
         match self {
             Self::PlaceOrder(_) => Some(BrokerCommandKindV6::PlaceOrder),
             Self::CancelOrder { .. } => Some(BrokerCommandKindV6::CancelOrder),
             Self::CancelAllOrders { .. } => Some(BrokerCommandKindV6::CancelAllOrders),
-            Self::ScheduleTimer { .. } | Self::CancelTimer { .. } | Self::Stop { .. } => None,
+            Self::ScheduleTimer { .. }
+            | Self::CancelTimer { .. }
+            | Self::Stop { .. }
+            | Self::ExternalRequest { .. } => None,
         }
+    }
+
+    /// Whether the command leaves the host after the decision is saved (a Broker command or
+    /// an external request), so the decision needs a durable write.
+    pub fn leaves_host(&self) -> bool {
+        self.broker_kind().is_some() || matches!(self, Self::ExternalRequest { .. })
     }
 }
 
@@ -888,11 +1006,21 @@ impl DecisionContextV6 {
         Ok(())
     }
 
-    /// The owner trigger of this decision; `None` for a Broker-state trigger.
+    /// The owner trigger of this decision; `None` for a Broker-state trigger or an external
+    /// response.
     pub fn owner_trigger(&self) -> Option<&OwnerTriggerV6> {
         match &self.trigger {
             TriggerV6::Owner(trigger) => Some(trigger),
-            TriggerV6::BrokerState { .. } => None,
+            TriggerV6::BrokerState { .. } | TriggerV6::ExternalResponse { .. } => None,
+        }
+    }
+
+    /// The request an external-response trigger answers. A completed result acknowledges
+    /// it, and the host forgets the request once that acknowledgement is durable.
+    pub fn external_response_id(&self) -> Option<&str> {
+        match &self.trigger {
+            TriggerV6::ExternalResponse { request_id, .. } => Some(request_id),
+            TriggerV6::Owner(_) | TriggerV6::BrokerState { .. } => None,
         }
     }
 
@@ -1165,11 +1293,16 @@ fn validate_capabilities(capabilities: &CapabilityGrantV6) -> Result<(), Decisio
     if !strictly_sorted(capabilities.external_requests.iter()) {
         return Err(DecisionV6Error::NonCanonicalOrder);
     }
-    if capabilities
-        .external_requests
-        .iter()
-        .any(|name| !valid_identifier(name))
-    {
+    if capabilities.external_requests.iter().any(|grant| {
+        !valid_identifier(grant)
+            || ![HTTP_REQUEST_GRANT_PREFIX, COMMAND_REQUEST_GRANT_PREFIX]
+                .iter()
+                .any(|prefix| {
+                    grant
+                        .strip_prefix(prefix)
+                        .is_some_and(valid_external_request_target)
+                })
+    }) {
         return Err(DecisionV6Error::InvalidContract);
     }
     Ok(())
@@ -1366,6 +1499,40 @@ fn validate_trigger(context: &DecisionContextV6) -> Result<(), DecisionV6Error> 
             Ok(())
         }
         TriggerV6::BrokerState { .. } => Err(DecisionV6Error::InvalidContract),
+        TriggerV6::ExternalResponse {
+            request_id,
+            outcome,
+        } => {
+            if !valid_identifier(request_id) {
+                return Err(DecisionV6Error::InvalidContract);
+            }
+            validate_external_outcome(outcome)
+        }
+    }
+}
+
+/// An answer's bounds: a body of at most `MAX_EXTERNAL_RESPONSE_BODY_BYTES` with status 0 (a
+/// command) or 2xx, or an error with a message of at most `MAX_REASON_BYTES` (a `Status` error
+/// names a status outside 2xx).
+pub fn validate_external_outcome(outcome: &ExternalOutcomeV6) -> Result<(), DecisionV6Error> {
+    match outcome {
+        ExternalOutcomeV6::Ok { body, .. } if body.len() > MAX_EXTERNAL_RESPONSE_BODY_BYTES => {
+            Err(DecisionV6Error::BoundExceeded)
+        }
+        ExternalOutcomeV6::Ok { status, .. } if *status == 0 || (200..300).contains(status) => {
+            Ok(())
+        }
+        ExternalOutcomeV6::Ok { .. } => Err(DecisionV6Error::InvalidContract),
+        ExternalOutcomeV6::Err { message, .. } if !valid_text(message, MAX_REASON_BYTES) => {
+            Err(DecisionV6Error::BoundExceeded)
+        }
+        ExternalOutcomeV6::Err {
+            kind: ExternalErrorKindV6::Status(status),
+            ..
+        } if !(100..600).contains(status) || (200..300).contains(status) => {
+            Err(DecisionV6Error::InvalidContract)
+        }
+        ExternalOutcomeV6::Err { .. } => Ok(()),
     }
 }
 
@@ -1783,6 +1950,15 @@ impl DecisionResultV6 {
         }
         unique(self.acknowledged_command_ids.iter().map(String::as_str))?;
         unique(self.commands.iter().map(StrategyCommandV6::command_id))?;
+        if self
+            .commands
+            .iter()
+            .filter(|command| matches!(command, StrategyCommandV6::ExternalRequest { .. }))
+            .count()
+            > MAX_OUTSTANDING_EXTERNAL_REQUESTS
+        {
+            return Err(DecisionV6Error::BoundExceeded);
+        }
         let generation = format!("timer.{}", self.delivery_id);
         let mut client_ids = BTreeSet::new();
         let mut timer_keys = BTreeSet::new();
@@ -1906,6 +2082,11 @@ pub fn validate_decision_result_v6(
             StrategyCommandV6::CancelAllOrders { .. } if !context.orders_complete => {
                 return Err(DecisionV6Error::InvalidContract);
             }
+            StrategyCommandV6::ExternalRequest { kind, target, .. }
+                if !context.capabilities.grants_request(kind, target) =>
+            {
+                return Err(DecisionV6Error::InvalidContract);
+            }
             _ => {}
         }
     }
@@ -1921,6 +2102,7 @@ pub fn validate_decision_result_v6(
                 .filter(|order| order.status.is_terminal())
                 .map(|order| order.command_id.as_str()),
         )
+        .chain(context.external_response_id())
         .collect::<BTreeSet<_>>();
     if result
         .acknowledged_command_ids
@@ -2034,8 +2216,75 @@ fn validate_command(command: &StrategyCommandV6) -> Result<(), DecisionV6Error> 
             return Err(DecisionV6Error::BoundExceeded);
         }
         StrategyCommandV6::Stop { .. } => {}
+        StrategyCommandV6::ExternalRequest {
+            kind,
+            target,
+            payload,
+            timeout_ms,
+            ..
+        } => validate_external_request(kind, target, payload, *timeout_ms)?,
     }
     Ok(())
+}
+
+/// Bounds of one external request: an allowlist name (never a URL or a path), a timeout of
+/// 1 ms to `MAX_EXTERNAL_REQUEST_TIMEOUT_MS`, a relative HTTP path or bounded command
+/// arguments, and at most `MAX_EXTERNAL_REQUEST_BYTES` of path or arguments plus payload.
+pub fn validate_external_request(
+    kind: &ExternalRequestKindV6,
+    target: &str,
+    payload: &[u8],
+    timeout_ms: u32,
+) -> Result<(), DecisionV6Error> {
+    if !valid_external_request_target(target)
+        || timeout_ms == 0
+        || timeout_ms > MAX_EXTERNAL_REQUEST_TIMEOUT_MS
+    {
+        return Err(DecisionV6Error::InvalidContract);
+    }
+    let request_bytes = match kind {
+        ExternalRequestKindV6::Http { path, .. } => {
+            if !valid_http_path(path) {
+                return Err(DecisionV6Error::InvalidContract);
+            }
+            path.len()
+        }
+        ExternalRequestKindV6::Command { args } => {
+            if args.len() > MAX_COMMAND_REQUEST_ARGS {
+                return Err(DecisionV6Error::BoundExceeded);
+            }
+            if args.iter().any(|arg| arg.contains('\0')) {
+                return Err(DecisionV6Error::InvalidContract);
+            }
+            args.iter().map(String::len).sum()
+        }
+    };
+    if request_bytes.saturating_add(payload.len()) > MAX_EXTERNAL_REQUEST_BYTES {
+        return Err(DecisionV6Error::BoundExceeded);
+    }
+    Ok(())
+}
+
+/// An allowlist name: an identifier without `:` (which separates a grant's kind).
+pub fn valid_external_request_target(name: &str) -> bool {
+    valid_identifier(name) && !name.contains(':')
+}
+
+/// A path the host can only append to an endpoint's base URL: it starts with a single `/`,
+/// has no `.` or `..` segment, no `\` and no fragment, and is visible ASCII of at most
+/// `MAX_HTTP_PATH_BYTES` (a query is allowed).
+pub fn valid_http_path(path: &str) -> bool {
+    let route = path.split('?').next().unwrap_or_default();
+    path.len() <= MAX_HTTP_PATH_BYTES
+        && path.starts_with('/')
+        && !path.starts_with("//")
+        && path
+            .bytes()
+            .all(|byte| byte.is_ascii_graphic() && !matches!(byte, b'\\' | b'#'))
+        && route
+            .split('/')
+            .skip(1)
+            .all(|segment| segment != "." && segment != "..")
 }
 
 fn valid_place_order_prices(order: &PlaceOrderV6) -> bool {
@@ -2184,7 +2433,8 @@ impl DecisionPlanRows {
             }
             StrategyCommandV6::ScheduleTimer { .. }
             | StrategyCommandV6::CancelTimer { .. }
-            | StrategyCommandV6::Stop { .. } => return,
+            | StrategyCommandV6::Stop { .. }
+            | StrategyCommandV6::ExternalRequest { .. } => return,
         };
         self.broker_commands += 1;
         self.rows += rows;

@@ -2,7 +2,7 @@
 
 use chrono::{DateTime, Utc};
 
-use crate::actions::OrderUpdate;
+use crate::actions::{ExternalResponse, OrderUpdate};
 use crate::events::{
     ForecastUpdatedView, MarketBracketView, OracleScoresUpdatedView, PriceUpdateView,
     StrategyEventView, TimerWakeView,
@@ -61,6 +61,8 @@ pub enum StrategyEvent {
     /// A change of one of the Strategy's orders or commands, delivered before the triggering
     /// event in the same decision.
     OrderUpdate(OrderUpdate),
+    /// The answer to an external request the Strategy issued in an earlier decision.
+    ExternalResponse(ExternalResponse),
     Unknown {
         event_type: String,
         emitted_at: Option<DateTime<Utc>>,
@@ -137,6 +139,7 @@ impl StrategyEvent {
                 name: &event.name,
             }),
             Self::OrderUpdate(update) => StrategyEventView::OrderUpdate(update),
+            Self::ExternalResponse(response) => StrategyEventView::ExternalResponse(response),
             Self::Unknown {
                 event_type,
                 emitted_at,

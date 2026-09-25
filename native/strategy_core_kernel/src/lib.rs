@@ -26,9 +26,10 @@ pub use weather::{WeatherFact, WeatherFactProvenance, WeatherFacts, WeatherField
 
 pub use actions::{
     BrokerCommandKind, BrokerOrderStatus, CancelAllOrdersRequest, CancelOrderRequest, CancelTarget,
-    CommandTicket, ContractQuantity, ContractSide, KernelAction, LogAction, OrderAction,
-    OrderStatusView, OrderTicket, OrderType, OrderUpdate, OrderUpdateStatus, PendingOrderView,
-    PlaceOrderRequest, StopAction, TelemetryAction, WakeAtRequest,
+    CommandRequest, CommandTicket, ContractQuantity, ContractSide, ExternalErrorKind,
+    ExternalOutcome, ExternalResponse, HttpMethod, HttpRequest, KernelAction, LogAction,
+    OrderAction, OrderStatusView, OrderTicket, OrderType, OrderUpdate, OrderUpdateStatus,
+    PendingOrderView, PlaceOrderRequest, RequestTicket, StopAction, TelemetryAction, WakeAtRequest,
 };
 pub use context::{
     AnnotationValue, KernelCapabilities, NativeKernel, ParameterValue, PendingTimer, RuntimeMode,

@@ -9,7 +9,7 @@ use std::borrow::Cow;
 
 use chrono::{DateTime, Utc};
 
-use crate::actions::{ContractQuantity, OrderUpdate};
+use crate::actions::{ContractQuantity, ExternalResponse, OrderUpdate};
 use crate::supplied::{
     SuppliedExtreme, SuppliedForecast, SuppliedForecastModel, SuppliedObservation,
     SuppliedOracleTable, SuppliedReport, SuppliedWeatherEvent,
@@ -474,6 +474,7 @@ pub enum StrategyEventView<'a> {
     NewLow(HighLowView<'a>),
     TimerWake(TimerWakeView<'a>),
     OrderUpdate(&'a OrderUpdate),
+    ExternalResponse(&'a ExternalResponse),
     Unknown {
         event_type: &'a str,
         emitted_at: Option<DateTime<Utc>>,
@@ -494,6 +495,7 @@ impl StrategyEventView<'_> {
             Self::NewLow(_) => "new_low",
             Self::TimerWake(_) => "timer_wake",
             Self::OrderUpdate(_) => "order_update",
+            Self::ExternalResponse(_) => "external_response",
             Self::Unknown { event_type, .. } => event_type,
         }
     }

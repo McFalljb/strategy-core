@@ -376,6 +376,28 @@ fn hosts_without_parameters_or_capabilities_supply_none_by_default() {
     let mut runtime = runtime;
     assert!(runtime.cancel_timer(&handle).is_err());
     assert!(runtime.pending_timers().is_empty());
+    assert!(
+        runtime
+            .request_http(strategy_core_kernel::HttpRequest {
+                endpoint: "jev".to_owned(),
+                method: strategy_core_kernel::HttpMethod::Post,
+                path: "/".to_owned(),
+                body: Vec::new(),
+                timeout_ms: 1_000,
+            })
+            .is_err(),
+        "a host without external requests refuses them"
+    );
+    assert!(
+        runtime
+            .request_command(strategy_core_kernel::CommandRequest {
+                command: "echo".to_owned(),
+                args: Vec::new(),
+                stdin: Vec::new(),
+                timeout_ms: 1_000,
+            })
+            .is_err()
+    );
     let kept = serde_json::to_string(&handle).unwrap();
     assert_eq!(kept, r#"{"key":"exit","generation":"timer.delivery.1"}"#);
     assert_eq!(serde_json::from_str::<TimerHandle>(&kept).unwrap(), handle);

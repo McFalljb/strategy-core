@@ -1,13 +1,16 @@
 //! Host services a kernel reads or requests beyond Broker calls: its parameters, the host's
-//! capabilities, gauge and annotation telemetry, and cancellable timers.
+//! capabilities, gauge and annotation telemetry, cancellable timers, and external requests
+//! with their responses.
 
 use super::*;
 use strategy_core_kernel::{
-    AnnotationValue, KernelCapabilities, ParameterValue, RuntimeMode, TimerHandle, WakeAtRequest,
+    AnnotationValue, CommandRequest, HttpMethod, HttpRequest, KernelCapabilities, ParameterValue,
+    RequestTicket, RuntimeMode, TimerHandle, WakeAtRequest,
 };
 use strategy_core_v3::decision_v4::TimerRecoveryV4;
 use strategy_core_v3::decision_v6::{
-    AnnotationValueV6, DecisionResultV6, StrategyParameterValueV6, TelemetryEntryV6,
+    AnnotationValueV6, DecisionResultV6, ExternalErrorKindV6, ExternalOutcomeV6,
+    ExternalRequestKindV6, HttpMethodV6, StrategyParameterValueV6, TelemetryEntryV6,
 };
 
 type Script = fn(&mut dyn StrategyKernelContext, &mut Vec<String>) -> KernelResult<()>;
@@ -109,7 +112,7 @@ fn kernels_read_exact_parameters_and_the_granted_capabilities() {
         ("unset".to_owned(), StrategyParameterValueV6::Null),
         ("window".to_owned(), StrategyParameterValueV6::U64(90)),
     ];
-    context.capabilities.external_requests = vec!["weather.lookup".to_owned()];
+    context.capabilities.external_requests = vec!["http:weather.lookup".to_owned()];
     let (seen, result) = run_script(&context, |context, seen| {
         let parameters = context.parameters();
         seen.push(format!(
@@ -156,7 +159,7 @@ fn kernels_read_exact_parameters_and_the_granted_capabilities() {
         assert_eq!(capabilities.mode, Some(RuntimeMode::Paper));
         assert!(capabilities.timers);
         assert!(capabilities.timer_handles);
-        assert_eq!(capabilities.external_requests, ["weather.lookup"]);
+        assert_eq!(capabilities.external_requests, ["http:weather.lookup"]);
         assert_eq!(context.contributor_stations(), [STATION]);
         seen.push(format!("capabilities={capabilities:?}"));
         Ok(())
@@ -488,4 +491,302 @@ fn a_decision_carries_at_most_one_timer_operation_per_key() {
             ),
         ]
     );
+}
+
+fn request_grants(context: &mut DecisionContextV6) {
+    context.capabilities.external_requests = vec!["command:echo".to_owned(), "http:jev".to_owned()];
+}
+
+fn jev(path: &str) -> HttpRequest {
+    HttpRequest {
+        endpoint: "jev".to_owned(),
+        method: HttpMethod::Post,
+        path: path.to_owned(),
+        body: b"{\"options\":6}".to_vec(),
+        timeout_ms: 5_000,
+    }
+}
+
+fn echo(args: &[&str]) -> CommandRequest {
+    CommandRequest {
+        command: "echo".to_owned(),
+        args: args.iter().map(|arg| (*arg).to_owned()).collect(),
+        stdin: Vec::new(),
+        timeout_ms: 1_000,
+    }
+}
+
+/// A request is one more command of the decision, beside its orders; its ticket's request id
+/// is its command id.
+#[test]
+fn external_requests_share_a_decision_with_orders_and_return_tickets() {
+    let mut context = observation_context(Some("22.8"), Some("73"));
+    request_grants(&mut context);
+    let (seen, result) = run_script(&context, |context, seen| {
+        let order = context.broker().place_order(PlaceOrderRequest {
+            ticker: MARKET.to_owned(),
+            action: OrderAction::Buy,
+            contract_side: ContractSide::Yes,
+            order_type: OrderType::Limit,
+            quantity: ContractQuantity::from_hundredths(100),
+            limit_price: Some(0.42),
+            expires_after_ms: None,
+            reduce_only: false,
+            signal_type: None,
+            signal_metadata: None,
+            client_order_id: Some("value-yes-1".to_owned()),
+        })?;
+        let http = context.runtime().request_http(jev("/v1/choose"))?;
+        let command = context.runtime().request_command(echo(&["hello"]))?;
+        seen.extend([order.command_id, http.request_id, command.request_id]);
+        Ok(())
+    });
+    assert_eq!(result.disposition, DecisionDispositionV6::Completed);
+    assert_eq!(seen, [cid(1, 0), cid(1, 1), cid(1, 2)]);
+    assert_eq!(result.commands.len(), 3);
+    assert!(matches!(
+        result.commands[0],
+        StrategyCommandV6::PlaceOrder(_)
+    ));
+    assert_eq!(
+        result.commands[1],
+        StrategyCommandV6::ExternalRequest {
+            command_id: cid(1, 1),
+            kind: ExternalRequestKindV6::Http {
+                method: HttpMethodV6::Post,
+                path: "/v1/choose".to_owned(),
+            },
+            target: "jev".to_owned(),
+            payload: b"{\"options\":6}".to_vec(),
+            timeout_ms: 5_000,
+        }
+    );
+    assert_eq!(
+        result.commands[2],
+        StrategyCommandV6::ExternalRequest {
+            command_id: cid(1, 2),
+            kind: ExternalRequestKindV6::Command {
+                args: vec!["hello".to_owned()],
+            },
+            target: "echo".to_owned(),
+            payload: Vec::new(),
+            timeout_ms: 1_000,
+        }
+    );
+    assert!(result.commands.iter().all(StrategyCommandV6::leaves_host));
+    // Only the order is tracked by the runner section.
+    let runner = &result.kernel_checkpoint.as_ref().unwrap().runner;
+    assert_eq!(runner.entries.len(), 1);
+    assert_eq!(runner.entries[0].command_id, cid(1, 0));
+}
+
+/// Everything outside the grant or the bounds is a local error, and the decision goes on.
+#[test]
+fn an_ungranted_or_unbounded_request_is_a_local_error() {
+    let mut context = observation_context(Some("22.8"), Some("73"));
+    request_grants(&mut context);
+    let (seen, result) = run_script(&context, |context, seen| {
+        let runtime = context.runtime();
+        let mut refuse = |label: &str, outcome: KernelResult<RequestTicket>| {
+            let error = outcome.expect_err(label);
+            seen.push(format!("{label}: {}", error.message()));
+        };
+        refuse(
+            "unknown endpoint",
+            runtime.request_http(HttpRequest {
+                endpoint: "other".to_owned(),
+                ..jev("/")
+            }),
+        );
+        refuse(
+            "a command name as an endpoint",
+            runtime.request_http(HttpRequest {
+                endpoint: "echo".to_owned(),
+                ..jev("/")
+            }),
+        );
+        refuse(
+            "an endpoint name as a command",
+            runtime.request_command(CommandRequest {
+                command: "jev".to_owned(),
+                ..echo(&[])
+            }),
+        );
+        refuse(
+            "a URL instead of a name",
+            runtime.request_http(HttpRequest {
+                endpoint: "https://api.example".to_owned(),
+                ..jev("/")
+            }),
+        );
+        refuse(
+            "a zero timeout",
+            runtime.request_http(HttpRequest {
+                timeout_ms: 0,
+                ..jev("/")
+            }),
+        );
+        refuse(
+            "a timeout over two minutes",
+            runtime.request_command(CommandRequest {
+                timeout_ms: 120_001,
+                ..echo(&[])
+            }),
+        );
+        refuse(
+            "an absolute URL path",
+            runtime.request_http(jev("//evil/x")),
+        );
+        refuse(
+            "a parent segment",
+            runtime.request_http(jev("/v1/../admin")),
+        );
+        refuse(
+            "a payload over 64 KiB",
+            runtime.request_http(HttpRequest {
+                body: vec![b'x'; 64 * 1024],
+                ..jev("/")
+            }),
+        );
+        for index in 0..8 {
+            runtime.request_command(echo(&[&index.to_string()]))?;
+        }
+        refuse("a ninth request", runtime.request_http(jev("/")));
+        Ok(())
+    });
+    assert_eq!(result.disposition, DecisionDispositionV6::Completed);
+    assert_eq!(result.commands.len(), 8);
+    assert_eq!(seen.len(), 10);
+    assert!(
+        seen[0].contains("\"http:other\" is not granted"),
+        "{}",
+        seen[0]
+    );
+    assert!(
+        seen[9].contains("at most 8 external requests"),
+        "{}",
+        seen[9]
+    );
+
+    // A host that grants nothing refuses every request.
+    let context = observation_context(Some("22.8"), Some("73"));
+    let (_, result) = run_script(&context, |context, _| {
+        assert!(context.runtime().request_http(jev("/")).is_err());
+        assert!(context.runtime().request_command(echo(&[])).is_err());
+        Ok(())
+    });
+    assert!(result.commands.is_empty());
+}
+
+/// Records the event a kernel sees; fails on it when asked to.
+#[derive(Clone)]
+struct ResponseKernel {
+    seen: Rc<RefCell<Vec<String>>>,
+    fail: bool,
+}
+
+impl NativeKernel for ResponseKernel {
+    fn name(&self) -> &str {
+        "response"
+    }
+
+    fn on_event(
+        &mut self,
+        event: StrategyEventView<'_>,
+        _context: &mut dyn StrategyKernelContext,
+    ) -> KernelResult<()> {
+        if let StrategyEventView::ExternalResponse(response) = &event {
+            self.seen
+                .borrow_mut()
+                .push(format!("{} {:?}", response.request_id, response.outcome));
+        }
+        self.seen.borrow_mut().push(event.event_type().to_owned());
+        if self.fail {
+            return Err(strategy_core_kernel::KernelError::new("cannot parse"));
+        }
+        Ok(())
+    }
+}
+
+impl TransactionKernel for ResponseKernel {
+    fn encode_checkpoint_state(&self) -> Result<Vec<u8>, KernelTransactionError> {
+        Ok(b"response".to_vec())
+    }
+}
+
+struct ResponseFactory(ResponseKernel);
+
+impl TransactionKernelFactory for ResponseFactory {
+    type Kernel = ResponseKernel;
+
+    fn checkpoint_codec(
+        &self,
+        _strategy_id: &str,
+    ) -> Result<KernelCheckpointCodec, KernelTransactionError> {
+        Ok(KernelCheckpointCodec {
+            profile: "response.checkpoint.v1".to_owned(),
+            version: 1,
+        })
+    }
+    fn create(&self, _context: &DecisionContextV6) -> Result<Self::Kernel, KernelTransactionError> {
+        Ok(self.0.clone())
+    }
+    fn restore(
+        &self,
+        _context: &DecisionContextV6,
+        _checkpoint: &strategy_core_v3::decision_v6::KernelCheckpointV6,
+    ) -> Result<Self::Kernel, KernelTransactionError> {
+        Ok(self.0.clone())
+    }
+}
+
+/// The answer is the decision's event; a completed result acknowledges the request, so the
+/// host forgets it once that is durable. A rejected one acknowledges nothing.
+#[test]
+fn an_external_response_is_the_event_and_the_completed_result_acknowledges_it() {
+    let mut context = base_context();
+    let request_id = cid(0, 3);
+    for (outcome, shown) in [
+        (
+            ExternalOutcomeV6::Ok {
+                status: 200,
+                body: b"{\"p\":[0.1,0.9]}".to_vec(),
+            },
+            "Ok { status: 200, body: [123, 34, 112, 34, 58, 91, 48, 46, 49, 44, 48, 46, 57, 93, 125] }",
+        ),
+        (
+            ExternalOutcomeV6::Err {
+                kind: ExternalErrorKindV6::Abandoned,
+                message: "traderd restarted while the request was in flight".to_owned(),
+            },
+            "Err { kind: Abandoned, message: \"traderd restarted while the request was in flight\" }",
+        ),
+    ] {
+        context.trigger = TriggerV6::ExternalResponse {
+            request_id: request_id.clone(),
+            outcome,
+        };
+        for fail in [false, true] {
+            let seen = Rc::new(RefCell::new(Vec::new()));
+            let factory = ResponseFactory(ResponseKernel {
+                seen: Rc::clone(&seen),
+                fail,
+            });
+            let result = run_transaction(&factory, &context).unwrap();
+            assert_eq!(
+                *seen.borrow(),
+                [
+                    format!("{request_id} {shown}"),
+                    "external_response".to_owned()
+                ]
+            );
+            if fail {
+                assert_eq!(result.disposition, DecisionDispositionV6::Rejected);
+                assert!(result.acknowledged_command_ids.is_empty());
+            } else {
+                assert_eq!(result.disposition, DecisionDispositionV6::Completed);
+                assert_eq!(result.acknowledged_command_ids, [request_id.clone()]);
+            }
+        }
+    }
 }

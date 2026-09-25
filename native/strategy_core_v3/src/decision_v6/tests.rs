@@ -773,10 +773,291 @@ fn contributor_stations_are_the_owner_stations() {
 #[test]
 fn capabilities_are_canonical() {
     let mut context = context();
-    context.capabilities.external_requests = vec!["b.request".to_owned(), "a.request".to_owned()];
+    context.capabilities.external_requests =
+        vec!["http:b.request".to_owned(), "command:a.request".to_owned()];
     assert_eq!(context.validate(), Err(DecisionV6Error::NonCanonicalOrder));
     context.capabilities.external_requests.sort();
     context.validate().unwrap();
+    // A grant names its kind: `http:` or `command:` and an allowlist name without `:`.
+    for grant in [
+        "a.request",
+        "ftp:a",
+        "http:",
+        "http:a:b",
+        "command:/bin/echo",
+    ] {
+        context.capabilities.external_requests = vec![grant.to_owned()];
+        assert_eq!(
+            context.validate(),
+            Err(DecisionV6Error::InvalidContract),
+            "{grant}"
+        );
+    }
+}
+
+pub(super) fn external_request(
+    context: &DecisionContextV6,
+    ordinal: usize,
+    kind: ExternalRequestKindV6,
+    target: &str,
+) -> StrategyCommandV6 {
+    StrategyCommandV6::ExternalRequest {
+        command_id: context.command_id(ordinal),
+        kind,
+        target: target.to_owned(),
+        payload: b"{\"question\":1}".to_vec(),
+        timeout_ms: 5_000,
+    }
+}
+
+pub(super) fn http_post(path: &str) -> ExternalRequestKindV6 {
+    ExternalRequestKindV6::Http {
+        method: HttpMethodV6::Post,
+        path: path.to_owned(),
+    }
+}
+
+/// External requests ride in the result beside orders; the grant names each one's kind.
+#[test]
+fn external_requests_need_a_grant_of_their_kind_and_stay_within_bounds() {
+    let mut context = context();
+    context.capabilities.external_requests = vec!["command:echo".to_owned(), "http:jev".to_owned()];
+    let mut result = multi_order_result(&context);
+    result.state_fence = hex_digest(&decision_fence_v6_sha256(&context).unwrap());
+    let ordinal = result.commands.len();
+    result.commands.push(external_request(
+        &context,
+        ordinal,
+        http_post("/v1/choose?model=one"),
+        "jev",
+    ));
+    result.commands.push(external_request(
+        &context,
+        ordinal + 1,
+        ExternalRequestKindV6::Command {
+            args: vec!["hello".to_owned(), String::new()],
+        },
+        "echo",
+    ));
+    validate_decision_result_v6(&context, &result).unwrap();
+    assert!(result.commands.iter().all(|command| {
+        !matches!(command, StrategyCommandV6::ExternalRequest { .. }) || command.leaves_host()
+    }));
+    assert_eq!(result.commands[ordinal].broker_kind(), None);
+    assert_eq!(
+        decision_plan_rows_v6(&context, &result),
+        decision_plan_rows_v6(
+            &context,
+            &DecisionResultV6 {
+                commands: result.commands[..ordinal].to_vec(),
+                ..result.clone()
+            }
+        ),
+        "a request adds no account plan rows"
+    );
+
+    // Not granted, or granted for the other kind.
+    let with = |command: StrategyCommandV6| {
+        let mut result = result.clone();
+        result.commands[ordinal] = command;
+        validate_decision_result_v6(&context, &result)
+    };
+    let command = |target: &str, kind: ExternalRequestKindV6| StrategyCommandV6::ExternalRequest {
+        command_id: context.command_id(ordinal),
+        kind,
+        target: target.to_owned(),
+        payload: Vec::new(),
+        timeout_ms: 1_000,
+    };
+    for (target, kind, error) in [
+        ("other", http_post("/"), DecisionV6Error::InvalidContract),
+        ("echo", http_post("/"), DecisionV6Error::InvalidContract),
+        (
+            "jev",
+            ExternalRequestKindV6::Command { args: vec![] },
+            DecisionV6Error::InvalidContract,
+        ),
+        (
+            "https://api.example",
+            http_post("/"),
+            DecisionV6Error::InvalidContract,
+        ),
+        (
+            "jev",
+            http_post("relative"),
+            DecisionV6Error::InvalidContract,
+        ),
+        (
+            "jev",
+            http_post("//evil.example/x"),
+            DecisionV6Error::InvalidContract,
+        ),
+        (
+            "jev",
+            http_post("/a/../b"),
+            DecisionV6Error::InvalidContract,
+        ),
+        ("jev", http_post("/a/./b"), DecisionV6Error::InvalidContract),
+        ("jev", http_post("/a b"), DecisionV6Error::InvalidContract),
+        ("jev", http_post("/a#b"), DecisionV6Error::InvalidContract),
+        ("jev", http_post("/a\\b"), DecisionV6Error::InvalidContract),
+        (
+            "jev",
+            http_post(&format!("/{}", "a".repeat(MAX_HTTP_PATH_BYTES))),
+            DecisionV6Error::InvalidContract,
+        ),
+        (
+            "echo",
+            ExternalRequestKindV6::Command {
+                args: vec!["nul\0".to_owned()],
+            },
+            DecisionV6Error::InvalidContract,
+        ),
+        (
+            "echo",
+            ExternalRequestKindV6::Command {
+                args: vec![String::new(); MAX_COMMAND_REQUEST_ARGS + 1],
+            },
+            DecisionV6Error::BoundExceeded,
+        ),
+    ] {
+        assert_eq!(
+            with(command(target, kind.clone())),
+            Err(error),
+            "{target} {kind:?}"
+        );
+    }
+    // A dotted segment inside a query is only data.
+    with(command("jev", http_post("/a?next=/../b"))).unwrap();
+
+    // Timeouts from 1 ms to two minutes.
+    for (timeout_ms, valid) in [(0, false), (1, true), (120_000, true), (120_001, false)] {
+        let mut request = command("jev", http_post("/"));
+        if let StrategyCommandV6::ExternalRequest { timeout_ms: t, .. } = &mut request {
+            *t = timeout_ms;
+        }
+        assert_eq!(with(request).is_ok(), valid, "{timeout_ms}");
+    }
+    // Path or arguments plus payload within 64 KiB.
+    for (payload, valid) in [
+        (MAX_EXTERNAL_REQUEST_BYTES - 1, true),
+        (MAX_EXTERNAL_REQUEST_BYTES, false),
+    ] {
+        let mut request = command("jev", http_post("/"));
+        if let StrategyCommandV6::ExternalRequest { payload: p, .. } = &mut request {
+            *p = vec![b'x'; payload];
+        }
+        assert_eq!(with(request).is_ok(), valid, "{payload}");
+    }
+    // At most eight in one decision.
+    let mut many = result.clone();
+    many.commands.truncate(ordinal);
+    for index in 0..=MAX_OUTSTANDING_EXTERNAL_REQUESTS {
+        many.commands.push(external_request(
+            &context,
+            ordinal + index,
+            http_post("/"),
+            "jev",
+        ));
+    }
+    assert_eq!(
+        validate_decision_result_v6(&context, &many),
+        Err(DecisionV6Error::BoundExceeded)
+    );
+    many.commands.pop();
+    validate_decision_result_v6(&context, &many).unwrap();
+}
+
+/// The answer arrives as a trigger of its own; a completed result may acknowledge it.
+#[test]
+fn an_external_response_is_a_trigger_the_result_acknowledges() {
+    let mut context = context();
+    let request_id = "command.0123456789abcdef0123456789abcdef".to_owned();
+    context.trigger = TriggerV6::ExternalResponse {
+        request_id: request_id.clone(),
+        outcome: ExternalOutcomeV6::Ok {
+            status: 200,
+            body: vec![b'x'; MAX_EXTERNAL_RESPONSE_BODY_BYTES],
+        },
+    };
+    context.validate().unwrap();
+    assert_eq!(context.owner_trigger(), None);
+    assert_eq!(context.external_response_id(), Some(request_id.as_str()));
+    let mut result = multi_order_result(&context);
+    result.state_fence = hex_digest(&decision_fence_v6_sha256(&context).unwrap());
+    result.acknowledged_command_ids = vec![request_id.clone()];
+    validate_decision_result_v6(&context, &result).unwrap();
+    result.acknowledged_command_ids = vec!["command.other".to_owned()];
+    assert_eq!(
+        validate_decision_result_v6(&context, &result),
+        Err(DecisionV6Error::InvalidContract)
+    );
+
+    for (outcome, verdict) in [
+        (
+            ExternalOutcomeV6::Ok {
+                status: 0,
+                body: Vec::new(),
+            },
+            Ok(()),
+        ),
+        (
+            ExternalOutcomeV6::Ok {
+                status: 200,
+                body: vec![0; MAX_EXTERNAL_RESPONSE_BODY_BYTES + 1],
+            },
+            Err(DecisionV6Error::BoundExceeded),
+        ),
+        (
+            ExternalOutcomeV6::Ok {
+                status: 404,
+                body: Vec::new(),
+            },
+            Err(DecisionV6Error::InvalidContract),
+        ),
+        (
+            ExternalOutcomeV6::Err {
+                kind: ExternalErrorKindV6::Status(503),
+                message: "HTTP 503: busy".to_owned(),
+            },
+            Ok(()),
+        ),
+        (
+            ExternalOutcomeV6::Err {
+                kind: ExternalErrorKindV6::Status(204),
+                message: "not an error".to_owned(),
+            },
+            Err(DecisionV6Error::InvalidContract),
+        ),
+        (
+            ExternalOutcomeV6::Err {
+                kind: ExternalErrorKindV6::Abandoned,
+                message: String::new(),
+            },
+            Err(DecisionV6Error::BoundExceeded),
+        ),
+        (
+            ExternalOutcomeV6::Err {
+                kind: ExternalErrorKindV6::Exit(Some(2)),
+                message: "m".repeat(MAX_REASON_BYTES),
+            },
+            Ok(()),
+        ),
+    ] {
+        context.trigger = TriggerV6::ExternalResponse {
+            request_id: request_id.clone(),
+            outcome: outcome.clone(),
+        };
+        assert_eq!(context.validate(), verdict, "{outcome:?}");
+    }
+    context.trigger = TriggerV6::ExternalResponse {
+        request_id: "not an id".to_owned(),
+        outcome: ExternalOutcomeV6::Ok {
+            status: 0,
+            body: Vec::new(),
+        },
+    };
+    assert_eq!(context.validate(), Err(DecisionV6Error::InvalidContract));
 }
 
 #[test]

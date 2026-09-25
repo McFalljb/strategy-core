@@ -475,7 +475,7 @@ pub(super) fn derive(context: &DecisionContextV6) -> Result<Derived, KernelTrans
 }
 
 /// The receipts and terminal orders a result acknowledges: every one the runner section no
-/// longer tracks. An entry is pruned only once its outcome was delivered (or abandoned), and
+/// longer tracks, and the external request the trigger answers. An entry is pruned only once its outcome was delivered (or abandoned), and
 /// the section, seeded by every decision, tracks each open order of the Sleeve until its final
 /// update: a terminal order it does not track is no Strategy news.
 pub(super) fn acknowledgements(
@@ -500,6 +500,7 @@ pub(super) fn acknowledgements(
                 .map(|order| order.command_id.as_str())
                 .filter(|command_id| !tracked.contains(command_id)),
         )
+        .chain(context.external_response_id())
         .map(str::to_owned)
         .collect()
 }
@@ -518,6 +519,7 @@ pub(super) fn acknowledgeable(context: &DecisionContextV6) -> Vec<String> {
                 .filter(|order| order.status.is_terminal())
                 .map(|order| order.command_id.clone()),
         )
+        .chain(context.external_response_id().map(str::to_owned))
         .collect()
 }
 
