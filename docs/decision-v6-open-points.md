@@ -20,8 +20,9 @@ traderv3 and strategies must build to these choices or change them here first.
    `BrokerOrderV6` also adds `rejection_reason`, which the host fills from the provider's
    rejection message and writes with the order's status, atomically. Validation is lenient:
    up to 4 KiB (as V5 accepted reasons), empty is the same as none, ignored unless the order
-   is `Rejected`. The runner reports it as the `provider_rejected` refusal's reason, cut to
-   512 bytes on a character boundary, with a fixed text when absent. The harness's V5
+   is `Rejected`. The runner reports all of it as the `provider_rejected` refusal's reason
+   (V5 parity: kernels classify by keywords anywhere in it), with a fixed text when absent;
+   only the evidence copy is cut to 512 bytes on a character boundary. The harness's V5
    conversion fills it from the V5 outcome's reason.
 3. **Capabilities.** `CapabilityGrantV6 { timers, external_requests }`; the request names
    are strictly sorted identifiers, at most 32, empty until Phase 4. Without `timers`,
@@ -51,11 +52,15 @@ traderv3 and strategies must build to these choices or change them here first.
 9. **Acknowledgements.** `acknowledged_command_ids` names receipts and terminal orders (the
    note's order view keeps unacknowledged terminal orders, so orders need acknowledging
    too). Because only durable writes apply acknowledgements, every result repeats them while
-   the context still shows them: every receipt the runner section no longer tracks (an entry
-   is pruned only after its outcome was reported), and every terminal order the section
-   recorded as reported (`RunnerSectionV6::reported`, kept until a complete view no longer
-   shows the order). Other terminal orders are acknowledged silently only by the seeding
-   decision. A result never acknowledges a command its section still tracks, and a rejected
+   the context still shows them: every receipt and every terminal order the result's runner
+   section does not track. There is no list of reported orders: an entry is pruned only
+   once its outcome was delivered (or abandoned), and every decision seeds the section
+   (point 23), which then tracks every open order of the Sleeve until its final update, so
+   an untracked terminal order is no news: one whose final update this or an earlier
+   decision delivered, one that was terminal before the section first saw it, or one whose
+   tombstone expired or was evicted (acknowledged without an update). This holds over
+   truncated views too. A result never acknowledges a command its section still tracks
+   (a pending, failed update keeps its receipt or order unacknowledged), and a rejected
    result acknowledges nothing.
 10. **Result size.** V5's 256 KiB result bound cannot hold a 128 KiB state, the runner
     section, 64 commands and the update evidence, so the V6 result bound is 1 MiB. Decoding
@@ -67,10 +72,10 @@ traderv3 and strategies must build to these choices or change them here first.
     margin is a heuristic: the runner then checks the result decodes under the bound and
     sheds telemetry, then logs, until it does, all counted as overflow, so `run_transaction`
     never fails for size on a valid kernel. A refusal reason in the evidence copy is cut to
-    512 bytes.
+    512 bytes (the kernel sees up to 4 KiB).
 11. **Runner section size.** An entry holds up to four bounded identifiers (160 bytes each),
-    so the worst case is about 730 bytes, not the note's ~350; 256 live entries and 32
-    tombstones are about 210 KB. `MAX_ENCODED_KERNEL_CHECKPOINT_BYTES` includes them;
+    so the worst case is about 730 bytes, not the note's ~350; the section's 288 entries
+    (`MAX_RUNNER_SECTION_ENTRIES`: 256 plus 32 tombstones) are about 210 KB. `MAX_ENCODED_KERNEL_CHECKPOINT_BYTES` includes them;
     traderv3's checkpoint row bound must grow to match.
 12. **State fence.** `decision_fence_v6_sha256` is domain-separated, length-prefixes its
     identifiers, and also binds the deployment mode, capabilities and receipts.
@@ -94,8 +99,10 @@ traderv3 and strategies must build to these choices or change them here first.
     `orders_complete` true, and converts the checkpoint with `convert_v5_kernel_checkpoint`.
 17. **Truncated views.** The context carries `orders_complete`; the host sets it false when
     it had to truncate the Sleeve's order view. A truncated view reports no order as
-    vanished, never seeds the runner section and allows no cancel-all (a local error;
-    validation rejects one).
+    vanished and allows no cancel-all (a local error; validation rejects one). Host
+    invariant: a truncated view drops terminal orders only, never an open one (traderv3
+    computes `orders_complete` over active and unacknowledged orders), so the runner seeds
+    over it.
 18. **Early-stopped terminal orders.** `Expired` and `Rejected` orders, like `Cancelled`
     ones, may report no remaining quantity with less than their whole quantity filled.
     `validate_broker_order_v6` checks one order record on its own so the host can quarantine
@@ -129,19 +136,29 @@ traderv3 and strategies must build to these choices or change them here first.
     show waits as a tombstone too (unless its target is shown final), so a late refusal
     still reaches the kernel. Tombstones do not count toward the 256 live entries a Broker
     command is checked against; at most 32 are kept (the oldest is evicted, with a
-    diagnostic) and one expires after 16 complete views above its vanish revision that do
-    not show it. The revision check cannot see every stale view, because the Broker revision
+    diagnostic; a tombstone whose order is back with a failed update goes last) and one
+    expires after 16 complete views above its vanish revision that do not show it. A
+    revived tombstone (and an adopted order) is live again, so a derived section may hold
+    more than 256 live entries: derivation and validation bound the section at 288 entries
+    (`MAX_RUNNER_SECTION_ENTRIES`), and no Broker command is issued while 256 or more are
+    live. The revision check cannot see every stale view, because the Broker revision
     is account-wide and moves with other Sleeves; the tombstone makes a false vanish
     recoverable. Orders are matched by command id only.
-23. **Seeding.** The runner section records whether it is seeded. The seeding decision (a
-    Sleeve's first over a complete view, or the first after converting a V5 checkpoint)
-    records open orders as seen without updates. Over a truncated view it does not seed
-    (`runner_not_seeded`). Once seeded, every terminal order the section does not track is
-    acknowledged: the section tracks each of the Strategy's orders until its final update
-    was delivered (or its tombstone was evicted or expired), so such an order is no news and
-    must not occupy a view slot forever. Untracked open orders are ignored. The reported list
-    of an earlier revision is gone. A section that would pass 256 live entries fails the
-    decision before the kernel runs.
+23. **Seeding and adoption.** The runner section records whether it is seeded. The seeding
+    decision (a Sleeve's first, or the first after converting a V5 checkpoint), over a
+    complete or a truncated view, records the open orders as seen without updates. Since
+    the Sleeve's view holds only its own orders, an open order the section does not track
+    later (its tombstone expired or was evicted) is adopted the same way, reported as
+    `runner_order_adopted`, and its updates are delivered from then on; kernels must accept
+    updates for orders they do not know (the fill before adoption is not reported). The
+    section records the newest Broker revision it has compared
+    (`RunnerSectionV6::newest_view_revision`) and adopts only from a newer view: a stale view
+    could show an order older than the Strategy was told of, even one whose final update
+    was delivered, and its fills would be reported again. Host invariant: a view never shows
+    an order older than a view at a lower revision did. An order is not adopted while the
+    section holds 288 entries (`runner_order_not_adopted`). Acknowledgements follow (point
+    9). A checkpoint whose section holds more than 288 entries fails the decision before the
+    kernel runs.
 24. **Order of delivery.** Updates precede `on_start` for Bootstrap and Recovery too. A
     Broker-state trigger delivers `Unknown { event_type: "broker_state" }` after its
     updates, as V5 did. Before each update the runner snapshots the kernel with its own
@@ -149,8 +166,19 @@ traderv3 and strategies must build to these choices or change them here first.
     undoes the decision's commands and the update's telemetry (its logs stay), records a
     `kernel_error` diagnostic and goes on; the decision completes. The entry keeps a
     delivery-failure count and stays as it was, so the update is delivered again, up to 3
-    attempts (counted per entry, consecutively), then counts as seen
-    (`order_update_abandoned`); its receipt or terminal order is not acknowledged until then.
+    counted failures (per entry, consecutively), then counts as seen
+    (`order_update_abandoned`, severity `error`, with the `newly_filled` each abandoned update
+    carried and their total); its receipt or terminal order is not acknowledged until then.
+    A failure is not counted when the host refused a Broker or runtime call during that
+    update for a decision-wide capacity limit (64 commands, 512 plan rows, the result byte
+    budget, 256 live entries, the open-order cap): the update waits until there is room
+    (`order_update_deferred`, a warning), so a kernel that reacts to a fill with `?` does not
+    lose it. A snapshot the kernel's codec cannot take before an update is a counted failure
+    of that update, which is not delivered. A snapshot the factory cannot restore after a
+    failed update takes the kernel and the decision back to their start; every update is
+    delivered again later (only that one's failure counts), the trigger still runs, and only
+    a failure to restore the decision's start fails the transaction. The snapshot carries an
+    empty runner section, so it costs the kernel's state only.
     `TransactionKernel` no longer needs `Clone`. A kernel error on the trigger rejects the
     decision.
 25. **Failed commits.** When a decision's durable write fails as a whole (stale fence,

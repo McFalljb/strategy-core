@@ -31,9 +31,19 @@ V6 context (owner projection, scope, Broker state, command receipts, checkpoint,
   kernel through the factory, undoes the commands and telemetry of that update (its logs
   stay), records a `kernel_error` diagnostic naming the update and its attempt, and goes on
   with the remaining updates and the trigger. The entry stays as it was and the update is
-  delivered again in the next decisions, up to `MAX_DELIVERY_ATTEMPTS = 3`; then it counts
-  as seen (`order_update_abandoned`). Until then its receipt or terminal order is not
+  delivered again in the next decisions, up to `MAX_DELIVERY_ATTEMPTS = 3` counted
+  failures; then it counts as seen (`order_update_abandoned`, an `error` diagnostic with
+  the fill the kernel was never told of). Until then its receipt or terminal order is not
   acknowledged.
+- A failure is not counted when, during that update, the runner refused a Broker or runtime
+  call for a decision-wide capacity limit (64 commands, 512 plan rows, the result's byte
+  budget, 256 live runner entries, the open-order cap): the update waits, as it was, until
+  there is room (`order_update_deferred`, a `warn` diagnostic). A snapshot the kernel's
+  codec cannot take before an update is a counted failure of that update (it is not
+  delivered). A snapshot the factory cannot restore after a failed update takes the kernel
+  and the decision back to how they were before the first update; every update is
+  delivered again later and only that one's failure counts. If the kernel cannot be
+  restored even to the decision's start, the decision fails.
 - The host validates with `validate_decision_result_v6(context, result)`, which binds the
   delivery, Sleeve, state fence (`decision_fence_v6_sha256`), Broker revision, Market scope,
   cancel targets, timer capability, acknowledgements and the plan row limit.
@@ -62,7 +72,16 @@ frozen-encoding evidence, plus:
   until Phase 4 grants any).
 - `orders_complete`: true when `broker.orders` holds every order of the Sleeve the host
   keeps. The host sets it false when it had to truncate the view; a truncated view never
-  reports an order as vanished, never seeds the runner section and allows no cancel-all.
+  reports an order as vanished and allows no cancel-all.
+
+Host invariants on the order view:
+- A truncated view drops terminal orders only, never an open one: the runner seeds over any
+  view.
+- A view never shows an order older than a view at a lower Broker revision did (each view
+  is the Sleeve's orders as of its revision, and a terminal order stays terminal). The
+  runner forgets an order once its final update is delivered and adopts an untracked open
+  order only from a view newer than any it has seen; an older record in such a view would
+  be adopted and its fills reported again.
 - `command_receipts`: the outcome of each recent command without an order record (a refused
   place, a cancel, a cancel-all), strictly sorted by command id, at most 256. A place receipt
   is always a refusal: an admitted place has an order record. A command never has both.
@@ -120,15 +139,19 @@ telemetry }`.
 - `evidence` carries the order updates the runner delivered, as `order_updates` entries
   (`decode_order_update_evidence`), each at most 64 KiB, in delivery order; a refusal reason
   there is cut to 512 bytes.
-- `diagnostics` also carry what the order-update comparison did: `runner_not_seeded`,
-  `runner_tombstone_evicted`, `runner_tombstone_expired` and `order_update_abandoned`, one
-  per kind with a count and up to 8 command ids.
+- `diagnostics` also carry what the order-update comparison did: `runner_order_adopted`,
+  `runner_order_not_adopted`, `runner_tombstone_evicted`, `runner_tombstone_expired` and
+  `order_update_abandoned`, one per kind with a count and up to 8 command ids (the
+  abandoned one is an `error` and also lists the fill each update carried and their
+  total); a failed update is a `kernel_error`, one that waits for capacity an
+  `order_update_deferred` warning.
 
 `KernelCheckpointV6` is the V5 checkpoint plus the runner section, sealed under
 `strategy-core/decision-v6/checkpoint/v1`. The kernel's private state stays at most 128 KiB
 and its codec stays the kernel's. The runner section is bounded separately: whether it is
-seeded, at most `MAX_RUNNER_ENTRIES = 256` live entries of bounded identifiers, and at most
-`MAX_TOMBSTONES = 32` tombstones.
+seeded, the newest Broker revision it has compared (`newest_view_revision`), and at most `MAX_RUNNER_SECTION_ENTRIES = 288` entries of bounded identifiers
+(`MAX_RUNNER_ENTRIES = 256` plus `MAX_TOMBSTONES = 32`), of which at most 32 are
+tombstones.
 
 ## Plan rows
 
@@ -173,36 +196,46 @@ reappears, its updates continue, the next one reporting what was filled meanwhil
 that keeps a vanished order in its books counts every fill.
 
 Tombstones do not count toward the 256 live entries a Broker command is checked against, so
-they never keep a Strategy from cancelling. At most 32 are kept (the oldest is evicted), and
-one expires after `TOMBSTONE_EXPIRY_VIEWS = 16` complete views above its vanish revision that
-do not show it; an evicted or expired order that later returns final is acknowledged without
-an update.
+they never keep a Strategy from cancelling. At most 32 are kept (the oldest is evicted; a
+tombstone whose order is back but whose update failed goes last), and one expires after
+`TOMBSTONE_EXPIRY_VIEWS = 16` complete views above its vanish revision that do not show it.
+An evicted or expired order that later returns final is acknowledged without an update; one
+that returns open is adopted (below). A tombstone whose order is back, and an adopted order,
+are live again, so the live entries may pass 256 (up to 288, the section's bound); no Broker
+command is issued until they are below 256 again.
 
 Broker statuses map to update statuses: accepted and dispatched are `Accepted`, resting
 `Resting`, partially filled `PartiallyFilled`, filled `Filled`, cancelled `Cancelled`, expired
 `Expired`, rejected `Refused { code: "provider_rejected", reason }` where `reason` is the
-order's `rejection_reason` cut to 512 bytes on a character boundary, or "the provider
-rejected the order" when the provider gave none. Kernels classify transient rejections by
-that text. A cancellation request or a recovery hold is not news of its own: the order keeps
+order's `rejection_reason` (up to 4 KiB, all of it), or "the provider rejected the order"
+when the provider gave none. Kernels classify transient rejections by that text; the
+result's evidence records at most 512 bytes of it, cut on a character boundary. A cancellation request or a recovery hold is not news of its own: the order keeps
 its last status (`PartiallyFilled` once anything filled).
 
-Seeding: a Sleeve's first decision over a complete view (or the first after
-`convert_v5_kernel_checkpoint`, which keeps the kernel's bytes and starts an unseeded
-section) records open orders as seen, from their current status, without updates, so no
-Strategy receives a burst of updates for old orders. Over a truncated view the section stays
-unseeded (`runner_not_seeded`). A section that would exceed 256 live entries fails the
-decision before the kernel runs; a place or cancel that would need live entry 257 is a local
-`Err`.
+Seeding: a Sleeve's first decision (or the first after `convert_v5_kernel_checkpoint`,
+which keeps the kernel's bytes and starts an unseeded section), over a complete or a
+truncated view, records the open orders as seen, from their current status, without
+updates, so no Strategy receives a burst of updates for old orders. Afterwards an open
+order the section does not track (its tombstone expired or was evicted) is adopted the same
+way from a view newer than `newest_view_revision`, the highest Broker revision the section
+has compared (`runner_order_adopted`); its updates are delivered from then on, and a kernel
+should accept updates for orders it does not know. An order is not adopted when the section
+holds 288 entries (`runner_order_not_adopted`; a later decision adopts it). A checkpoint
+whose section holds more than 288 entries fails the decision before the kernel runs; a
+place or cancel that would need live entry 257 is a local `Err`.
 
-Acknowledgements: every receipt the section no longer tracks (an entry is pruned only once
-its outcome was delivered) and, once the section is seeded, every terminal order it no
-longer tracks (the section tracks each of the Strategy's orders until its final update was
-delivered, so such an order is no news). Untracked open orders are ignored.
+Acknowledgements: every receipt and every terminal order in the context the section does
+not track. An entry is pruned only once its outcome was delivered (or abandoned), and every
+decision seeds the section, which tracks each open order of the Sleeve until its final
+update, so such an order is no news: an order whose final update was delivered, a terminal
+order older than the section, or one whose tombstone expired or was evicted.
 
 Because nothing is queued, a checkpoint that goes back (a crash between durable writes)
 produces the same updates again, and a dropped, coalesced, stale, truncated or reordered view
 loses nothing: every fill is reported exactly once in `newly_filled` (short of an evicted or
-expired tombstone, or an update abandoned after three failed deliveries).
+expired tombstone, whose order is adopted from its current fill if it returns open, or an
+update abandoned after three counted failures, whose fill the `order_update_abandoned`
+diagnostic reports).
 
 ## Provisional view
 

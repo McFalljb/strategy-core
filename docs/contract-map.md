@@ -1485,7 +1485,10 @@ The native context exposes these exact trait surfaces:
   of the order. A kernel's own `client_order_id` may not start with `tv3` (reserved for ids
   the host derives) and must be unique for the account's lifetime. A kernel error while
   handling an `OrderUpdate` is undone and recorded, the decision goes on, and the update is
-  delivered again in the next decisions (up to three attempts).
+  delivered again in the next decisions (up to three failures; a failure while a call was
+  refused for a decision-wide capacity limit is not counted, so the update waits for room).
+  Updates may arrive for orders the kernel does not know: the runner adopts the Sleeve's
+  open orders it does not track (on its first decision, or when a lost order returns).
   Inside a decision the reads are provisional: the decision's own orders
   are pending with status `submitted` and reserve budget with the Broker's formula,
   cancels mark their targets `cancellation_requested`, and positions are unchanged.
