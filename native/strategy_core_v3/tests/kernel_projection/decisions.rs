@@ -1821,33 +1821,98 @@ fn a_provider_rejection_carries_the_provider_text() {
 }
 
 #[test]
-fn a_live_market_sell_is_a_local_error() {
+fn a_live_market_sell_goes_to_the_broker_which_refuses_it() {
     let mut live = priced_context();
     live.deployment_mode = DeploymentModeV6::Live;
-    for (context, admitted) in [(priced_context(), true), (live, false)] {
+    for (context, market_sell) in [(priced_context(), true), (live.clone(), false)] {
         let decision = decide(&context, |context, seen| {
+            seen.push(context.capabilities().market_sell.to_string());
             let mut sell = limit_buy("sell-1", ContractSide::Yes, 100, 0.4);
             sell.action = OrderAction::Sell;
             sell.order_type = OrderType::Market;
             sell.limit_price = None;
             sell.reduce_only = true;
-            seen.push(match context.broker().place_order(sell) {
-                Ok(_) => "admitted".to_owned(),
-                Err(error) => error.to_string(),
-            });
+            context.broker().place_order(sell)?;
             Ok(())
         });
-        if admitted {
-            assert_eq!(decision.seen, ["admitted"]);
-        } else {
-            assert!(
-                decision.seen[0].contains("not admitted in live"),
-                "{:?}",
-                decision.seen
+        assert_eq!(decision.seen, [market_sell.to_string()]);
+        assert_eq!(
+            decision.result.commands.len(),
+            1,
+            "the command is issued either way"
+        );
+    }
+    // The Broker refuses it per command; the kernel sees the refusal.
+    let placed = decide(&live, |context, _| {
+        let mut sell = limit_buy("sell-1", ContractSide::Yes, 100, 0.4);
+        sell.action = OrderAction::Sell;
+        sell.order_type = OrderType::Market;
+        sell.limit_price = None;
+        sell.reduce_only = true;
+        context.broker().place_order(sell)?;
+        Ok(())
+    });
+    let refusal = follow_up(
+        &live,
+        Some(&placed.result),
+        2,
+        vec![],
+        vec![refused(
+            &cid(1, 0),
+            BrokerCommandKindV6::PlaceOrder,
+            strategy_core_v3::decision_v6::MARKET_SELL_UNSUPPORTED_CODE,
+        )],
+    );
+    let decision = decide(&refusal, nothing);
+    assert!(matches!(
+        &decision.updates[0].status,
+        OrderUpdateStatus::Refused { code, .. } if code == "market_sell_unsupported"
+    ));
+}
+
+#[test]
+fn a_cancel_all_always_fits_at_the_open_order_cap() {
+    for mode in [DeploymentModeV6::Paper, DeploymentModeV6::Live] {
+        for acknowledgements in [false, true] {
+            let cap = strategy_core_v3::decision_v6::max_open_orders(mode);
+            let mut context = crowded_context(cap);
+            context.deployment_mode = mode;
+            if acknowledgements {
+                context.command_receipts = vec![CommandReceiptV6 {
+                    command_id: "command.old.receipt".to_owned(),
+                    kind: BrokerCommandKindV6::CancelOrder,
+                    outcome: CommandOutcomeV6::Accepted,
+                }];
+            }
+            context.validate().unwrap();
+            let decision = decide(&context, |context, seen| {
+                let placed = context.broker().place_order(limit_buy(
+                    "one-more",
+                    ContractSide::Yes,
+                    100,
+                    0.01,
+                ));
+                seen.push(format!("{:?}", placed.map(drop).map_err(|e| e.to_string())));
+                context.broker().cancel_all_orders()?;
+                Ok(())
+            });
+            assert_eq!(
+                decision.seen,
+                [format!("Err(\"a Sleeve holds at most {cap} open orders\")")],
+                "{mode:?}"
             );
-            assert!(decision.result.commands.is_empty());
+            assert_eq!(
+                decision.result.commands.len(),
+                1,
+                "{mode:?} {acknowledgements}"
+            );
+            assert_eq!(
+                decision.result.acknowledged_command_ids.is_empty(),
+                !acknowledgements
+            );
         }
     }
+    assert_eq!(strategy_core_v3::decision_v6::MAX_OPEN_ORDERS_LIVE, 168);
 }
 
 /// Keeps a book of its orders' fills; a vanished order stays in the book in case it returns.

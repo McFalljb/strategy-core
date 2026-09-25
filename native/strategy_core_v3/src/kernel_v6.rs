@@ -449,6 +449,8 @@ impl KernelSnapshot {
         capabilities.gauges = true;
         capabilities.annotations = true;
         capabilities.external_requests = context.capabilities.external_requests.clone();
+        // The Broker refuses a Market sell outside paper (until Phase 5), per command.
+        capabilities.market_sell = context.deployment_mode == DeploymentModeV6::Paper;
         Ok(Self {
             now: millis(Some(context.decision_time_unix_ms))?
                 .ok_or(KernelTransactionError::InvalidTime)?,
@@ -721,12 +723,6 @@ impl<'a> KernelHost<'a> {
             (OrderType::Market, None) => None,
             (OrderType::Market, Some(_)) => return invalid("a market order has no limit price"),
         };
-        if request.action == OrderAction::Sell
-            && request.order_type == OrderType::Market
-            && self.context.deployment_mode == DeploymentModeV6::Live
-        {
-            return invalid("a Market sell is not admitted in live");
-        }
         let market_price_cap_micros = if request.action == OrderAction::Buy
             && request.order_type == OrderType::Market
         {
@@ -750,10 +746,10 @@ impl<'a> KernelHost<'a> {
             0
         };
         let context = self.context;
-        if self.open_orders() >= wire::MAX_OPEN_ORDERS {
+        let cap = wire::max_open_orders(context.deployment_mode);
+        if self.open_orders() >= cap {
             return Err(KernelError::new(format!(
-                "a Sleeve holds at most {} open orders",
-                wire::MAX_OPEN_ORDERS
+                "a Sleeve holds at most {cap} open orders"
             )));
         }
         let provider_client_id = match &request.client_order_id {

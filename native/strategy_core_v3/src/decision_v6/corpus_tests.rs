@@ -323,6 +323,16 @@ fn valid_results() -> Vec<(&'static str, &'static str, DecisionResultV6)> {
             "live-request-grants",
             live_cancel_all_result(&live_context()),
         ),
+        (
+            "live-market-sell-goes-to-the-broker",
+            "live-request-grants",
+            {
+                let context = live_context();
+                let mut result = multi_order_result(&context);
+                live_market_sell(&context, &mut result);
+                result
+            },
+        ),
     ]
 }
 
@@ -346,7 +356,8 @@ fn live_cancel_all_result(context: &DecisionContextV6) -> DecisionResultV6 {
     result
 }
 
-/// A live YES place replaced by a Market sell, without the (ungranted) timer.
+/// A live YES place replaced by a Market sell, without the (ungranted) timer: the Broker
+/// refuses it with a receipt, so it counts 5 + 1 plan rows.
 fn live_market_sell(context: &DecisionContextV6, result: &mut DecisionResultV6) {
     result.commands.truncate(4);
     let StrategyCommandV6::PlaceOrder(order) = &mut result.commands[0] else {
@@ -632,12 +643,6 @@ fn invalid_results() -> Vec<(&'static str, &'static str, DecisionV6Error, Result
                     .seal(),
                 );
             },
-        ),
-        (
-            "live-market-sell",
-            "live-request-grants",
-            DecisionV6Error::InvalidContract,
-            live_market_sell,
         ),
         (
             "timer-without-the-timer-grant",
@@ -953,7 +958,7 @@ fn v6_corpus_is_current_and_every_vector_decodes_to_its_verdict() {
         }
     }
     let invalid = recorded["invalid"].as_array().unwrap();
-    assert_eq!(invalid.len(), 34);
+    assert_eq!(invalid.len(), 33);
     for entry in invalid {
         let id = entry["id"].as_str().unwrap();
         let bytes = bytes(entry);

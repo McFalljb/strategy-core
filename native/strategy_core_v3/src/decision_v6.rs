@@ -73,10 +73,27 @@ pub const MAX_PRICE_MICROS: u64 = 1_000_000;
 pub const MAX_EXTERNAL_REQUEST_GRANTS: usize = 32;
 /// Upper bound of one encoded runner entry: four bounded identifiers and fixed-width fields.
 pub const MAX_ENCODED_RUNNER_ENTRY_BYTES: usize = 4 * (MAX_IDENTIFIER_BYTES + 3) + 80;
-/// Open orders one Sleeve may hold: open context orders plus the decision's own places. The
-/// Sleeve's order view holds `MAX_BROKER_ORDERS`; the rest is room for terminal orders whose
-/// outcome the Strategy has not yet acknowledged.
+/// Open orders one Sleeve may hold in paper: open context orders plus the decision's own
+/// places. The Sleeve's order view holds `MAX_BROKER_ORDERS`; the rest is room for terminal
+/// orders whose outcome the Strategy has not yet acknowledged.
 pub const MAX_OPEN_ORDERS: usize = 192;
+/// Open orders one Sleeve may hold in live, where the Broker expands a cancel-all into one
+/// cancel (3 plan rows) per order: a cancel-all over all of them still fits the plan with the
+/// decision's 4 rows and 1 acknowledgement row: (512 - 5 - 3) / 3.
+pub const MAX_OPEN_ORDERS_LIVE: usize =
+    (MAX_DECISION_PLAN_ROWS - DECISION_PLAN_ROWS - ACKNOWLEDGEMENT_PLAN_ROWS - 3)
+        / CANCEL_ORDER_PLAN_ROWS;
+/// The Broker's refusal code of a Market sell outside paper (until Phase 5).
+pub const MARKET_SELL_UNSUPPORTED_CODE: &str = "market_sell_unsupported";
+
+/// The open orders a Sleeve may hold in `mode`, so a cancel-all over them always fits the
+/// decision plan.
+pub const fn max_open_orders(mode: DeploymentModeV6) -> usize {
+    match mode {
+        DeploymentModeV6::Paper => MAX_OPEN_ORDERS,
+        DeploymentModeV6::Live => MAX_OPEN_ORDERS_LIVE,
+    }
+}
 /// State, the runner section, three identifiers, the profile digest, and codec overhead.
 pub const MAX_ENCODED_KERNEL_CHECKPOINT_BYTES: usize = MAX_KERNEL_CHECKPOINT_BYTES
     + (MAX_RUNNER_ENTRIES + MAX_TOMBSTONES) * MAX_ENCODED_RUNNER_ENTRY_BYTES
@@ -1868,14 +1885,6 @@ pub fn validate_decision_result_v6(
             StrategyCommandV6::CancelAllOrders { .. } if !context.orders_complete => {
                 return Err(DecisionV6Error::InvalidContract);
             }
-            // The Broker refuses a Market sell outside paper (until Phase 5).
-            StrategyCommandV6::PlaceOrder(order)
-                if context.deployment_mode == DeploymentModeV6::Live
-                    && order.action == OrderActionV6::Sell
-                    && order.order_type == OrderTypeV6::Market =>
-            {
-                return Err(DecisionV6Error::InvalidContract);
-            }
             _ => {}
         }
     }
@@ -1907,7 +1916,9 @@ pub fn validate_decision_result_v6(
         .iter()
         .filter(|command| matches!(command, StrategyCommandV6::PlaceOrder(_)))
         .count();
-    if places > 0 && open_orders(&context.broker) + places > MAX_OPEN_ORDERS {
+    if places > 0
+        && open_orders(&context.broker) + places > max_open_orders(context.deployment_mode)
+    {
         return Err(DecisionV6Error::BoundExceeded);
     }
     Ok(())
@@ -2104,7 +2115,16 @@ impl DecisionPlanRows {
             StrategyCommandV6::PlaceOrder(order) => {
                 self.active_orders
                     .insert(format!("client:{}", order.provider_client_id));
+                // In live the Broker refuses a Market sell with a receipt (a row of its own).
+                let refused_market_sell = self.mode == DeploymentModeV6::Live
+                    && order.action == OrderActionV6::Sell
+                    && order.order_type == OrderTypeV6::Market;
                 PLACE_ORDER_PLAN_ROWS
+                    + if refused_market_sell {
+                        REFUSED_COMMAND_PLAN_ROWS
+                    } else {
+                        0
+                    }
             }
             StrategyCommandV6::CancelOrder {
                 target: CancelTargetV6::Order { order_id, .. },

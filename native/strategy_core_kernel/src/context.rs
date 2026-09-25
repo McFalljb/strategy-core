@@ -342,4 +342,7 @@ pub struct KernelCapabilities {
     pub annotations: bool,
     /// External request names the host allows, sorted. Empty until hosts grant any.
     pub external_requests: Vec<String>,
+    /// The Broker admits Market sells. When false (live, until Phase 5) a Market sell is
+    /// refused (`Refused { code: "market_sell_unsupported" }`); exit with a limit sell.
+    pub market_sell: bool,
 }
