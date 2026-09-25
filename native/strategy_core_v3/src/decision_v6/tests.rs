@@ -989,3 +989,38 @@ fn command_ids_are_the_intent_ids_and_unique_across_sleeves() {
     .unwrap();
     assert_eq!(client, format!("tv3paper_{}", &hex_digest(&intent)[..24]));
 }
+
+#[test]
+fn a_cancel_all_counts_the_orders_open_when_it_is_issued() {
+    let context = context();
+    let base = multi_order_result(&context);
+    let place =
+        |ordinal, client: &str| super::tests::place(&context, ordinal, ContractSideV6::Yes, client);
+    let cancel_all = |ordinal| StrategyCommandV6::CancelAllOrders {
+        command_id: context.command_id(ordinal),
+    };
+    let cases: [(&str, Vec<StrategyCommandV6>, usize); 3] = [
+        (
+            "places before a cancel-all are cancelled by it",
+            vec![place(0, "a"), place(1, "b"), cancel_all(2)],
+            4 + 5 + 5 + (3 + 1 + 2),
+        ),
+        (
+            "a place after a cancel-all is not",
+            vec![place(0, "a"), cancel_all(1), place(2, "b")],
+            4 + 5 + (3 + 1 + 1) + 5,
+        ),
+        (
+            "a second cancel-all counts only what opened since the first",
+            vec![place(0, "a"), cancel_all(1), place(2, "b"), cancel_all(3)],
+            4 + 5 + (3 + 1 + 1) + 5 + (3 + 1),
+        ),
+    ];
+    for (name, commands, rows) in cases {
+        let result = DecisionResultV6 {
+            commands,
+            ..base.clone()
+        };
+        assert_eq!(decision_plan_rows_v6(&context, &result), rows, "{name}");
+    }
+}

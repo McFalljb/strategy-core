@@ -1993,8 +1993,21 @@ fn valid_place_order_prices(order: &PlaceOrderV6) -> bool {
 // ---------------------------------------------------------------------------------------------
 
 /// Counts the account plan rows a decision's Broker commands need, as the runner does while
-/// the kernel issues them. The count is an upper bound: a command the Broker refuses costs
-/// [`REFUSED_COMMAND_PLAN_ROWS`] instead.
+/// the kernel issues them, in issue order:
+///
+/// - 4 per decision with a Broker command, plus 1 when the result acknowledges anything
+///   (acknowledged receipts and orders are removed with one statement);
+/// - 5 per place;
+/// - 3 per cancel, or 1 when its target is already final in the context (the Broker refuses
+///   it);
+/// - 3 per cancel-all plus 1 per order open at that point: every non-terminal context order
+///   and every place issued before it in the decision (a cancel-all includes the decision's
+///   own earlier orders). Those orders are then being cancelled, so a later cancel-all counts
+///   only places issued after the earlier one.
+///
+/// The count is an upper bound of the Broker's: a command the Broker refuses costs
+/// [`REFUSED_COMMAND_PLAN_ROWS`] instead, and an order already being cancelled is still
+/// counted. traderv3's parity test checks the runner's count is at least the owner's.
 #[derive(Clone, Debug)]
 pub struct DecisionPlanRows {
     rows: usize,
@@ -2064,7 +2077,9 @@ impl DecisionPlanRows {
             }
             StrategyCommandV6::CancelOrder { .. } => CANCEL_ORDER_PLAN_ROWS,
             StrategyCommandV6::CancelAllOrders { .. } => {
-                CANCEL_ALL_ORDERS_PLAN_ROWS + self.active_orders.len()
+                let rows = CANCEL_ALL_ORDERS_PLAN_ROWS + self.active_orders.len();
+                self.active_orders.clear();
+                rows
             }
             StrategyCommandV6::ScheduleTimer { .. }
             | StrategyCommandV6::CancelTimer { .. }
