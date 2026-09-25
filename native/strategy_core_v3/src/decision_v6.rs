@@ -42,6 +42,13 @@ pub const MAX_STRATEGY_COMMANDS: usize = 64;
 pub const MAX_ACKNOWLEDGED_COMMANDS: usize = MAX_COMMAND_RECEIPTS + MAX_BROKER_ORDERS;
 /// Orders and commands the runner section tracks until their final outcome is seen.
 pub const MAX_RUNNER_ENTRIES: usize = 256;
+/// Tombstones the runner section keeps besides its live entries; the oldest is evicted first.
+pub const MAX_TOMBSTONES: usize = 32;
+/// Complete views above its vanish revision that must not show a tombstone before it expires.
+pub const TOMBSTONE_EXPIRY_VIEWS: u16 = 16;
+/// Times an order update is delivered to a kernel that returns an error for it before the
+/// runner gives up and treats it as seen.
+pub const MAX_DELIVERY_ATTEMPTS: u8 = 3;
 pub const MAX_RESULT_EVIDENCE: usize = 64;
 pub const MAX_RESULT_DIAGNOSTICS: usize = 64;
 pub const MAX_RESULT_TELEMETRY: usize = 256;
@@ -71,8 +78,7 @@ pub const MAX_ENCODED_RUNNER_ENTRY_BYTES: usize = 4 * (MAX_IDENTIFIER_BYTES + 3)
 pub const MAX_OPEN_ORDERS: usize = 192;
 /// State, the runner section, three identifiers, the profile digest, and codec overhead.
 pub const MAX_ENCODED_KERNEL_CHECKPOINT_BYTES: usize = MAX_KERNEL_CHECKPOINT_BYTES
-    + MAX_RUNNER_ENTRIES * MAX_ENCODED_RUNNER_ENTRY_BYTES
-    + MAX_BROKER_ORDERS * (MAX_IDENTIFIER_BYTES + 3)
+    + (MAX_RUNNER_ENTRIES + MAX_TOMBSTONES) * MAX_ENCODED_RUNNER_ENTRY_BYTES
     + 3 * MAX_IDENTIFIER_BYTES
     + MAX_SHORT_TEXT_BYTES
     + 96;
@@ -361,22 +367,35 @@ pub struct RunnerEntryV6 {
     /// The Broker revision of the context the command was issued (or adopted) in. A context
     /// at or below it may predate the command's admission, so its absence there is no news.
     pub issued_broker_revision: u64,
-    /// The order went missing from a complete, newer view and was reported final once. The
-    /// entry stays as a tombstone: if the order reappears, its real update follows, with
-    /// `newly_filled` counted from this entry.
+    /// A tombstone: a place whose order, or a cancel whose receipt, went missing from a
+    /// complete, newer view (a vanished place was reported final once). If the order or the
+    /// receipt reappears, its real update follows, a place's `newly_filled` counted from this
+    /// entry. At most `MAX_TOMBSTONES` are kept; one expires after
+    /// `TOMBSTONE_EXPIRY_VIEWS` complete views above `vanished_revision` that do not show it.
     pub vanished: bool,
+    /// The Broker revision of the view the entry went missing from.
+    pub vanished_revision: u64,
+    /// Complete views above `vanished_revision` that did not show it since.
+    pub absent_views: u16,
+    /// Decisions whose kernel returned an error for this entry's pending update; the update
+    /// is delivered again until `MAX_DELIVERY_ATTEMPTS`.
+    pub delivery_failures: u8,
+}
+
+impl RunnerEntryV6 {
+    /// Counts toward `MAX_RUNNER_ENTRIES` (a tombstone counts toward `MAX_TOMBSTONES`).
+    pub const fn is_live(&self) -> bool {
+        !self.vanished
+    }
 }
 
 /// The runner's record of the Strategy's orders and commands, in issue order.
 #[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct RunnerSectionV6 {
-    /// False only before the first decision (and after converting a V5 checkpoint): that
-    /// decision records the Broker state as seen without updates.
+    /// False before the first decision over a complete view (and after converting a V5
+    /// checkpoint): that decision records the Broker state as seen without updates.
     pub seeded: bool,
     pub entries: Vec<RunnerEntryV6>,
-    /// Command ids of terminal orders whose final update the Strategy has seen, acknowledged
-    /// in every result until the order leaves a complete view.
-    pub reported: Vec<String>,
 }
 
 /// Bounded, versioned private kernel state owned by one exact Strategy profile, plus the runner
@@ -723,6 +742,9 @@ pub struct OrderUpdateRecordV6 {
     pub average_fill_price_micros: Option<u64>,
     pub fees_micros: u64,
     pub is_final: bool,
+    /// The Broker no longer reports the order: `status` is the last one seen and nothing
+    /// remains. Updates follow if the order reappears.
+    pub vanished: bool,
 }
 
 #[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
@@ -1605,21 +1627,18 @@ fn validate_kernel_checkpoint_shape(
 }
 
 fn validate_runner_section(runner: &RunnerSectionV6) -> Result<(), DecisionV6Error> {
-    if runner.entries.len() > MAX_RUNNER_ENTRIES || runner.reported.len() > MAX_BROKER_ORDERS {
+    let tombstones = runner.entries.iter().filter(|entry| entry.vanished).count();
+    if runner.entries.len() - tombstones > MAX_RUNNER_ENTRIES || tombstones > MAX_TOMBSTONES {
         return Err(DecisionV6Error::BoundExceeded);
     }
-    if !runner.seeded && (!runner.entries.is_empty() || !runner.reported.is_empty())
-        || runner.reported.iter().any(|id| !valid_identifier(id))
-    {
+    if runner.entries.iter().any(|entry| {
+        entry.delivery_failures >= MAX_DELIVERY_ATTEMPTS
+            || (!entry.vanished && (entry.vanished_revision != 0 || entry.absent_views != 0))
+            || entry.absent_views >= TOMBSTONE_EXPIRY_VIEWS
+    }) {
         return Err(DecisionV6Error::InvalidContract);
     }
-    unique(
-        runner
-            .entries
-            .iter()
-            .map(|entry| entry.command_id.as_str())
-            .chain(runner.reported.iter().map(String::as_str)),
-    )?;
+    unique(runner.entries.iter().map(|entry| entry.command_id.as_str()))?;
     unique(runner.entries.iter().filter_map(|entry| {
         (entry.kind == BrokerCommandKindV6::PlaceOrder)
             .then_some(entry.client_order_id.as_deref())
@@ -1643,10 +1662,9 @@ fn validate_runner_section(runner: &RunnerSectionV6) -> Result<(), DecisionV6Err
                         .as_ref()
                         .is_none_or(|status| !status.is_terminal())
             }
-            BrokerCommandKindV6::CancelOrder => entry.last_status.is_none() && !entry.vanished,
+            BrokerCommandKindV6::CancelOrder => entry.last_status.is_none(),
             BrokerCommandKindV6::CancelAllOrders => {
                 entry.last_status.is_none()
-                    && !entry.vanished
                     && entry.client_order_id.is_none()
                     && entry.order_id.is_none()
                     && entry.market_id.is_none()
@@ -1772,14 +1790,12 @@ impl DecisionResultV6 {
                     .collect::<BTreeSet<_>>();
                 // Every Broker command is tracked until its outcome is seen, and nothing
                 // tracked is acknowledged.
-                if !runner.seeded
-                    || self.commands.iter().any(|command| {
-                        command.broker_kind().is_some() && !tracked.contains(command.command_id())
-                    })
-                    || self
-                        .acknowledged_command_ids
-                        .iter()
-                        .any(|id| tracked.contains(id.as_str()))
+                if self.commands.iter().any(|command| {
+                    command.broker_kind().is_some() && !tracked.contains(command.command_id())
+                }) || self
+                    .acknowledged_command_ids
+                    .iter()
+                    .any(|id| tracked.contains(id.as_str()))
                 {
                     return Err(DecisionV6Error::InvalidContract);
                 }

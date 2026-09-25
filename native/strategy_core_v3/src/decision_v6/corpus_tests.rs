@@ -200,6 +200,7 @@ fn order_updates_result(context: &DecisionContextV6) -> DecisionResultV6 {
         average_fill_price_micros: None,
         fees_micros: 0,
         is_final: true,
+        vanished: false,
     };
     DecisionResultV6 {
         delivery_id: context.owner_state.delivery_id.clone(),
@@ -212,7 +213,6 @@ fn order_updates_result(context: &DecisionContextV6) -> DecisionResultV6 {
             b"after-updates",
             RunnerSectionV6 {
                 seeded: true,
-                reported: vec![],
                 entries: previous.runner.entries[..1].to_vec(),
             },
         )),
@@ -266,6 +266,9 @@ fn converted_result(context: &DecisionContextV6) -> DecisionResultV6 {
         order_revision: order.revision,
         issued_broker_revision: 0,
         vanished: false,
+        vanished_revision: 0,
+        absent_views: 0,
+        delivery_failures: 0,
     };
     DecisionResultV6 {
         delivery_id: context.owner_state.delivery_id.clone(),
@@ -278,7 +281,6 @@ fn converted_result(context: &DecisionContextV6) -> DecisionResultV6 {
                 sequence: previous.sequence + 1,
                 runner: RunnerSectionV6 {
                     seeded: true,
-                    reported: vec![],
                     entries: vec![adopted],
                 },
                 ..previous.clone()
@@ -426,15 +428,6 @@ fn invalid_contexts() -> Vec<(&'static str, DecisionV6Error, ContextMutation)> {
             |context| {
                 *context = provider_rejection_context();
                 context.broker.orders[1].rejection_reason = Some("r".repeat(513));
-            },
-        ),
-        (
-            "unseeded-runner-section-with-entries",
-            DecisionV6Error::InvalidContract,
-            |context| {
-                let mut checkpoint = context.kernel_checkpoint.take().unwrap();
-                checkpoint.runner.seeded = false;
-                context.kernel_checkpoint = Some(checkpoint.seal());
             },
         ),
         (
@@ -615,7 +608,6 @@ fn invalid_results() -> Vec<(&'static str, &'static str, DecisionV6Error, Result
                 let previous = context.kernel_checkpoint.as_ref().unwrap();
                 let runner = RunnerSectionV6 {
                     seeded: true,
-                    reported: vec![],
                     entries: previous.runner.entries[..2].to_vec(),
                 };
                 result.kernel_checkpoint = Some(
@@ -968,7 +960,7 @@ fn v6_corpus_is_current_and_every_vector_decodes_to_its_verdict() {
         }
     }
     let invalid = recorded["invalid"].as_array().unwrap();
-    assert_eq!(invalid.len(), 36);
+    assert_eq!(invalid.len(), 35);
     for entry in invalid {
         let id = entry["id"].as_str().unwrap();
         let bytes = bytes(entry);

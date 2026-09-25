@@ -6,14 +6,16 @@
 //! A context that is stale, truncated or reordered never costs a fill: an order is matched by
 //! its command id only, an older record of it than the one last reported is ignored, its
 //! absence from a view that may predate its admission or that the host truncated is no news,
-//! and an order reported as vanished stays tracked so a reappearance reports what it missed.
+//! and an order (or a cancel's receipt) missing from a complete newer view stays tracked as a
+//! tombstone, so a reappearance reports what it missed. Tombstones are bounded and expire.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::KernelTransactionError;
 use crate::decision_v6::{
     BrokerCommandKindV6, BrokerOrderStatusV6, BrokerOrderV6, CommandOutcomeV6, DecisionContextV6,
-    MAX_BROKER_ORDERS, MAX_RUNNER_ENTRIES, OrderUpdateRecordV6, OrderUpdateStatusV6, RunnerEntryV6,
+    MAX_DELIVERY_ATTEMPTS, MAX_REJECTION_REASON_BYTES, MAX_RUNNER_ENTRIES, MAX_TOMBSTONES,
+    OrderUpdateRecordV6, OrderUpdateStatusV6, RunnerEntryV6, TOMBSTONE_EXPIRY_VIEWS,
 };
 
 /// Refusal code of an order the provider rejected after admission.
@@ -21,14 +23,115 @@ pub const PROVIDER_REJECTED_CODE: &str = "provider_rejected";
 /// The refusal reason of a rejected order whose provider gave no text.
 pub const PROVIDER_REJECTED_REASON: &str = "the provider rejected the order";
 
-/// The comparison's outcome: the updates to deliver in issue order, the runner section's
-/// entries and reported terminal orders afterwards, and the receipts and terminal orders the
-/// result acknowledges.
+/// Something the comparison did that the result reports as a diagnostic.
+pub(super) struct Note {
+    pub code: &'static str,
+    pub command_id: String,
+}
+
+/// One runner entry's comparison: the entry before, the entry after (none once its outcome
+/// is seen), and the update to deliver.
+pub(super) struct Step {
+    previous: Option<RunnerEntryV6>,
+    next: Option<RunnerEntryV6>,
+    pub update: Option<OrderUpdateRecordV6>,
+}
+
+/// The comparison's outcome, before the updates are delivered.
 pub(super) struct Derived {
-    pub updates: Vec<OrderUpdateRecordV6>,
-    pub entries: Vec<RunnerEntryV6>,
-    pub reported: Vec<String>,
-    pub acknowledged: Vec<String>,
+    /// In issue order; orders recorded by seeding come last.
+    pub steps: Vec<Step>,
+    /// The section is seeded after this decision.
+    pub seeded: bool,
+    pub notes: Vec<Note>,
+}
+
+impl Step {
+    /// The delivery attempt this step's update is on.
+    pub fn attempt(&self) -> u8 {
+        self.previous
+            .as_ref()
+            .map_or(1, |entry| entry.delivery_failures + 1)
+    }
+}
+
+impl Derived {
+    /// The entries as they stand if every update is handled.
+    pub fn entries(&self) -> Vec<RunnerEntryV6> {
+        self.steps
+            .iter()
+            .filter_map(|step| step.next.clone())
+            .collect()
+    }
+
+    /// Live entries a failed update would bring back beyond [`Self::entries`].
+    pub fn reinstatable_live(&self) -> usize {
+        self.steps
+            .iter()
+            .filter(|step| {
+                step.update.is_some()
+                    && step.previous.as_ref().is_some_and(RunnerEntryV6::is_live)
+                    && !step.next.as_ref().is_some_and(RunnerEntryV6::is_live)
+            })
+            .count()
+    }
+
+    /// The runner section's entries after delivery. An entry whose update the kernel failed
+    /// on (the indexes of `failed`) stays as it was, to be delivered again, until
+    /// `MAX_DELIVERY_ATTEMPTS`; then its update counts as seen. `issued` are the entries of
+    /// the decision's own commands. Tombstones past `MAX_TOMBSTONES` are evicted, oldest
+    /// first.
+    pub fn finalize(
+        self,
+        failed: &BTreeSet<usize>,
+        issued: Vec<RunnerEntryV6>,
+    ) -> (Vec<RunnerEntryV6>, Vec<Note>) {
+        let mut notes = self.notes;
+        let mut entries = Vec::new();
+        for (index, step) in self.steps.into_iter().enumerate() {
+            if failed.contains(&index) {
+                let previous = step.previous.expect("an update comes from an entry");
+                let attempts = previous.delivery_failures + 1;
+                if attempts < MAX_DELIVERY_ATTEMPTS {
+                    entries.push(RunnerEntryV6 {
+                        delivery_failures: attempts,
+                        ..previous
+                    });
+                    continue;
+                }
+                notes.push(Note {
+                    code: "order_update_abandoned",
+                    command_id: previous.command_id.clone(),
+                });
+            }
+            if let Some(next) = step.next {
+                let delivery_failures = if step.update.is_some() {
+                    0
+                } else {
+                    next.delivery_failures
+                };
+                entries.push(RunnerEntryV6 {
+                    delivery_failures,
+                    ..next
+                });
+            }
+        }
+        entries.extend(issued);
+        while entries.iter().filter(|entry| entry.vanished).count() > MAX_TOMBSTONES {
+            let oldest = entries
+                .iter()
+                .enumerate()
+                .filter(|(_, entry)| entry.vanished)
+                .min_by_key(|(index, entry)| (entry.vanished_revision, *index))
+                .map(|(index, _)| index)
+                .expect("a tombstone exists");
+            notes.push(Note {
+                code: "runner_tombstone_evicted",
+                command_id: entries.remove(oldest).command_id,
+            });
+        }
+        (entries, notes)
+    }
 }
 
 pub(super) fn derive(context: &DecisionContextV6) -> Result<Derived, KernelTransactionError> {
@@ -37,7 +140,6 @@ pub(super) fn derive(context: &DecisionContextV6) -> Result<Derived, KernelTrans
         .as_ref()
         .map(|checkpoint| checkpoint.runner.clone())
         .unwrap_or_default();
-    let seeding = !section.seeded;
     let revision = context.broker.revision;
     let complete = context.orders_complete;
     let orders = &context.broker.orders;
@@ -49,38 +151,62 @@ pub(super) fn derive(context: &DecisionContextV6) -> Result<Derived, KernelTrans
         .iter()
         .map(|order| (order.order_id.as_str(), order))
         .collect::<BTreeMap<_, _>>();
+    let by_client = orders
+        .iter()
+        .map(|order| (order.provider_client_id.as_str(), order))
+        .collect::<BTreeMap<_, _>>();
     let receipts = context
         .command_receipts
         .iter()
         .map(|receipt| (receipt.command_id.as_str(), receipt))
         .collect::<BTreeMap<_, _>>();
 
-    let mut updates = Vec::new();
-    let mut entries = Vec::new();
-    let mut reported = section.reported.clone();
+    let mut steps = Vec::new();
+    let mut notes = Vec::new();
     for entry in section.entries {
         // The view may predate the command's admission: its absence is no news.
         let may_predate = revision <= entry.issued_broker_revision;
-        match entry.kind {
+        // What becomes of an entry a complete, newer view does not show.
+        let absent = |entry: RunnerEntryV6, notes: &mut Vec<Note>| {
+            if may_predate || !complete {
+                Some(entry)
+            } else if !entry.vanished {
+                Some(RunnerEntryV6 {
+                    vanished: true,
+                    vanished_revision: revision,
+                    absent_views: 0,
+                    ..entry
+                })
+            } else if revision <= entry.vanished_revision {
+                Some(entry)
+            } else if entry.absent_views + 1 >= TOMBSTONE_EXPIRY_VIEWS {
+                notes.push(Note {
+                    code: "runner_tombstone_expired",
+                    command_id: entry.command_id,
+                });
+                None
+            } else {
+                Some(RunnerEntryV6 {
+                    absent_views: entry.absent_views + 1,
+                    ..entry
+                })
+            }
+        };
+        let (next, update) = match entry.kind {
             BrokerCommandKindV6::PlaceOrder => {
                 if let Some(order) = by_command.get(entry.command_id.as_str()) {
                     if order.revision < entry.order_revision {
                         // An older record than the one last reported.
-                        entries.push(entry);
-                        continue;
-                    }
-                    let status = seen_status(order, entry.last_status.as_ref());
-                    let changed = entry.vanished
-                        || entry.last_status.as_ref() != Some(&status)
-                        || entry.filled_quantity_hundredths != order.filled_quantity_hundredths;
-                    let is_final = status.is_terminal();
-                    if changed {
-                        updates.push(order_record(&entry, order, status.clone(), is_final));
-                    }
-                    if is_final {
-                        reported.push(entry.command_id.clone());
+                        (Some(entry.clone()), None)
                     } else {
-                        entries.push(RunnerEntryV6 {
+                        let status = seen_status(order, entry.last_status.as_ref());
+                        let changed = entry.vanished
+                            || entry.last_status.as_ref() != Some(&status)
+                            || entry.filled_quantity_hundredths != order.filled_quantity_hundredths;
+                        let is_final = status.is_terminal();
+                        let update =
+                            changed.then(|| order_record(&entry, order, status.clone(), is_final));
+                        let next = (!is_final).then(|| RunnerEntryV6 {
                             order_id: Some(order.order_id.clone()),
                             last_status: Some(status),
                             filled_quantity_hundredths: order
@@ -88,133 +214,165 @@ pub(super) fn derive(context: &DecisionContextV6) -> Result<Derived, KernelTrans
                                 .max(entry.filled_quantity_hundredths),
                             order_revision: order.revision,
                             vanished: false,
-                            ..entry
+                            vanished_revision: 0,
+                            absent_views: 0,
+                            ..entry.clone()
                         });
+                        (next, update)
                     }
                 } else if let Some(CommandOutcomeV6::Refused { code, reason }) = receipts
                     .get(entry.command_id.as_str())
                     .map(|receipt| &receipt.outcome)
                 {
-                    updates.push(command_record(
-                        &entry,
-                        OrderUpdateStatusV6::Refused {
-                            code: code.clone(),
-                            reason: reason.clone(),
-                        },
-                        None,
-                    ));
-                } else if may_predate || !complete || entry.vanished {
-                    entries.push(entry);
+                    let status = OrderUpdateStatusV6::Refused {
+                        code: code.clone(),
+                        reason: reason.clone(),
+                    };
+                    (None, Some(command_record(&entry, status, None, false)))
                 } else {
-                    // A complete, newer view no longer shows the order: report the last status
-                    // once as final, with nothing remaining, and keep the entry as a tombstone.
-                    updates.push(command_record(
-                        &entry,
-                        entry
+                    let first_vanish = !entry.vanished && !may_predate && complete;
+                    // Report the last status once as final, with nothing remaining.
+                    let update = first_vanish.then(|| {
+                        let status = entry
                             .last_status
                             .clone()
-                            .unwrap_or(OrderUpdateStatusV6::Accepted),
-                        None,
-                    ));
-                    entries.push(RunnerEntryV6 {
-                        vanished: true,
-                        ..entry
+                            .unwrap_or(OrderUpdateStatusV6::Accepted);
+                        command_record(&entry, status, None, true)
                     });
+                    (absent(entry.clone(), &mut notes), update)
                 }
             }
             BrokerCommandKindV6::CancelOrder | BrokerCommandKindV6::CancelAllOrders => {
+                let target = entry
+                    .order_id
+                    .as_deref()
+                    .and_then(|order_id| by_order_id.get(order_id))
+                    .or_else(|| {
+                        entry
+                            .client_order_id
+                            .as_deref()
+                            .and_then(|client| by_client.get(client))
+                    })
+                    .copied();
                 match receipts
                     .get(entry.command_id.as_str())
                     .map(|receipt| &receipt.outcome)
                 {
                     // An admitted cancel shows on its target's own updates.
-                    Some(CommandOutcomeV6::Accepted) => {}
+                    Some(CommandOutcomeV6::Accepted) => (None, None),
                     Some(CommandOutcomeV6::Refused { code, reason }) => {
-                        let target = entry
-                            .order_id
-                            .as_deref()
-                            .and_then(|order_id| by_order_id.get(order_id))
-                            .copied();
-                        updates.push(command_record(
-                            &entry,
-                            OrderUpdateStatusV6::Refused {
-                                code: code.clone(),
-                                reason: reason.clone(),
-                            },
-                            target,
-                        ));
+                        let status = OrderUpdateStatusV6::Refused {
+                            code: code.clone(),
+                            reason: reason.clone(),
+                        };
+                        (None, Some(command_record(&entry, status, target, false)))
                     }
-                    // Not yet visible, or already acknowledged in a durable write.
-                    None if may_predate => entries.push(entry),
-                    None => {}
+                    // A final target tells the story whatever the cancel's outcome.
+                    None if entry.kind == BrokerCommandKindV6::CancelOrder
+                        && target.is_some_and(|order| order.status.is_terminal()) =>
+                    {
+                        (None, None)
+                    }
+                    // Not yet visible: keep waiting for the receipt.
+                    None => (absent(entry.clone(), &mut notes), None),
                 }
             }
-        }
+        };
+        steps.push(Step {
+            previous: Some(entry),
+            next,
+            update,
+        });
     }
 
-    let mut acknowledged_terminal = Vec::new();
-    if seeding {
-        // The first decision (or the first after converting a V5 checkpoint) records the
-        // Broker state as seen: open orders are tracked from their current status and
-        // terminal orders are acknowledged, without updates.
-        let tracked = entries
-            .iter()
-            .map(|entry| entry.command_id.clone())
-            .collect::<BTreeSet<_>>();
-        for order in orders {
-            if tracked.contains(&order.command_id) || reported.contains(&order.command_id) {
-                continue;
+    let mut seeded = section.seeded;
+    if !seeded {
+        if complete {
+            // The first decision over a complete view (or the first after converting a V5
+            // checkpoint) records open orders as seen, from their current status, without
+            // updates. The result acknowledges terminal ones.
+            let tracked = steps
+                .iter()
+                .filter_map(|step| step.next.as_ref())
+                .map(|entry| entry.command_id.clone())
+                .collect::<BTreeSet<_>>();
+            for order in orders {
+                if !order.status.is_terminal() && !tracked.contains(&order.command_id) {
+                    steps.push(Step {
+                        previous: None,
+                        next: Some(adopted(order, revision)),
+                        update: None,
+                    });
+                }
             }
-            if order.status.is_terminal() {
-                acknowledged_terminal.push(order.command_id.clone());
-            } else {
-                entries.push(adopted(order, revision));
-            }
+            seeded = true;
+        } else {
+            notes.push(Note {
+                code: "runner_not_seeded",
+                command_id: String::new(),
+            });
         }
     }
-    if entries.len() > MAX_RUNNER_ENTRIES {
+    let live = steps
+        .iter()
+        .filter(|step| step.next.as_ref().is_some_and(RunnerEntryV6::is_live))
+        .count();
+    if live > MAX_RUNNER_ENTRIES {
         return Err(KernelTransactionError::RunnerSectionFull);
     }
+    Ok(Derived {
+        steps,
+        seeded,
+        notes,
+    })
+}
 
-    reported.extend(acknowledged_terminal);
-    // A reported order stays until a complete view no longer shows it (its acknowledgement
-    // reached a durable write).
-    if complete {
-        reported.retain(|command_id| by_command.contains_key(command_id.as_str()));
-    }
-    let mut seen = BTreeSet::new();
-    reported.retain(|command_id| seen.insert(command_id.clone()));
-    if reported.len() > MAX_BROKER_ORDERS {
-        reported.drain(..reported.len() - MAX_BROKER_ORDERS);
-    }
-
+/// The receipts and terminal orders a result acknowledges: every receipt the runner section
+/// no longer tracks (an entry is pruned only once its outcome was delivered), and, once the
+/// section is seeded, every terminal order it no longer tracks (it is no Strategy news: the
+/// section tracks each of the Strategy's orders until its final update was delivered).
+pub(super) fn acknowledgements(
+    context: &DecisionContextV6,
+    entries: &[RunnerEntryV6],
+    seeded: bool,
+) -> Vec<String> {
     let tracked = entries
         .iter()
         .map(|entry| entry.command_id.as_str())
         .collect::<BTreeSet<_>>();
-    let reported_ids = reported.iter().map(String::as_str).collect::<BTreeSet<_>>();
-    // Receipts are only ever written for this Sleeve's commands, and an entry is pruned only
-    // once its outcome was reported, so an untracked receipt has been seen.
-    let acknowledged = context
+    context
         .command_receipts
         .iter()
         .map(|receipt| receipt.command_id.as_str())
         .filter(|command_id| !tracked.contains(command_id))
         .chain(
-            orders
+            context
+                .broker
+                .orders
                 .iter()
-                .filter(|order| order.status.is_terminal())
+                .filter(|order| seeded && order.status.is_terminal())
                 .map(|order| order.command_id.as_str())
-                .filter(|command_id| reported_ids.contains(command_id)),
+                .filter(|command_id| !tracked.contains(command_id)),
         )
         .map(str::to_owned)
-        .collect();
-    Ok(Derived {
-        updates,
-        entries,
-        reported,
-        acknowledged,
-    })
+        .collect()
+}
+
+/// Every receipt and terminal order a result could acknowledge, to size the result.
+pub(super) fn acknowledgeable(context: &DecisionContextV6) -> Vec<String> {
+    context
+        .command_receipts
+        .iter()
+        .map(|receipt| receipt.command_id.clone())
+        .chain(
+            context
+                .broker
+                .orders
+                .iter()
+                .filter(|order| order.status.is_terminal())
+                .map(|order| order.command_id.clone()),
+        )
+        .collect()
 }
 
 fn adopted(order: &BrokerOrderV6, revision: u64) -> RunnerEntryV6 {
@@ -232,6 +390,9 @@ fn adopted(order: &BrokerOrderV6, revision: u64) -> RunnerEntryV6 {
         order_revision: order.revision,
         issued_broker_revision: revision,
         vanished: false,
+        vanished_revision: 0,
+        absent_views: 0,
+        delivery_failures: 0,
     }
 }
 
@@ -252,10 +413,7 @@ pub(super) fn seen_status(
         BrokerOrderStatusV6::Expired => OrderUpdateStatusV6::Expired,
         BrokerOrderStatusV6::Rejected => OrderUpdateStatusV6::Refused {
             code: PROVIDER_REJECTED_CODE.to_owned(),
-            reason: order
-                .rejection_reason
-                .clone()
-                .unwrap_or_else(|| PROVIDER_REJECTED_REASON.to_owned()),
+            reason: rejection_reason(order),
         },
         BrokerOrderStatusV6::CancellationRequested | BrokerOrderStatusV6::RecoveryRequired => {
             if order.filled_quantity_hundredths > 0 {
@@ -264,6 +422,21 @@ pub(super) fn seen_status(
                 last.cloned().unwrap_or(OrderUpdateStatusV6::Accepted)
             }
         }
+    }
+}
+
+/// The provider's text of a rejected order, cut to `MAX_REJECTION_REASON_BYTES` on a
+/// character boundary; the fixed text when the provider gave none.
+fn rejection_reason(order: &BrokerOrderV6) -> String {
+    match order.rejection_reason.as_deref() {
+        Some(reason) if !reason.is_empty() => {
+            let mut end = reason.len().min(MAX_REJECTION_REASON_BYTES);
+            while !reason.is_char_boundary(end) {
+                end -= 1;
+            }
+            reason[..end].to_owned()
+        }
+        _ => PROVIDER_REJECTED_REASON.to_owned(),
     }
 }
 
@@ -291,6 +464,7 @@ fn order_record(
         average_fill_price_micros: order.average_fill_price_micros,
         fees_micros: order.fees_micros,
         is_final,
+        vanished: false,
     }
 }
 
@@ -300,6 +474,7 @@ fn command_record(
     entry: &RunnerEntryV6,
     status: OrderUpdateStatusV6,
     target: Option<&BrokerOrderV6>,
+    vanished: bool,
 ) -> OrderUpdateRecordV6 {
     OrderUpdateRecordV6 {
         command_id: entry.command_id.clone(),
@@ -325,5 +500,6 @@ fn command_record(
         average_fill_price_micros: target.and_then(|order| order.average_fill_price_micros),
         fees_micros: target.map_or(0, |order| order.fees_micros),
         is_final: true,
+        vanished,
     }
 }

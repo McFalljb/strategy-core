@@ -416,7 +416,12 @@ pub struct OrderUpdate {
     pub average_fill_price: Option<f64>,
     /// Execution fees charged so far, in dollars.
     pub fee_cost: f64,
-    /// No further update follows for this command: its status is terminal, or the Broker no
-    /// longer reports the order (then `status` is the last one seen and `remaining` is zero).
+    /// No further update follows for this command: its status is terminal, or the order
+    /// vanished.
     pub is_final: bool,
+    /// The Broker no longer reports the order: `status` is the last one seen, `remaining` is
+    /// zero and `is_final` is true. If the order reappears, its updates continue (the next one
+    /// reports what was filled meanwhile), so a vanished update is final only as far as the
+    /// runner knows.
+    pub vanished: bool,
 }

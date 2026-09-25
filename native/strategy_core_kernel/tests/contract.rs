@@ -434,6 +434,7 @@ fn order_updates_reach_kernels_as_borrowed_events() {
         average_fill_price: None,
         fee_cost: 0.0,
         is_final: true,
+        vanished: false,
     };
     assert!(update.status.is_terminal());
     assert!(!OrderUpdateStatus::Resting.is_terminal());

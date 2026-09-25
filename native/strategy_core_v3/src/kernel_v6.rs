@@ -157,26 +157,34 @@ pub fn run_transaction<F: TransactionKernelFactory>(
     let event = KernelEvent::from_context(context)?;
     let evidence = wire::order_update_evidence(
         &derived
-            .updates
+            .steps
             .iter()
+            .filter_map(|step| step.update.as_ref())
             .map(evidence_record)
             .collect::<Vec<_>>(),
     )?;
+    let acknowledgeable = updates::acknowledgeable(context);
     // Everything in the result but the commands, the runner entries and the kernel's
     // telemetry, with the kernel's state at its bound: commands are admitted against the rest.
     let fixed_bytes = wire::encoded_len(&evidence)
-        + wire::encoded_len(&derived.acknowledged)
-        + wire::encoded_len(&derived.reported)
+        + wire::encoded_len(&acknowledgeable)
         + wire::MAX_KERNEL_CHECKPOINT_BYTES
         + RESULT_OVERHEAD_BYTES;
-    let mut host = KernelHost::new(context, derived.entries, !derived.acknowledged.is_empty())?;
+    let mut host = KernelHost::new(context, derived.entries(), !acknowledgeable.is_empty())?;
     host.market_buy_cap = Some(&market_buy_cap);
     host.fixed_bytes = fixed_bytes;
+    host.reinstatable_live = derived.reinstatable_live();
+    let issued_from = host.runner.len();
 
-    // Each update is delivered on its own: when the kernel fails on one, the kernel and the
-    // decision go back to how they were before it, the failure is recorded, and the update
-    // counts as seen, so one update the kernel cannot handle never stalls the Sleeve.
-    for record in &derived.updates {
+    // Each update is delivered on its own. When the kernel fails on one, the kernel and the
+    // decision go back to how they were before it and the failure is recorded; the update is
+    // delivered again in the next decisions, up to MAX_DELIVERY_ATTEMPTS, then counts as seen.
+    // The remaining updates and the trigger are still delivered.
+    let mut failed = BTreeSet::new();
+    for (index, step) in derived.steps.iter().enumerate() {
+        let Some(record) = &step.update else {
+            continue;
+        };
         let before = (kernel.clone(), host.save());
         let delivered = StrategyEvent::OrderUpdate(order_update(record))
             .with_view(|view| kernel.on_event(view, &mut host));
@@ -184,9 +192,12 @@ pub fn run_transaction<F: TransactionKernelFactory>(
             let (restored, saved) = before;
             kernel = restored;
             host.restore(saved);
+            failed.insert(index);
             host.outputs.push(HostOutput::UpdateError(format!(
-                "order update of {}: {error}",
-                record.command_id
+                "order update of {} (attempt {} of {}): {error}",
+                record.command_id,
+                step.attempt(),
+                wire::MAX_DELIVERY_ATTEMPTS
             )));
         }
     }
@@ -207,6 +218,10 @@ pub fn run_transaction<F: TransactionKernelFactory>(
     };
     match outcome {
         Ok(()) => {
+            let issued = host.runner.split_off(issued_from);
+            let seeded = derived.seeded;
+            let (entries, notes) = derived.finalize(&failed, issued);
+            result.acknowledged_command_ids = updates::acknowledgements(context, &entries, seeded);
             let sequence = context
                 .kernel_checkpoint
                 .as_ref()
@@ -226,17 +241,13 @@ pub fn run_transaction<F: TransactionKernelFactory>(
                         .clone(),
                     sequence,
                     state: kernel.encode_checkpoint_state()?,
-                    runner: RunnerSectionV6 {
-                        seeded: true,
-                        entries: std::mem::take(&mut host.runner),
-                        reported: derived.reported.clone(),
-                    },
+                    runner: RunnerSectionV6 { seeded, entries },
                     state_sha256: [0; 32],
                 }
                 .seal(),
             );
             result.commands = std::mem::take(&mut host.commands);
-            result.acknowledged_command_ids = derived.acknowledged;
+            append_notes(&notes, &mut result);
             append_outputs(&host.outputs, None, &mut result);
         }
         Err(error) => {
@@ -336,6 +347,7 @@ pub fn order_update(record: &OrderUpdateRecordV6) -> OrderUpdate {
         average_fill_price: record.average_fill_price_micros.map(price),
         fee_cost: record.fees_micros as f64 / 1_000_000.0,
         is_final: record.is_final,
+        vanished: record.vanished,
     }
 }
 
@@ -517,6 +529,8 @@ pub struct KernelHost<'a> {
     market_buy_cap: Option<MarketBuyCap<'a>>,
     /// Encoded bytes the result needs besides its commands and runner entries.
     fixed_bytes: usize,
+    /// Live runner entries a failed order update could bring back.
+    reinstatable_live: usize,
 }
 
 impl<'a> KernelHost<'a> {
@@ -546,6 +560,7 @@ impl<'a> KernelHost<'a> {
             outputs: Vec::new(),
             market_buy_cap: None,
             fixed_bytes: RESULT_OVERHEAD_BYTES + wire::MAX_KERNEL_CHECKPOINT_BYTES,
+            reinstatable_live: 0,
         })
     }
 
@@ -633,7 +648,9 @@ impl<'a> KernelHost<'a> {
                 wire::MAX_DECISION_PLAN_ROWS
             )));
         }
-        if self.runner.len() >= wire::MAX_RUNNER_ENTRIES {
+        // Tombstones do not count: they never keep the Strategy from cancelling.
+        let live = self.runner.iter().filter(|entry| entry.is_live()).count();
+        if live + self.reinstatable_live >= wire::MAX_RUNNER_ENTRIES {
             return Err(KernelError::new(format!(
                 "the runner tracks at most {} orders and commands",
                 wire::MAX_RUNNER_ENTRIES
@@ -769,6 +786,9 @@ impl<'a> KernelHost<'a> {
             order_revision: 0,
             issued_broker_revision: self.context.broker.revision,
             vanished: false,
+            vanished_revision: 0,
+            absent_views: 0,
+            delivery_failures: 0,
         };
         self.issue_broker_command(command, entry)?;
         self.finances.current_commitment_micros = self
@@ -853,6 +873,9 @@ impl<'a> KernelHost<'a> {
             order_revision: 0,
             issued_broker_revision: self.context.broker.revision,
             vanished: false,
+            vanished_revision: 0,
+            absent_views: 0,
+            delivery_failures: 0,
         };
         let (target, entry) = match (target, provisional, order) {
             (Some(target), Some(index), _) => {
@@ -934,6 +957,9 @@ impl<'a> KernelHost<'a> {
             order_revision: 0,
             issued_broker_revision: self.context.broker.revision,
             vanished: false,
+            vanished_revision: 0,
+            absent_views: 0,
+            delivery_failures: 0,
         };
         self.issue_broker_command(command, entry)?;
         for order in &self.context.broker.orders {
@@ -1430,6 +1456,27 @@ fn append_outputs(
                 "lost_entries": lost, "lost_payload_bytes": lost_bytes, "reason": "v6_result_bound"
             })
             .to_string(),
+        });
+    }
+}
+
+/// Reports what the order-update comparison did, one diagnostic per kind.
+fn append_notes(notes: &[updates::Note], result: &mut DecisionResultV6) {
+    let mut by_code = std::collections::BTreeMap::<&str, Vec<&str>>::new();
+    for note in notes {
+        by_code.entry(note.code).or_default().push(&note.command_id);
+    }
+    for (code, command_ids) in by_code {
+        let named = command_ids
+            .iter()
+            .filter(|id| !id.is_empty())
+            .take(8)
+            .collect::<Vec<_>>();
+        result.diagnostics.push(ResultDiagnosticV6 {
+            severity: "warn".to_owned(),
+            code: code.to_owned(),
+            message: serde_json::json!({"count": command_ids.len(), "command_ids": named})
+                .to_string(),
         });
     }
 }

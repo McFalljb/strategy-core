@@ -390,6 +390,7 @@ fn refusals_rejections_and_vanished_orders_arrive_as_final_updates() {
         Vec<BrokerOrderV6>,
         Vec<CommandReceiptV6>,
         Vec<(BrokerCommandKind, OrderUpdateStatus, bool)>,
+        usize,
     );
     let refusal = |code: &str| OrderUpdateStatus::Refused {
         code: code.to_owned(),
@@ -415,6 +416,7 @@ fn refusals_rejections_and_vanished_orders_arrive_as_final_updates() {
                     true,
                 ),
             ],
+            1,
         ),
         (
             "an admitted cancel shows as the order's own update",
@@ -442,12 +444,15 @@ fn refusals_rejections_and_vanished_orders_arrive_as_final_updates() {
                 OrderUpdateStatus::Cancelled,
                 true,
             )],
+            0,
         ),
         (
             "a provider rejection is a refusal",
             vec![order(command, "yes-1", BrokerOrderStatusV6::Rejected, 0, 2)],
             vec![],
             vec![(BrokerCommandKind::PlaceOrder, refusal_rejected(), true)],
+            // The cancel of a final order is settled; the cancel-all waits for its receipt.
+            1,
         ),
         (
             "a vanished order is reported once with its last status",
@@ -458,9 +463,11 @@ fn refusals_rejections_and_vanished_orders_arrive_as_final_updates() {
                 OrderUpdateStatus::Resting,
                 true,
             )],
+            // The place, the cancel and the cancel-all stay as tombstones.
+            3,
         ),
     ];
-    for (name, orders, receipts, expected) in cases {
+    for (name, orders, receipts, expected, expected_tracked) in cases {
         let next = follow_up(&context, Some(&resting.result), 3, orders, receipts.clone());
         let decision = decide(&next, nothing);
         let seen = decision
@@ -499,14 +506,10 @@ fn refusals_rejections_and_vanished_orders_arrive_as_final_updates() {
             .runner
             .entries
             .len();
-        let order_open = next
-            .broker
-            .orders
-            .iter()
-            .any(|order| !order.status.is_terminal());
-        // A vanished order stays as a tombstone in case it reappears.
-        let tombstone = usize::from(name.contains("vanished"));
-        assert_eq!(tracked, usize::from(order_open) + tombstone, "{name}");
+        assert_eq!(tracked, expected_tracked, "{name}");
+        for update in &decision.updates {
+            assert_eq!(update.vanished, name.contains("vanished"), "{name}");
+        }
     }
 
     // A refused place has no order record, only its receipt.
@@ -645,18 +648,33 @@ fn a_kernel_error_on_one_update_is_recorded_and_the_decision_goes_on() {
         "{}",
         errors[0].message
     );
-    // The failed update counts as seen: the next decision does not deliver it again.
-    let mut again = next.clone();
-    again.kernel_checkpoint = result.kernel_checkpoint.clone();
-    seen.borrow_mut().clear();
-    let later = run_transaction(&factory, &again).unwrap();
-    assert!(
-        later
+    // The failed update is delivered again, up to three attempts; then it counts as seen.
+    let mut previous = result;
+    for attempt in 2..=4 {
+        let mut again = next.clone();
+        again.owner_state.delivery_id = format!("delivery.daily.{}", 10 + attempt);
+        again.kernel_checkpoint = previous.kernel_checkpoint.clone();
+        seen.borrow_mut().clear();
+        let later = run_transaction(&factory, &again).unwrap();
+        validate_decision_result_v6(&again, &later).unwrap();
+        let codes = later
             .diagnostics
             .iter()
-            .all(|diagnostic| diagnostic.code != "kernel_error")
-    );
-    assert_eq!(*seen.borrow(), ["broker_state"]);
+            .map(|diagnostic| diagnostic.code.as_str())
+            .collect::<Vec<_>>();
+        match attempt {
+            2 => assert_eq!(codes, ["kernel_error"]),
+            3 => assert_eq!(codes, ["order_update_abandoned", "kernel_error"]),
+            _ => assert!(codes.is_empty(), "{codes:?}"),
+        }
+        assert_eq!(
+            later.acknowledged_command_ids.contains(&cid(1, 1)),
+            attempt >= 3,
+            "the refusal's receipt is acknowledged only once the update is given up"
+        );
+        assert_eq!(*seen.borrow(), ["broker_state"]);
+        previous = later;
+    }
 }
 
 #[test]
@@ -952,25 +970,69 @@ fn a_sleeve_holds_at_most_192_open_orders() {
     assert_eq!(tracked, 192, "the 129 open orders and the 63 places");
 }
 
-#[test]
-fn the_runner_tracks_at_most_256_orders_and_commands() {
-    // 191 open orders, plus 65 tombstones of orders that vanished: 256 entries.
-    let crowded = crowded_context(191);
+/// The crowded Sleeve's seeded checkpoint with `live` cancels still waiting for their
+/// receipts and `tombstones` places that vanished.
+fn crowded_with(
+    open: usize,
+    live: usize,
+    tombstones: usize,
+) -> (
+    DecisionContextV6,
+    strategy_core_v3::decision_v6::KernelCheckpointV6,
+) {
+    let crowded = crowded_context(open);
     let seeded = decide(&crowded, nothing).result;
     let mut checkpoint = seeded.kernel_checkpoint.clone().unwrap();
-    let template = checkpoint.runner.entries[0].clone();
-    checkpoint.runner.entries.extend((0..65).map(|index| {
+    let waiting = strategy_core_v3::decision_v6::RunnerEntryV6 {
+        command_id: String::new(),
+        kind: BrokerCommandKindV6::CancelOrder,
+        client_order_id: None,
+        order_id: None,
+        market_id: None,
+        action: None,
+        side: None,
+        requested_quantity_hundredths: 0,
+        last_status: None,
+        filled_quantity_hundredths: 0,
+        order_revision: 0,
+        // Issued above the view's revision: not yet visible.
+        issued_broker_revision: 1_000,
+        vanished: false,
+        vanished_revision: 0,
+        absent_views: 0,
+        delivery_failures: 0,
+    };
+    checkpoint.runner.entries.extend((0..live).map(|index| {
         strategy_core_v3::decision_v6::RunnerEntryV6 {
-            command_id: format!("command.gone.{index:03}"),
-            client_order_id: Some(format!("gone-{index:03}")),
-            order_id: None,
-            vanished: true,
-            ..template.clone()
+            command_id: format!("command.wait.{index:03}"),
+            ..waiting.clone()
         }
     }));
-    let mut context = crowded.clone();
-    context.kernel_checkpoint = Some(checkpoint.seal());
+    let template = checkpoint.runner.entries[0].clone();
+    checkpoint
+        .runner
+        .entries
+        .extend(
+            (0..tombstones).map(|index| strategy_core_v3::decision_v6::RunnerEntryV6 {
+                command_id: format!("command.gone.{index:03}"),
+                client_order_id: Some(format!("gone-{index:03}")),
+                order_id: None,
+                vanished: true,
+                vanished_revision: 5 + index as u64,
+                ..template.clone()
+            }),
+        );
+    let checkpoint = checkpoint.seal();
+    let mut context = crowded;
+    context.kernel_checkpoint = Some(checkpoint.clone());
     context.validate().unwrap();
+    (context, checkpoint)
+}
+
+#[test]
+fn the_runner_tracks_at_most_256_orders_and_commands() {
+    // 191 open orders and 65 cancels waiting for their receipts: 256 live entries.
+    let (context, _) = crowded_with(191, 65, 0);
     let decision = decide(&context, |context, seen| {
         seen.push(
             context
@@ -984,6 +1046,211 @@ fn the_runner_tracks_at_most_256_orders_and_commands() {
     assert_eq!(
         decision.seen,
         ["the runner tracks at most 256 orders and commands"]
+    );
+}
+
+#[test]
+fn tombstones_never_keep_the_strategy_from_cancelling() {
+    // 191 open orders, 63 cancels waiting and the full 32 tombstones: a cancel and a
+    // cancel-all still fit in the 256 live entries.
+    let (context, _) = crowded_with(191, 63, 32);
+    let decision = decide(&context, |context, seen| {
+        let cancel = context.broker().cancel_order(CancelOrderRequest {
+            target: CancelTarget::ClientOrderId("old-000".to_owned()),
+        });
+        seen.push(format!("{:?}", cancel.map(drop).map_err(|e| e.to_string())));
+        let cancel_all = context.broker().cancel_all_orders();
+        seen.push(format!(
+            "{:?}",
+            cancel_all.map(drop).map_err(|e| e.to_string())
+        ));
+        Ok(())
+    });
+    assert_eq!(decision.seen, ["Ok(())", "Ok(())"]);
+    let entries = &decision.result.kernel_checkpoint.unwrap().runner.entries;
+    assert_eq!(entries.iter().filter(|entry| entry.vanished).count(), 32);
+
+    // A 33rd tombstone evicts the oldest, with a diagnostic.
+    let crowded = crowded_context(191);
+    let (_, mut checkpoint) = crowded_with(191, 0, 32);
+    let placed = strategy_core_v3::decision_v6::RunnerEntryV6 {
+        command_id: "command.will-vanish".to_owned(),
+        client_order_id: Some("will-vanish".to_owned()),
+        issued_broker_revision: 0,
+        vanished: false,
+        vanished_revision: 0,
+        ..checkpoint.runner.entries[0].clone()
+    };
+    checkpoint.runner.entries.push(placed);
+    let mut context = crowded;
+    context.kernel_checkpoint = Some(checkpoint.seal());
+    let decision = decide(&context, nothing);
+    assert_eq!(decision.updates.len(), 1, "the vanish is reported");
+    assert!(decision.updates[0].vanished);
+    let evicted = decision
+        .result
+        .diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code == "runner_tombstone_evicted")
+        .expect("the oldest tombstone is evicted");
+    assert!(
+        evicted.message.contains("command.gone.000"),
+        "{}",
+        evicted.message
+    );
+    let entries = &decision.result.kernel_checkpoint.unwrap().runner.entries;
+    assert_eq!(entries.iter().filter(|entry| entry.vanished).count(), 32);
+}
+
+#[test]
+fn a_tombstone_expires_after_16_complete_newer_views_without_it() {
+    use BrokerOrderStatusV6::*;
+    let context = priced_context();
+    let placed = decide(&context, place_yes);
+    let command_id = cid(1, 0);
+    let mut previous = decide(
+        &follow_up(
+            &context,
+            Some(&placed.result),
+            2,
+            vec![order(&command_id, "yes-1", Resting, 0, 1)],
+            vec![],
+        ),
+        nothing,
+    )
+    .result;
+    let mut expired_at = None;
+    for delivery in 3..30 {
+        let decision = decide(
+            &follow_up(&context, Some(&previous), delivery, vec![], vec![]),
+            nothing,
+        );
+        if decision
+            .result
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "runner_tombstone_expired")
+        {
+            expired_at.get_or_insert(delivery);
+        }
+        previous = decision.result;
+    }
+    // Vanished at delivery 3, then 16 newer complete views without it.
+    assert_eq!(expired_at, Some(3 + 16));
+    assert!(
+        previous
+            .kernel_checkpoint
+            .unwrap()
+            .runner
+            .entries
+            .is_empty()
+    );
+}
+
+#[test]
+fn a_cancel_waits_for_its_receipt_through_a_newer_view_without_it() {
+    use BrokerOrderStatusV6::*;
+    let context = priced_context();
+    let placed = decide(&context, place_yes);
+    let command_id = cid(1, 0);
+    let resting = vec![order(&command_id, "yes-1", Resting, 0, 1)];
+    let r2 = decide(
+        &follow_up(&context, Some(&placed.result), 2, resting.clone(), vec![]),
+        |context, _| {
+            context.broker().cancel_order(CancelOrderRequest {
+                target: CancelTarget::ClientOrderId("yes-1".to_owned()),
+            })?;
+            Ok(())
+        },
+    );
+    let cancel = cid(2, 0);
+    // A newer view that predates the cancel's write: no receipt yet.
+    let r3 = decide(
+        &follow_up(&context, Some(&r2.result), 3, resting.clone(), vec![]),
+        nothing,
+    );
+    assert!(r3.updates.is_empty());
+    // The refusal arrives.
+    let r4 = decide(
+        &follow_up(
+            &context,
+            Some(&r3.result),
+            4,
+            resting,
+            vec![refused(
+                &cancel,
+                BrokerCommandKindV6::CancelOrder,
+                "stale_order_revision",
+            )],
+        ),
+        nothing,
+    );
+    assert_eq!(r4.updates.len(), 1, "the refusal reaches the kernel");
+    assert_eq!(r4.updates[0].command_kind, BrokerCommandKind::CancelOrder);
+    assert!(r4.result.acknowledged_command_ids.contains(&cancel));
+}
+
+#[test]
+fn seeding_waits_for_a_complete_view() {
+    use BrokerOrderStatusV6::*;
+    let context = priced_context();
+    let hidden_open = order("command.v5-hidden-open", "v5-hidden-open", Resting, 0, 3);
+    let hidden_done = order("command.v5-hidden-done", "v5-hidden-done", Filled, 300, 3);
+    let visible = order("command.v5-visible", "v5-visible", Resting, 0, 3);
+    let mut truncated = follow_up(&context, None, 1, vec![visible.clone()], vec![]);
+    truncated.orders_complete = false;
+    truncated.trigger = TriggerV6::Owner(OwnerTriggerV6::Recovery);
+    let first = decide(&truncated, nothing);
+    let runner = &first.result.kernel_checkpoint.as_ref().unwrap().runner;
+    assert!(!runner.seeded && runner.entries.is_empty());
+    assert!(
+        first
+            .result
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "runner_not_seeded")
+    );
+    assert!(first.result.acknowledged_command_ids.is_empty());
+    // The first complete view seeds: the hidden open order is recorded as seen and the hidden
+    // terminal one acknowledged.
+    let second = decide(
+        &follow_up(
+            &context,
+            Some(&first.result),
+            2,
+            vec![visible.clone(), hidden_done, hidden_open.clone()],
+            vec![],
+        ),
+        nothing,
+    );
+    let runner = &second.result.kernel_checkpoint.as_ref().unwrap().runner;
+    assert!(runner.seeded);
+    assert_eq!(runner.entries.len(), 2);
+    assert_eq!(
+        second.result.acknowledged_command_ids,
+        ["command.v5-hidden-done"]
+    );
+    // Its fill is then reported.
+    let mut filled = hidden_open;
+    filled.status = Filled;
+    filled.filled_quantity_hundredths = 300;
+    filled.remaining_quantity_hundredths = 0;
+    filled.reserved_principal_micros = 0;
+    filled.average_fill_price_micros = Some(400_000);
+    filled.revision = 9;
+    let third = decide(
+        &follow_up(
+            &context,
+            Some(&second.result),
+            3,
+            vec![visible, filled],
+            vec![],
+        ),
+        nothing,
+    );
+    assert_eq!(
+        third.updates.iter().map(summary).collect::<Vec<_>>(),
+        [(OrderUpdateStatus::Filled, 300, 0, true)]
     );
 }
 
@@ -1571,4 +1838,132 @@ fn a_live_market_sell_is_a_local_error() {
             assert!(decision.result.commands.is_empty());
         }
     }
+}
+
+/// Keeps a book of its orders' fills; a vanished order stays in the book in case it returns.
+#[derive(Clone)]
+struct BookKernel {
+    book: std::collections::BTreeMap<String, i64>,
+    position: i64,
+    place: bool,
+}
+
+impl NativeKernel for BookKernel {
+    fn name(&self) -> &str {
+        "book"
+    }
+    fn on_start(&mut self, context: &mut dyn StrategyKernelContext) -> KernelResult<()> {
+        if self.place {
+            let ticket =
+                context
+                    .broker()
+                    .place_order(limit_buy("yes-1", ContractSide::Yes, 300, 0.4))?;
+            self.book.insert(ticket.client_order_id, 0);
+        }
+        Ok(())
+    }
+    fn on_event(
+        &mut self,
+        event: StrategyEventView<'_>,
+        _context: &mut dyn StrategyKernelContext,
+    ) -> KernelResult<()> {
+        if let StrategyEventView::OrderUpdate(update) = event {
+            let Some(filled) = self.book.get_mut(&update.client_order_id) else {
+                return Err(strategy_core_kernel::KernelError::new("unknown order"));
+            };
+            *filled += update.newly_filled.hundredths();
+            self.position += update.newly_filled.hundredths();
+            if update.is_final && !update.vanished {
+                self.book.remove(&update.client_order_id);
+            }
+        }
+        Ok(())
+    }
+}
+
+impl TransactionKernel for BookKernel {
+    fn encode_checkpoint_state(&self) -> Result<Vec<u8>, KernelTransactionError> {
+        let mut text = self.position.to_string();
+        for (client, filled) in &self.book {
+            text.push_str(&format!(";{client}={filled}"));
+        }
+        Ok(text.into_bytes())
+    }
+}
+
+struct BookFactory {
+    place: bool,
+}
+
+impl TransactionKernelFactory for BookFactory {
+    type Kernel = BookKernel;
+    fn checkpoint_codec(&self, _: &str) -> Result<KernelCheckpointCodec, KernelTransactionError> {
+        Ok(KernelCheckpointCodec {
+            profile: "script.checkpoint.v1".to_owned(),
+            version: 1,
+        })
+    }
+    fn create(&self, _: &DecisionContextV6) -> Result<BookKernel, KernelTransactionError> {
+        Ok(BookKernel {
+            book: Default::default(),
+            position: 0,
+            place: self.place,
+        })
+    }
+    fn restore(
+        &self,
+        _: &DecisionContextV6,
+        checkpoint: &strategy_core_v3::decision_v6::KernelCheckpointV6,
+    ) -> Result<BookKernel, KernelTransactionError> {
+        let text = String::from_utf8(checkpoint.state.clone()).unwrap();
+        let mut parts = text.split(';');
+        let position = parts.next().unwrap().parse().unwrap_or(0);
+        let book = parts
+            .map(|part| {
+                let (client, filled) = part.split_once('=').unwrap();
+                (client.to_owned(), filled.parse().unwrap())
+            })
+            .collect();
+        Ok(BookKernel {
+            book,
+            position,
+            place: self.place,
+        })
+    }
+}
+
+#[test]
+fn a_kernel_that_keeps_a_vanished_order_counts_its_fill_when_it_returns() {
+    use BrokerOrderStatusV6::*;
+    let context = priced_context();
+    let placed = run_transaction(&BookFactory { place: true }, &context).unwrap();
+    let command_id = cid(1, 0);
+    let run = |context: &DecisionContextV6| {
+        let result = run_transaction(&BookFactory { place: false }, context).unwrap();
+        validate_decision_result_v6(context, &result).unwrap();
+        result
+    };
+    let r2 = run(&follow_up(
+        &context,
+        Some(&placed),
+        2,
+        vec![order(&command_id, "yes-1", Resting, 0, 1)],
+        vec![],
+    ));
+    // A stale view at a newer account-wide revision without the order: a false vanish.
+    let r3 = run(&follow_up(&context, Some(&r2), 3, vec![], vec![]));
+    // It is back, filled.
+    let r4 = run(&follow_up(
+        &context,
+        Some(&r3),
+        4,
+        vec![order(&command_id, "yes-1", Filled, 300, 4)],
+        vec![],
+    ));
+    let state = String::from_utf8(r4.kernel_checkpoint.as_ref().unwrap().state.clone()).unwrap();
+    assert_eq!(
+        state, "300",
+        "the fill is counted once and the order leaves the book"
+    );
+    assert!(r4.diagnostics.is_empty(), "{:?}", r4.diagnostics);
 }

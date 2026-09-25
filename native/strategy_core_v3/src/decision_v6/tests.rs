@@ -11,7 +11,6 @@ pub(super) fn seeded(entries: Vec<RunnerEntryV6>) -> RunnerSectionV6 {
     RunnerSectionV6 {
         seeded: true,
         entries,
-        reported: vec![],
     }
 }
 
@@ -179,7 +178,6 @@ pub(super) fn context() -> DecisionContextV6 {
             b"durable-kernel-state",
             RunnerSectionV6 {
                 seeded: true,
-                reported: vec![],
                 entries: vec![RunnerEntryV6 {
                     command_id: "command.delivery.daily.0.0".to_owned(),
                     kind: BrokerCommandKindV6::PlaceOrder,
@@ -194,6 +192,9 @@ pub(super) fn context() -> DecisionContextV6 {
                     order_revision: 2,
                     issued_broker_revision: 0,
                     vanished: false,
+                    vanished_revision: 0,
+                    absent_views: 0,
+                    delivery_failures: 0,
                 }],
             },
         )),
@@ -248,6 +249,9 @@ pub(super) fn place_entry(command: &StrategyCommandV6) -> RunnerEntryV6 {
         order_revision: 0,
         issued_broker_revision: 0,
         vanished: false,
+        vanished_revision: 0,
+        absent_views: 0,
+        delivery_failures: 0,
     }
 }
 
@@ -266,6 +270,9 @@ pub(super) fn command_entry(command: &StrategyCommandV6) -> RunnerEntryV6 {
         order_revision: 0,
         issued_broker_revision: 0,
         vanished: false,
+        vanished_revision: 0,
+        absent_views: 0,
+        delivery_failures: 0,
     }
 }
 
@@ -779,7 +786,6 @@ fn runner_section_entries_are_bounded_and_never_terminal() {
     let entry = context.kernel_checkpoint.unwrap().runner.entries[0].clone();
     let full = RunnerSectionV6 {
         seeded: true,
-        reported: vec![],
         entries: (0..=MAX_RUNNER_ENTRIES)
             .map(|index| RunnerEntryV6 {
                 command_id: format!("command.{index}"),
@@ -881,6 +887,7 @@ fn order_update_evidence_round_trips_in_bounded_chunks() {
         average_fill_price_micros: None,
         fees_micros: 0,
         is_final: true,
+        vanished: false,
     };
     let records = vec![record; 40];
     let evidence = order_update_evidence(&records).unwrap();
