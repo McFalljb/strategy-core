@@ -176,7 +176,9 @@ traderv3 and strategies must build to these choices or change them here first.
     would fit a decision without them (`order_update_deferred`, a warning). A kernel that
     hedges a fill with `?` does not lose it to a burst of an earlier update. Deferrals are
     bounded separately: after `MAX_DELIVERY_DEFERRALS = 8` decisions in a row
-    (`RunnerEntryV6::delivery_deferrals`) the update is abandoned. A refusal at a
+    (`RunnerEntryV6::delivery_deferrals`) the update is abandoned. The next decision
+    delivers deferred updates first (then the others, each group in issue order), so a
+    deferred update is deferred again only behind another deferred one. A refusal at a
     Sleeve-wide bound (open-order cap, 256 live entries), or one an update hits on its own,
     counts: waiting would never make room. A snapshot the kernel's codec cannot take before
     an update is a counted failure of that update, which is not delivered. A snapshot the

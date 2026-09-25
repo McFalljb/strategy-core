@@ -7,7 +7,8 @@
 //! One run per event:
 //! 1. Restore the kernel from its checkpoint (or create it).
 //! 2. Compare the context's Broker state and command receipts with the checkpoint's runner
-//!    section and deliver one `OrderUpdate` per change, in the order the commands were issued.
+//!    section and deliver one `OrderUpdate` per change, in the order the commands were issued
+//!    (updates the previous decision deferred first).
 //! 3. Deliver the trigger's event (`on_start` for Bootstrap/Recovery).
 //! 4. Broker calls return tickets at once. Inside the decision the kernel sees a provisional
 //!    view: its own new orders are pending (`submitted`) and reserve budget with the Broker's
@@ -155,11 +156,27 @@ pub fn run_transaction<F: TransactionKernelFactory>(
         |request: &PlaceOrderRequest| restored.market_buy_price_cap_micros(request);
     let derived = updates::derive(context)?;
     let event = KernelEvent::from_context(context)?;
+    // Updates the previous decision deferred are delivered first (in issue order), so they
+    // run without earlier commands; the others follow in issue order.
+    let delivery_order = derived
+        .steps
+        .iter()
+        .enumerate()
+        .filter(|(_, step)| step.deferred())
+        .chain(
+            derived
+                .steps
+                .iter()
+                .enumerate()
+                .filter(|(_, step)| !step.deferred()),
+        )
+        .filter(|(_, step)| step.update.is_some())
+        .map(|(index, _)| index)
+        .collect::<Vec<_>>();
     let evidence = wire::order_update_evidence(
-        &derived
-            .steps
+        &delivery_order
             .iter()
-            .filter_map(|step| step.update.as_ref())
+            .filter_map(|index| derived.steps[*index].update.as_ref())
             .map(evidence_record)
             .collect::<Vec<_>>(),
     )?;
@@ -186,7 +203,8 @@ pub fn run_transaction<F: TransactionKernelFactory>(
     // still delivered.
     let mut failed = BTreeMap::new();
     let mut start = Some(host.save());
-    for (index, step) in derived.steps.iter().enumerate() {
+    for &index in &delivery_order {
+        let step = &derived.steps[index];
         let Some(record) = &step.update else {
             continue;
         };

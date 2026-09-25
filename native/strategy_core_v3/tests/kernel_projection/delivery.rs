@@ -243,40 +243,64 @@ fn a_refusal_at_a_sleeve_wide_bound_counts_against_the_update() {
     assert_eq!(result.commands.len(), 1);
 }
 
-/// On an update of `a-first`, places orders until the decision refuses one (swallowing the
-/// refusal); on a fill of `z-target`, hedges with `?`; on any other update, counts it.
-struct Greedy {
-    counted: i64,
+/// Issues the `index`th command of a run; `tag` names the update that issues it.
+type Issue = fn(&mut dyn StrategyKernelContext, &str, usize) -> KernelResult<()>;
+
+/// What the scripted kernel does with the refusal that ends a run of commands.
+#[derive(Clone, Copy)]
+enum OnRefusal {
+    /// Stop the run and handle the update.
+    Swallow,
+    /// Return the refusal (`?`).
+    Return,
+    /// Catch it and return an error of its own.
+    ReturnOther,
 }
 
-impl NativeKernel for Greedy {
+/// On an update of `client`, issues commands with `issue` (at most `count`) and handles the
+/// refusal that ends the run as `on_refusal`; counts every fill it handles.
+#[derive(Clone, Copy)]
+struct Act {
+    client: &'static str,
+    issue: Issue,
+    count: usize,
+    on_refusal: OnRefusal,
+}
+
+#[derive(Clone)]
+struct Scripted {
+    counted: i64,
+    acts: &'static [Act],
+}
+
+impl NativeKernel for Scripted {
     fn name(&self) -> &str {
-        "greedy"
+        "scripted"
     }
     fn on_event(
         &mut self,
         event: StrategyEventView<'_>,
         context: &mut dyn StrategyKernelContext,
     ) -> KernelResult<()> {
-        if let StrategyEventView::OrderUpdate(update) = event {
-            if update.client_order_id == "a-first" {
-                for index in 0.. {
-                    let request = limit_buy(
-                        &format!("burst-{}-{index}", update.filled.hundredths()),
-                        ContractSide::No,
-                        100,
-                        0.01,
-                    );
-                    if context.broker().place_order(request).is_err() {
-                        break;
+        let StrategyEventView::OrderUpdate(update) = event else {
+            return Ok(());
+        };
+        self.counted += update.newly_filled.hundredths();
+        let tag = format!("{}-{}", update.client_order_id, update.filled.hundredths());
+        for act in self
+            .acts
+            .iter()
+            .filter(|act| act.client == update.client_order_id)
+        {
+            for index in 0..act.count {
+                if let Err(error) = (act.issue)(context, &tag, index) {
+                    match act.on_refusal {
+                        OnRefusal::Swallow => break,
+                        OnRefusal::Return => return Err(error),
+                        OnRefusal::ReturnOther => {
+                            return Err(strategy_core_kernel::KernelError::new("gave up"));
+                        }
                     }
-                }
-            } else if update.client_order_id == "z-target" {
-                self.counted += update.newly_filled.hundredths();
-                if update.newly_filled.is_positive() {
-                    context
-                        .broker()
-                        .place_order(limit_buy("hedge", ContractSide::No, 100, 0.4))?;
                 }
             }
         }
@@ -284,109 +308,407 @@ impl NativeKernel for Greedy {
     }
 }
 
-impl TransactionKernel for Greedy {
+impl TransactionKernel for Scripted {
     fn encode_checkpoint_state(&self) -> Result<Vec<u8>, KernelTransactionError> {
         Ok(self.counted.to_string().into_bytes())
     }
 }
 
-struct GreedyFactory;
+struct ScriptedFactory(&'static [Act]);
 
-impl TransactionKernelFactory for GreedyFactory {
-    type Kernel = Greedy;
+impl TransactionKernelFactory for ScriptedFactory {
+    type Kernel = Scripted;
     fn checkpoint_codec(&self, _: &str) -> Result<KernelCheckpointCodec, KernelTransactionError> {
         Ok(KernelCheckpointCodec {
             profile: "script.checkpoint.v1".to_owned(),
             version: 1,
         })
     }
-    fn create(&self, _: &DecisionContextV6) -> Result<Greedy, KernelTransactionError> {
-        Ok(Greedy { counted: 0 })
+    fn create(&self, _: &DecisionContextV6) -> Result<Scripted, KernelTransactionError> {
+        Ok(Scripted {
+            counted: 0,
+            acts: self.0,
+        })
     }
     fn restore(
         &self,
         _: &DecisionContextV6,
         checkpoint: &KernelCheckpointV6,
-    ) -> Result<Greedy, KernelTransactionError> {
-        Ok(Greedy {
+    ) -> Result<Scripted, KernelTransactionError> {
+        Ok(Scripted {
             counted: String::from_utf8(checkpoint.state.clone())
                 .unwrap()
                 .parse()
                 .unwrap_or(0),
+            acts: self.0,
         })
     }
 }
 
-#[test]
-fn an_update_waits_for_room_earlier_updates_took_for_at_most_8_decisions() {
+fn place_small(
+    context: &mut dyn StrategyKernelContext,
+    tag: &str,
+    index: usize,
+) -> KernelResult<()> {
+    context
+        .broker()
+        .place_order(limit_buy(
+            &format!("s-{tag}-{index}"),
+            ContractSide::No,
+            100,
+            0.01,
+        ))
+        .map(drop)
+}
+
+/// A place whose metadata takes 60 KiB of the result.
+fn place_big(context: &mut dyn StrategyKernelContext, tag: &str, index: usize) -> KernelResult<()> {
+    let mut request = limit_buy(&format!("b-{tag}-{index}"), ContractSide::No, 100, 0.01);
+    request.signal_metadata = Some("m".repeat(60 * 1024));
+    context.broker().place_order(request).map(drop)
+}
+
+/// A cancel-all, then small places.
+fn cancel_all_then_place(
+    context: &mut dyn StrategyKernelContext,
+    tag: &str,
+    index: usize,
+) -> KernelResult<()> {
+    if index == 0 {
+        context.broker().cancel_all_orders().map(drop)
+    } else {
+        place_small(context, tag, index)
+    }
+}
+
+/// `a-first` and `z-target` (issued in that order), and `fillers` more open orders; each
+/// view moves both actors along, so both have an update.
+fn actors_view(delivery: u32, fillers: usize) -> Vec<BrokerOrderV6> {
     use BrokerOrderStatusV6::*;
-    let context = priced_context();
-    let views = |first: u64, target: u64| {
-        vec![
-            order(
-                "command.a-first",
-                "a-first",
-                PartiallyFilled,
-                first,
-                first + 1,
-            ),
-            order(
-                "command.z-target",
-                "z-target",
-                if target > 0 { PartiallyFilled } else { Resting },
-                target,
-                target + 1,
-            ),
-        ]
-    };
-    let mut first = follow_up(&context, None, 1, views(1, 0), vec![]);
+    let filled = u64::from(delivery);
+    let mut orders = vec![
+        order(
+            "command.a-first",
+            "a-first",
+            PartiallyFilled,
+            filled,
+            filled + 1,
+        ),
+        order(
+            "command.z-target",
+            "z-target",
+            PartiallyFilled,
+            filled,
+            filled + 1,
+        ),
+    ];
+    orders.extend((0..fillers).map(|index| {
+        order(
+            &format!("command.filler.{index:03}"),
+            &format!("filler-{index:03}"),
+            Resting,
+            0,
+            1,
+        )
+    }));
+    orders
+}
+
+/// Runs `factory` over decisions 1..=`last` of the actors' views; returns each result.
+fn run_actors(
+    factory: &ScriptedFactory,
+    mode: DeploymentModeV6,
+    fillers: usize,
+    last: u32,
+) -> Vec<DecisionResultV6> {
+    let mut context = priced_context();
+    context.deployment_mode = mode;
+    let mut first = follow_up(&context, None, 1, actors_view(0, fillers), vec![]);
     first.trigger = TriggerV6::Owner(OwnerTriggerV6::Recovery);
-    let mut previous = run_transaction(&GreedyFactory, &first).unwrap();
-    // The burst's places never show in these views: they vanish and are evicted as
-    // tombstones, which is beside the point here.
-    let update_codes = |result: &DecisionResultV6| {
-        codes(result)
-            .into_iter()
-            .filter(|(_, code)| !code.starts_with("runner_tombstone"))
-            .map(|(severity, code)| (severity.to_owned(), code.to_owned()))
-            .collect::<Vec<_>>()
-    };
-    // Every decision, the first order's update takes all 64 commands before the target's
-    // fill is delivered: the target's hedge is refused for room an earlier update took.
-    for delivery in 2..=9_u32 {
+    let mut results = vec![run_transaction(factory, &first).unwrap()];
+    for delivery in 2..=last {
         let next = follow_up(
             &context,
-            Some(&previous),
+            results.last(),
             delivery,
-            views(u64::from(delivery), 100),
+            actors_view(delivery, fillers),
             vec![],
         );
-        let result = run_transaction(&GreedyFactory, &next).unwrap();
+        let result = run_transaction(factory, &next).unwrap();
         validate_decision_result_v6(&next, &result).unwrap();
-        assert_eq!(result.commands.len(), 64);
-        assert_eq!(state(&result), "0");
-        let target = entry(&result, "command.z-target").unwrap();
-        if delivery < 9 {
-            assert_eq!(target.delivery_deferrals, delivery as u8 - 1);
-            assert_eq!(target.delivery_failures, 0);
-            assert_eq!(target.filled_quantity_hundredths, 0, "the update waits");
-            assert_eq!(
-                update_codes(&result),
-                [("warn".to_owned(), "order_update_deferred".to_owned())]
-            );
-        } else {
-            assert_eq!(target.filled_quantity_hundredths, 100, "abandoned after 8");
-            assert_eq!(target.delivery_deferrals, 0);
-            assert_eq!(
-                update_codes(&result),
-                [
-                    ("error".to_owned(), "order_update_abandoned".to_owned()),
-                    ("warn".to_owned(), "order_update_deferred".to_owned())
-                ]
-            );
-        }
-        previous = result;
+        results.push(result);
     }
+    results
+}
+
+/// The update diagnostics of a result (tombstones of places the views never show aside).
+fn update_codes(result: &DecisionResultV6) -> Vec<(&str, &str)> {
+    codes(result)
+        .into_iter()
+        .filter(|(_, code)| !code.starts_with("runner_tombstone"))
+        .collect()
+}
+
+const COMMANDS: &[Act] = &[
+    Act {
+        client: "a-first",
+        issue: place_small,
+        count: 64,
+        on_refusal: OnRefusal::Swallow,
+    },
+    Act {
+        client: "z-target",
+        issue: place_small,
+        count: 1,
+        on_refusal: OnRefusal::Return,
+    },
+];
+
+#[test]
+fn a_deferred_update_is_delivered_first_in_the_next_decision() {
+    // Decision 2: the first order's update takes all 64 commands, so the target's place is
+    // refused for room an earlier update took: deferred. Decision 3: the target goes first.
+    let results = run_actors(&ScriptedFactory(COMMANDS), DeploymentModeV6::Paper, 0, 3);
+    let deferred = &results[1];
+    assert_eq!(deferred.commands.len(), 64);
+    assert_eq!(update_codes(deferred), [("warn", "order_update_deferred")]);
+    let target = entry(deferred, "command.z-target").unwrap();
+    assert_eq!(
+        (target.delivery_deferrals, target.delivery_failures),
+        (1, 0)
+    );
+    assert_eq!(
+        state(deferred),
+        "2",
+        "only the first order's fill is handled"
+    );
+
+    let delivered = &results[2];
+    assert!(
+        update_codes(delivered).is_empty(),
+        "{:?}",
+        delivered.diagnostics
+    );
+    assert_eq!(
+        state(delivered),
+        "6",
+        "both fills of both orders counted once"
+    );
+    let target = entry(delivered, "command.z-target").unwrap();
+    assert_eq!(
+        (target.delivery_deferrals, target.delivery_failures),
+        (0, 0)
+    );
+    // The target's place is the decision's first command; the first order's burst fills the
+    // rest.
+    let StrategyCommandV6::PlaceOrder(first) = &delivered.commands[0] else {
+        panic!("a place");
+    };
+    assert!(first.provider_client_id.starts_with("s-z-target"));
+    assert_eq!(delivered.commands.len(), 64);
+    let recorded = delivered
+        .evidence
+        .iter()
+        .flat_map(|evidence| {
+            strategy_core_v3::decision_v6::decode_order_update_evidence(evidence).unwrap()
+        })
+        .map(|record| record.command_id)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        recorded[..2],
+        ["command.z-target", "command.a-first"],
+        "evidence follows the delivery order"
+    );
+}
+
+#[test]
+fn deferrals_are_abandoned_after_8_in_a_row() {
+    // Two deferred updates that each need 40 commands: delivered first, the second is
+    // refused for the room the first took, and on its eighth deferral it is abandoned.
+    const FORTY: &[Act] = &[
+        Act {
+            client: "a-first",
+            issue: place_small,
+            count: 40,
+            on_refusal: OnRefusal::Return,
+        },
+        Act {
+            client: "z-target",
+            issue: place_small,
+            count: 40,
+            on_refusal: OnRefusal::Return,
+        },
+    ];
+    let factory = ScriptedFactory(FORTY);
+    let results = run_actors(&factory, DeploymentModeV6::Paper, 0, 2);
+    let mut checkpoint = results[1].kernel_checkpoint.clone().unwrap();
+    let target = entry(&results[1], "command.z-target").unwrap();
+    assert_eq!(
+        target.delivery_deferrals, 1,
+        "deferred behind the first order"
+    );
+    // Both are pending at their seventh deferral.
+    for entry in &mut checkpoint.runner.entries {
+        if entry.command_id == "command.a-first" || entry.command_id == "command.z-target" {
+            entry.delivery_deferrals = 7;
+            entry.last_status = Some(OrderUpdateStatusV6::Resting);
+            entry.filled_quantity_hundredths = 0;
+        }
+    }
+    let context = priced_context();
+    let mut next = follow_up(&context, None, 3, actors_view(3, 0), vec![]);
+    next.kernel_checkpoint = Some(checkpoint.seal());
+    next.validate().unwrap();
+    let result = run_transaction(&factory, &next).unwrap();
+    validate_decision_result_v6(&next, &result).unwrap();
+    assert_eq!(result.commands.len(), 40, "the first delivered in full");
+    assert_eq!(
+        update_codes(&result),
+        [
+            ("error", "order_update_abandoned"),
+            ("warn", "order_update_deferred")
+        ]
+    );
+    let abandoned = result
+        .diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code == "order_update_abandoned")
+        .unwrap();
+    assert!(abandoned.message.contains("command.z-target"));
+    assert_eq!(
+        entry(&result, "command.z-target")
+            .unwrap()
+            .filled_quantity_hundredths,
+        3
+    );
+}
+
+#[test]
+fn a_refusal_for_plan_rows_earlier_updates_took_defers_one_that_needs_them_alone_counts() {
+    // Live, 100 more open orders: a cancel-all costs 3 rows per open context order, so the
+    // first order's cancel-all and places fill the 512 rows.
+    const ROWS: &[Act] = &[
+        Act {
+            client: "a-first",
+            issue: cancel_all_then_place,
+            count: 64,
+            on_refusal: OnRefusal::Swallow,
+        },
+        Act {
+            client: "z-target",
+            issue: place_small,
+            count: 1,
+            on_refusal: OnRefusal::Return,
+        },
+    ];
+    let results = run_actors(&ScriptedFactory(ROWS), DeploymentModeV6::Live, 100, 2);
+    let deferred = &results[1];
+    assert!(deferred.commands.len() < 64, "the rows ran out first");
+    assert_eq!(update_codes(deferred), [("warn", "order_update_deferred")]);
+    assert!(
+        deferred
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("plan rows"))
+    );
+    let target = entry(deferred, "command.z-target").unwrap();
+    assert_eq!(
+        (target.delivery_deferrals, target.delivery_failures),
+        (1, 0)
+    );
+
+    // An update whose own cancel-all and places pass the rows fails on its own: counted.
+    const ALONE: &[Act] = &[Act {
+        client: "z-target",
+        issue: cancel_all_then_place,
+        count: 64,
+        on_refusal: OnRefusal::Return,
+    }];
+    let results = run_actors(&ScriptedFactory(ALONE), DeploymentModeV6::Live, 100, 2);
+    let counted = &results[1];
+    assert_eq!(update_codes(counted), [("error", "kernel_error")]);
+    assert!(counted.diagnostics[0].message.contains("plan rows"));
+    let target = entry(counted, "command.z-target").unwrap();
+    assert_eq!(
+        (target.delivery_deferrals, target.delivery_failures),
+        (0, 1)
+    );
+}
+
+#[test]
+fn a_refusal_for_result_bytes_earlier_updates_took_defers_one_that_needs_them_alone_counts() {
+    const BYTES: &[Act] = &[
+        Act {
+            client: "a-first",
+            issue: place_big,
+            count: 64,
+            on_refusal: OnRefusal::Swallow,
+        },
+        Act {
+            client: "z-target",
+            issue: place_big,
+            count: 1,
+            on_refusal: OnRefusal::Return,
+        },
+    ];
+    let results = run_actors(&ScriptedFactory(BYTES), DeploymentModeV6::Paper, 0, 2);
+    let deferred = &results[1];
+    assert!(deferred.commands.len() < 64, "the bytes ran out first");
+    assert_eq!(update_codes(deferred), [("warn", "order_update_deferred")]);
+    assert!(
+        deferred
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("result size"))
+    );
+    let target = entry(deferred, "command.z-target").unwrap();
+    assert_eq!(
+        (target.delivery_deferrals, target.delivery_failures),
+        (1, 0)
+    );
+
+    const ALONE: &[Act] = &[Act {
+        client: "z-target",
+        issue: place_big,
+        count: 64,
+        on_refusal: OnRefusal::Return,
+    }];
+    let results = run_actors(&ScriptedFactory(ALONE), DeploymentModeV6::Paper, 0, 2);
+    let counted = &results[1];
+    assert_eq!(update_codes(counted), [("error", "kernel_error")]);
+    assert!(counted.diagnostics[0].message.contains("result size"));
+    let target = entry(counted, "command.z-target").unwrap();
+    assert_eq!(
+        (target.delivery_deferrals, target.delivery_failures),
+        (0, 1)
+    );
+}
+
+#[test]
+fn a_kernel_that_catches_the_refusal_and_returns_its_own_error_counts() {
+    const OTHER: &[Act] = &[
+        Act {
+            client: "a-first",
+            issue: place_small,
+            count: 64,
+            on_refusal: OnRefusal::Swallow,
+        },
+        Act {
+            client: "z-target",
+            issue: place_small,
+            count: 1,
+            on_refusal: OnRefusal::ReturnOther,
+        },
+    ];
+    let results = run_actors(&ScriptedFactory(OTHER), DeploymentModeV6::Paper, 0, 2);
+    let counted = &results[1];
+    assert_eq!(update_codes(counted), [("error", "kernel_error")]);
+    assert!(counted.diagnostics[0].message.contains("gave up"));
+    let target = entry(counted, "command.z-target").unwrap();
+    assert_eq!(
+        (target.delivery_deferrals, target.delivery_failures),
+        (0, 1)
+    );
 }
 
 #[test]

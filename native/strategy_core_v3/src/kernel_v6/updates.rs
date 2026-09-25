@@ -74,6 +74,15 @@ pub(super) struct Derived {
 }
 
 impl Step {
+    /// The step's update was deferred by the previous decision: it is delivered first.
+    pub fn deferred(&self) -> bool {
+        self.update.is_some()
+            && self
+                .previous
+                .as_ref()
+                .is_some_and(|entry| entry.delivery_deferrals > 0)
+    }
+
     /// The consecutive deferral this step's update would be.
     pub fn deferral(&self) -> u8 {
         self.previous
