@@ -205,6 +205,7 @@ pub fn run_transaction<F: TransactionKernelFactory>(
     }
     let outcome = event.run(&mut kernel, &mut host);
 
+    let overflow;
     let mut result = DecisionResultV6 {
         delivery_id: context.owner_state.delivery_id.clone(),
         sleeve_identity: context.owner_state.sleeve.sleeve_id.clone(),
@@ -250,16 +251,16 @@ pub fn run_transaction<F: TransactionKernelFactory>(
             );
             result.commands = std::mem::take(&mut host.commands);
             append_notes(&notes, &mut result);
-            append_outputs(&host.outputs, None, &mut result);
+            overflow = append_outputs(&host.outputs, None, &mut result);
         }
         Err(error) => {
             result.disposition = DecisionDispositionV6::Rejected;
             result.kernel_checkpoint = context.kernel_checkpoint.clone();
-            append_outputs(&host.outputs, Some(&error), &mut result);
+            overflow = append_outputs(&host.outputs, Some(&error), &mut result);
         }
     }
     wire::validate_decision_result_v6(context, &result)?;
-    wire::encode_decision_result_v6(&result)?;
+    fit_result(&mut result, overflow)?;
     Ok(result)
 }
 
@@ -1387,7 +1388,7 @@ fn append_outputs(
     outputs: &[HostOutput],
     error: Option<&KernelError>,
     result: &mut DecisionResultV6,
-) {
+) -> Overflow {
     // Room for the kernel error and the overflow diagnostic.
     let diagnostic_room = wire::MAX_RESULT_DIAGNOSTICS - 2;
     // Logs and telemetry fill only the bytes the checkpoint, commands and updates leave.
@@ -1487,15 +1488,89 @@ fn append_outputs(
             message,
         });
     }
-    if lost > 0 {
-        result.diagnostics.push(ResultDiagnosticV6 {
-            severity: "error".to_owned(),
-            code: "kernel_telemetry_overflow".to_owned(),
-            message: serde_json::json!({
-                "lost_entries": lost, "lost_payload_bytes": lost_bytes, "reason": "v6_result_bound"
-            })
-            .to_string(),
-        });
+    Overflow { lost, lost_bytes }
+}
+
+/// Logs and telemetry the result could not keep.
+#[derive(Clone, Copy, Default)]
+struct Overflow {
+    lost: usize,
+    lost_bytes: usize,
+}
+
+/// Makes the result encode and decode within the result bound. The decoder charges every
+/// integer at its full width, so a result within the encoded budget can still overcharge
+/// (many tiny telemetry fields, for instance): while it does, telemetry and then logs are shed
+/// from the end and counted in `kernel_telemetry_overflow`. Commands, the checkpoint and the
+/// order updates are never shed; they fit the budget with room to spare.
+fn fit_result(
+    result: &mut DecisionResultV6,
+    mut overflow: Overflow,
+) -> Result<(), KernelTransactionError> {
+    loop {
+        result
+            .diagnostics
+            .retain(|diagnostic| diagnostic.code != "kernel_telemetry_overflow");
+        if overflow.lost > 0 {
+            result.diagnostics.push(ResultDiagnosticV6 {
+                severity: "error".to_owned(),
+                code: "kernel_telemetry_overflow".to_owned(),
+                message: serde_json::json!({
+                    "lost_entries": overflow.lost,
+                    "lost_payload_bytes": overflow.lost_bytes,
+                    "reason": "v6_result_bound"
+                })
+                .to_string(),
+            });
+        }
+        match wire::encode_decision_result_v6(result) {
+            Ok(_) => return Ok(()),
+            Err(DecisionV6Error::BoundExceeded) => {}
+            Err(error) => return Err(error.into()),
+        }
+        // Shed an eighth of what is left of the kind being shed, at least one entry.
+        let telemetry = result.telemetry.len();
+        let logs = result
+            .evidence
+            .iter()
+            .filter(|evidence| evidence.code == "kernel_log")
+            .count()
+            + result
+                .diagnostics
+                .iter()
+                .filter(|diagnostic| diagnostic.code == "kernel_log")
+                .count();
+        if telemetry > 0 {
+            for entry in result
+                .telemetry
+                .split_off(telemetry - telemetry.div_ceil(8))
+            {
+                overflow.lost += 1;
+                overflow.lost_bytes += wire::encoded_len(&entry);
+            }
+        } else if logs > 0 {
+            for _ in 0..logs.div_ceil(8) {
+                let shed = if let Some(index) = result
+                    .evidence
+                    .iter()
+                    .rposition(|evidence| evidence.code == "kernel_log")
+                {
+                    result.evidence.remove(index).payload.len()
+                } else if let Some(index) = result
+                    .diagnostics
+                    .iter()
+                    .rposition(|diagnostic| diagnostic.code == "kernel_log")
+                {
+                    result.diagnostics.remove(index).message.len()
+                } else {
+                    break;
+                };
+                overflow.lost += 1;
+                overflow.lost_bytes += shed;
+            }
+        } else {
+            return Err(DecisionV6Error::BoundExceeded.into());
+        }
     }
 }
 

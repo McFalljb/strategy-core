@@ -2065,3 +2065,125 @@ fn a_failed_update_is_undone_through_the_kernels_own_codec() {
         "its logs stay"
     );
 }
+
+/// Runs `step` and checks the result encodes, decodes under the result bound and completes.
+fn completes_within_the_bound(context: &DecisionContextV6, step: Step) -> DecisionResultV6 {
+    let decision = decide(context, step);
+    let result = decision.result;
+    assert_eq!(result.disposition, DecisionDispositionV6::Completed);
+    let encoded = strategy_core_v3::decision_v6::encode_decision_result_v6(&result).unwrap();
+    assert_eq!(
+        strategy_core_v3::decision_v6::decode_decision_result_v6(&encoded).unwrap(),
+        result
+    );
+    result
+}
+
+fn lost_entries(result: &DecisionResultV6) -> u64 {
+    result
+        .diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code == "kernel_telemetry_overflow")
+        .map_or(0, |diagnostic| {
+            serde_json::from_str::<serde_json::Value>(&diagnostic.message).unwrap()["lost_entries"]
+                .as_u64()
+                .unwrap()
+        })
+}
+
+#[test]
+fn telemetry_that_overcharges_the_decoder_is_shed_until_the_result_decodes() {
+    // Tiny telemetry fields cost two bytes on the wire and sixteen in the decoder's account.
+    let (mut context, _) = crowded_with(191, 0, 32);
+    context.command_receipts = (0..256)
+        .map(|index| CommandReceiptV6 {
+            command_id: format!("c.{index:03}"),
+            kind: BrokerCommandKindV6::CancelOrder,
+            outcome: CommandOutcomeV6::Accepted,
+        })
+        .collect();
+    context.validate().unwrap();
+    let result = completes_within_the_bound(&context, |context, _| {
+        for _ in 0..64 {
+            context.emit(KernelAction::Stop(strategy_core_kernel::StopAction {
+                reason: "s".to_owned(),
+            }))?;
+        }
+        let fields = (0..32)
+            .map(|index| (((b'a' + index % 26) as char).to_string(), String::new()))
+            .collect::<Vec<_>>();
+        let fields = fields
+            .iter()
+            .map(|(key, value)| (key.as_str(), value.as_str()))
+            .collect::<Vec<_>>();
+        for _ in 0..256 {
+            context.telemetry().counter("n", 0.0, &fields)?;
+        }
+        for size in std::iter::repeat_n(60 * 1024, 20).chain(std::iter::repeat_n(4000, 62)) {
+            context.emit(KernelAction::Log(LogAction {
+                level: "info".to_owned(),
+                message: "x".repeat(size),
+            }))?;
+        }
+        Ok(())
+    });
+    assert!(lost_entries(&result) > 0);
+    assert_eq!(result.commands.len(), 64, "commands are never shed");
+}
+
+#[test]
+fn a_result_at_every_bound_still_decodes() {
+    use BrokerOrderStatusV6::*;
+    let context = priced_context();
+    let seeded = decide(&context, nothing).result;
+    let terminal = (0..256)
+        .map(|index| {
+            order(
+                &format!("t.{index:03}"),
+                &format!("t{index:03}"),
+                Filled,
+                300,
+                1,
+            )
+        })
+        .collect();
+    let receipts = (0..256)
+        .map(|index| CommandReceiptV6 {
+            command_id: format!("c.{index:03}"),
+            kind: BrokerCommandKindV6::CancelOrder,
+            outcome: CommandOutcomeV6::Accepted,
+        })
+        .collect();
+    let next = follow_up(&context, Some(&seeded), 2, terminal, receipts);
+    let result = completes_within_the_bound(&next, |context, _| {
+        for index in 0..64 {
+            let mut request = limit_buy(&format!("p{index:02}"), ContractSide::Yes, 100, 0.01);
+            request.signal_type = Some("s".to_owned());
+            request.signal_metadata = Some("s".to_owned());
+            context.broker().place_order(request)?;
+        }
+        let fields = (0..32)
+            .map(|index| (((b'a' + index % 26) as char).to_string(), String::new()))
+            .collect::<Vec<_>>();
+        let fields = fields
+            .iter()
+            .map(|(key, value)| (key.as_str(), value.as_str()))
+            .collect::<Vec<_>>();
+        for _ in 0..256 {
+            context.telemetry().annotate(
+                "n",
+                strategy_core_kernel::AnnotationValue::Text(""),
+                &fields,
+            )?;
+        }
+        for size in std::iter::repeat_n(1, 62).chain(std::iter::repeat_n(64 * 1024 - 64, 14)) {
+            context.emit(KernelAction::Log(LogAction {
+                level: "info".to_owned(),
+                message: "x".repeat(size),
+            }))?;
+        }
+        Ok(())
+    });
+    assert_eq!(result.commands.len(), 64);
+    assert_eq!(result.acknowledged_command_ids.len(), 512);
+}

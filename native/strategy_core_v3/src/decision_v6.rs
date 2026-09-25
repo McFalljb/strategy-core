@@ -28,9 +28,10 @@ pub const MAX_DECISION_CONTEXT_V6_BYTES: usize = 20 * 1024 * 1024;
 /// The kernel's 128 KiB state, the runner section, 64 commands, the derived order updates and
 /// bounded telemetry.
 pub const MAX_DECISION_RESULT_V6_BYTES: usize = 1024 * 1024;
-/// The encoded size the runner keeps a result within: the result bound less room for the
-/// decoder's in-memory accounting of integers (it charges each decoded integer its full
-/// width), so every result the runner writes decodes under the result bound.
+/// The encoded size the runner admits commands and telemetry against: the result bound less
+/// room for the decoder's accounting, which charges every decoded integer its full width.
+/// The room is a heuristic, not a guarantee: the runner checks that each result decodes under
+/// the result bound and sheds telemetry, then logs, until it does.
 pub const RESULT_ENCODED_BUDGET_BYTES: usize = MAX_DECISION_RESULT_V6_BYTES - 128 * 1024;
 pub const MAX_STRATEGY_PARAMETERS: usize = 256;
 pub const MAX_BROKER_POSITIONS: usize = 256;
