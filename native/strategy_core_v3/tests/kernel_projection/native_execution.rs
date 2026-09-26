@@ -238,3 +238,213 @@ fn resident_execution_matches_transactional_tickets_and_fill_updates_without_a_c
         previous = reference.result;
     }
 }
+
+fn grant_requests(context: &mut DecisionContextV6) {
+    context.capabilities.external_requests = vec!["command:echo".to_owned(), "http:jev".to_owned()];
+}
+
+fn jev(path: &str, body: Vec<u8>) -> strategy_core_kernel::HttpRequest {
+    strategy_core_kernel::HttpRequest {
+        endpoint: "jev".to_owned(),
+        method: strategy_core_kernel::HttpMethod::Post,
+        path: path.to_owned(),
+        body,
+        timeout_ms: 5_000,
+    }
+}
+
+fn echo(arg: String) -> strategy_core_kernel::CommandRequest {
+    strategy_core_kernel::CommandRequest {
+        command: "echo".to_owned(),
+        args: vec![arg],
+        stdin: Vec::new(),
+        timeout_ms: 1_000,
+    }
+}
+
+/// An order, then requests up to the per-decision bound, then one request past each bound.
+fn requests(context: &mut dyn StrategyKernelContext, seen: &mut Vec<String>) -> KernelResult<()> {
+    place_yes(context, seen)?;
+    let runtime = context.runtime();
+    seen.push(
+        runtime
+            .request_http(jev("/v1/choose", b"{}".to_vec()))?
+            .request_id,
+    );
+    for index in 0..7 {
+        seen.push(runtime.request_command(echo(index.to_string()))?.request_id);
+    }
+    for (label, outcome) in [
+        (
+            "ungranted",
+            runtime.request_http(strategy_core_kernel::HttpRequest {
+                endpoint: "other".to_owned(),
+                ..jev("/", Vec::new())
+            }),
+        ),
+        (
+            "parent segment",
+            runtime.request_http(jev("/v1/../x", Vec::new())),
+        ),
+        (
+            "oversized",
+            runtime.request_http(jev("/", vec![b'x'; 64 * 1024])),
+        ),
+        ("ninth", runtime.request_http(jev("/", Vec::new()))),
+    ] {
+        seen.push(format!("{label}: {}", outcome.unwrap_err().message()));
+    }
+    Ok(())
+}
+
+/// Native execution issues external requests through the same host code as a transaction:
+/// the same grant check, bounds and messages, the same tickets (the command id), and the same
+/// staged `ExternalRequest` commands in issue order.
+#[test]
+fn native_external_requests_match_transactional_tickets_bounds_and_commands() {
+    let mut context = priced_context();
+    grant_requests(&mut context);
+    let reference = decide(&context, requests);
+    assert_eq!(reference.result.commands.len(), 9);
+    let seen = Rc::new(RefCell::new(Vec::new()));
+    let mut kernel = NativeOnly(ScriptKernel {
+        step: requests,
+        seen: Rc::clone(&seen),
+        updates: Rc::default(),
+    });
+    let native =
+        run_native_decision(&mut kernel, &mut Default::default(), &context, |_| Ok(None)).unwrap();
+    assert_eq!(native.commands, reference.result.commands);
+    assert_eq!(*seen.borrow(), reference.seen);
+    let seen = seen.borrow();
+    assert_eq!(seen[1], cid(1, 1));
+    assert!(
+        seen[9].contains("\"http:other\" is not granted"),
+        "{}",
+        seen[9]
+    );
+    assert!(
+        seen[10].starts_with("parent segment: invalid request"),
+        "{}",
+        seen[10]
+    );
+    assert!(
+        seen[11].starts_with("oversized: invalid request"),
+        "{}",
+        seen[11]
+    );
+    assert!(
+        seen[12].contains("at most 8 external requests"),
+        "{}",
+        seen[12]
+    );
+    assert!(matches!(
+        &native.commands[1],
+        StrategyCommandV6::ExternalRequest { command_id, target, .. }
+            if *command_id == cid(1, 1) && target == "jev"
+    ));
+    // Requests are not Broker commands: the host's seen section tracks only the order.
+    assert_eq!(native.acknowledged_command_ids, Vec::<String>::new());
+}
+
+/// A native host that grants nothing refuses every request, as a transaction does.
+#[test]
+fn native_requests_need_the_external_requests_grant() {
+    fn refused(
+        context: &mut dyn StrategyKernelContext,
+        seen: &mut Vec<String>,
+    ) -> KernelResult<()> {
+        let runtime = context.runtime();
+        for outcome in [
+            runtime.request_http(jev("/", Vec::new())),
+            runtime.request_command(echo("x".to_owned())),
+        ] {
+            seen.push(outcome.unwrap_err().message().to_owned());
+        }
+        Ok(())
+    }
+    let context = priced_context();
+    let reference = decide(&context, refused);
+    let seen = Rc::new(RefCell::new(Vec::new()));
+    let mut kernel = NativeOnly(ScriptKernel {
+        step: refused,
+        seen: Rc::clone(&seen),
+        updates: Rc::default(),
+    });
+    let native =
+        run_native_decision(&mut kernel, &mut Default::default(), &context, |_| Ok(None)).unwrap();
+    assert!(native.commands.is_empty());
+    assert_eq!(*seen.borrow(), reference.seen);
+    assert!(
+        seen.borrow()
+            .iter()
+            .all(|message| message.contains("is not granted"))
+    );
+}
+
+/// An `ExternalResponse` is a native event like any other: the kernel sees it (after any order
+/// updates), may act on it, and the invocation acknowledges the answered request exactly as a
+/// completed transactional result does. A failed invocation returns nothing to acknowledge.
+#[test]
+fn a_native_external_response_is_delivered_and_acknowledged() {
+    use strategy_core_v3::decision_v6::{ExternalErrorKindV6, ExternalOutcomeV6};
+    fn answer(context: &mut dyn StrategyKernelContext, seen: &mut Vec<String>) -> KernelResult<()> {
+        seen.push(
+            context
+                .runtime()
+                .request_command(echo("again".to_owned()))?
+                .request_id,
+        );
+        Ok(())
+    }
+    let request_id = cid(0, 3);
+    for outcome in [
+        ExternalOutcomeV6::Ok {
+            status: 200,
+            body: b"{\"p\":[0.1,0.9]}".to_vec(),
+        },
+        ExternalOutcomeV6::Err {
+            kind: ExternalErrorKindV6::Refused,
+            message: "external requests are not configured".to_owned(),
+        },
+    ] {
+        let mut context = priced_context();
+        grant_requests(&mut context);
+        context.trigger = TriggerV6::ExternalResponse {
+            request_id: request_id.clone(),
+            outcome,
+        };
+        context.validate().unwrap();
+        let reference = decide(&context, answer);
+        assert_eq!(
+            reference.result.acknowledged_command_ids,
+            [request_id.clone()]
+        );
+        let seen = Rc::new(RefCell::new(Vec::new()));
+        let mut kernel = NativeOnly(ScriptKernel {
+            step: answer,
+            seen: Rc::clone(&seen),
+            updates: Rc::default(),
+        });
+        let mut section = Default::default();
+        let native =
+            run_native_decision(&mut kernel, &mut section, &context, |_| Ok(None)).unwrap();
+        assert_eq!(*seen.borrow(), reference.seen);
+        assert!(
+            seen.borrow()[0].starts_with("event=ExternalResponse("),
+            "{:?}",
+            seen.borrow()
+        );
+        assert_eq!(native.commands, reference.result.commands);
+        assert_eq!(
+            native.acknowledged_command_ids,
+            reference.result.acknowledged_command_ids
+        );
+
+        fn fail(_: &mut dyn StrategyKernelContext, _: &mut Vec<String>) -> KernelResult<()> {
+            Err(strategy_core_kernel::KernelError::new("cannot parse"))
+        }
+        kernel.0.step = fail;
+        assert!(run_native_decision(&mut kernel, &mut section, &context, |_| Ok(None)).is_err());
+    }
+}
