@@ -113,6 +113,15 @@ impl Decimal {
     /// The nearest IEEE-754 double, which is the provider's original double for values captured
     /// from a shortest round-trip representation.
     pub fn to_f64(self) -> f64 {
+        if self.scale == 0 {
+            return self.coefficient as f64;
+        }
+        if self.coefficient.unsigned_abs() <= (1_u64 << 53) && self.scale <= MAX_DECIMAL_SCALE {
+            // Both operands are exact doubles (10^n is exact through n=22), so IEEE
+            // division rounds the exact decimal once, just like parsing. Larger
+            // coefficients retain the parser to avoid double rounding.
+            return self.coefficient as f64 / 10_u64.pow(u32::from(self.scale)) as f64;
+        }
         format!("{}e-{}", self.coefficient, self.scale)
             .parse::<f64>()
             .unwrap_or(f64::NAN)
@@ -140,6 +149,42 @@ impl core::fmt::Display for Decimal {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn double_conversion_matches_decimal_parser_bit_for_bit() {
+        let check = |coefficient, scale| {
+            let parsed = format!("{coefficient}e-{scale}").parse::<f64>().unwrap();
+            assert_eq!(
+                Decimal { coefficient, scale }.to_f64().to_bits(),
+                parsed.to_bits(),
+                "{coefficient}e-{scale}"
+            );
+        };
+        for coefficient in [
+            i64::MIN,
+            i64::MAX,
+            -(1_i64 << 53) - 1,
+            -(1_i64 << 53),
+            -1005,
+            -1,
+            0,
+            1,
+            1005,
+            (1_i64 << 53) - 1,
+            1_i64 << 53,
+            (1_i64 << 53) + 1,
+        ] {
+            for scale in 0..=u8::MAX {
+                check(coefficient, scale);
+            }
+        }
+        let mut seed = 0x7e57_cafe_u64;
+        for _ in 0..50_000 {
+            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+            let coefficient = (seed % (1_u64 << 54)) as i64 - (1_i64 << 53);
+            check(coefficient, (seed >> 56) as u8 % (MAX_DECIMAL_SCALE + 1));
+        }
+    }
 
     #[test]
     fn parse_preserves_exact_digits_and_normalizes() {
