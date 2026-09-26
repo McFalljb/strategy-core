@@ -289,11 +289,22 @@ pub struct CapabilityGrantV6 {
 impl CapabilityGrantV6 {
     /// Whether a request of `kind` to the allowlist name `target` is granted.
     pub fn grants_request(&self, kind: &ExternalRequestKindV6, target: &str) -> bool {
-        let prefix = kind.grant_prefix();
-        self.external_requests
-            .iter()
-            .any(|grant| grant.strip_prefix(prefix) == Some(target))
+        grants_external_request(&self.external_requests, kind, target)
     }
+}
+
+/// Whether the grant list `external_requests` (`http:<endpoint>` / `command:<name>`) allows a
+/// request of `kind` to the allowlist name `target`. Shared by the wire grant and by hosts that
+/// hand a kernel its `KernelCapabilities::external_requests` directly.
+pub fn grants_external_request(
+    external_requests: &[String],
+    kind: &ExternalRequestKindV6,
+    target: &str,
+) -> bool {
+    let prefix = kind.grant_prefix();
+    external_requests
+        .iter()
+        .any(|grant| grant.strip_prefix(prefix) == Some(target))
 }
 
 #[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]

@@ -17,7 +17,8 @@ use super::KernelTransactionError;
 use crate::decision_v6::{
     BrokerCommandKindV6, BrokerOrderStatusV6, BrokerOrderV6, CommandOutcomeV6, DecisionContextV6,
     MAX_DELIVERY_ATTEMPTS, MAX_DELIVERY_DEFERRALS, MAX_RUNNER_SECTION_ENTRIES, MAX_TOMBSTONES,
-    OrderUpdateRecordV6, OrderUpdateStatusV6, RunnerEntryV6, TOMBSTONE_EXPIRY_VIEWS,
+    OrderUpdateRecordV6, OrderUpdateStatusV6, RunnerEntryV6, RunnerSectionV6,
+    TOMBSTONE_EXPIRY_VIEWS,
 };
 
 /// Refusal code of an order the provider rejected after admission.
@@ -282,9 +283,22 @@ pub(super) fn derive(context: &DecisionContextV6) -> Result<Derived, KernelTrans
         .as_ref()
         .map(|checkpoint| checkpoint.runner.clone())
         .unwrap_or_default();
-    let revision = context.broker.revision;
-    let complete = context.orders_complete;
-    let orders = &context.broker.orders;
+    derive_from_section(
+        &context.broker,
+        context.orders_complete,
+        &context.command_receipts,
+        section,
+    )
+}
+
+pub(super) fn derive_from_section(
+    broker: &crate::decision_v6::BrokerDetailV6,
+    complete: bool,
+    receipts: &[crate::decision_v6::CommandReceiptV6],
+    section: RunnerSectionV6,
+) -> Result<Derived, KernelTransactionError> {
+    let revision = broker.revision;
+    let orders = &broker.orders;
     let by_command = orders
         .iter()
         .map(|order| (order.command_id.as_str(), order))
@@ -297,8 +311,7 @@ pub(super) fn derive(context: &DecisionContextV6) -> Result<Derived, KernelTrans
         .iter()
         .map(|order| (order.provider_client_id.as_str(), order))
         .collect::<BTreeMap<_, _>>();
-    let receipts = context
-        .command_receipts
+    let receipts = receipts
         .iter()
         .map(|receipt| (receipt.command_id.as_str(), receipt))
         .collect::<BTreeMap<_, _>>();
@@ -475,34 +488,61 @@ pub(super) fn derive(context: &DecisionContextV6) -> Result<Derived, KernelTrans
 }
 
 /// The receipts and terminal orders a result acknowledges: every one the runner section no
-/// longer tracks, and the external request the trigger answers. An entry is pruned only once its outcome was delivered (or abandoned), and
-/// the section, seeded by every decision, tracks each open order of the Sleeve until its final
-/// update: a terminal order it does not track is no Strategy news.
+/// longer tracks, and the external request the trigger answers. An entry is pruned only once
+/// its outcome was delivered (or abandoned), and the section, seeded by every decision, tracks
+/// each open order of the Sleeve until its final update: a terminal order it does not track is
+/// no Strategy news.
 pub(super) fn acknowledgements(
     context: &DecisionContextV6,
+    entries: &[RunnerEntryV6],
+) -> Vec<String> {
+    acknowledgements_from_view(
+        &context.broker,
+        &context.command_receipts,
+        context.external_response_id(),
+        entries,
+    )
+}
+
+/// [`acknowledgements`] from borrowed views; `external_response` is the request the
+/// decision's event answers, if any.
+pub(super) fn acknowledgements_from_view(
+    broker: &crate::decision_v6::BrokerDetailV6,
+    receipts: &[crate::decision_v6::CommandReceiptV6],
+    external_response: Option<&str>,
     entries: &[RunnerEntryV6],
 ) -> Vec<String> {
     let tracked = entries
         .iter()
         .map(|entry| entry.command_id.as_str())
         .collect::<BTreeSet<_>>();
-    context
-        .command_receipts
+    receipts
         .iter()
         .map(|receipt| receipt.command_id.as_str())
         .filter(|command_id| !tracked.contains(command_id))
         .chain(
-            context
-                .broker
+            broker
                 .orders
                 .iter()
                 .filter(|order| order.status.is_terminal())
                 .map(|order| order.command_id.as_str())
                 .filter(|command_id| !tracked.contains(command_id)),
         )
-        .chain(context.external_response_id())
+        .chain(external_response)
         .map(str::to_owned)
         .collect()
+}
+
+/// Whether a result over these views could acknowledge anything: a receipt, a terminal order
+/// or the answered external request. Equals `!acknowledgeable(context).is_empty()`.
+pub(super) fn any_acknowledgeable(
+    broker: &crate::decision_v6::BrokerDetailV6,
+    receipts: &[crate::decision_v6::CommandReceiptV6],
+    external_response: Option<&str>,
+) -> bool {
+    !receipts.is_empty()
+        || external_response.is_some()
+        || broker.orders.iter().any(|order| order.status.is_terminal())
 }
 
 /// Every receipt and terminal order a result could acknowledge, to size the result.

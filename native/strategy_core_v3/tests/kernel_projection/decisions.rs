@@ -15,6 +15,8 @@ use strategy_core_v3::decision_v6::{
 
 #[path = "delivery.rs"]
 mod delivery;
+#[path = "native_execution.rs"]
+mod native_execution;
 
 type Step = fn(&mut dyn StrategyKernelContext, &mut Vec<String>) -> KernelResult<()>;
 
