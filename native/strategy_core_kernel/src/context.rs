@@ -1,6 +1,7 @@
 use crate::actions::{
-    CancelOrderRequest, CommandTicket, ContractQuantity, ContractSide, KernelAction,
-    OrderStatusView, OrderTicket, PendingOrderView, PlaceOrderRequest, WakeAtRequest,
+    CancelOrderRequest, CommandRequest, CommandTicket, ContractQuantity, ContractSide, HttpRequest,
+    KernelAction, OrderStatusView, OrderTicket, PendingOrderView, PlaceOrderRequest, RequestTicket,
+    WakeAtRequest,
 };
 use crate::errors::{KernelError, KernelResult};
 use crate::events::{
@@ -157,6 +158,26 @@ pub trait StrategyKernelRuntime {
     /// anything the kernel schedules or cancels in it. Empty when the host does not report them.
     fn pending_timers(&self) -> Vec<PendingTimer> {
         Vec::new()
+    }
+
+    /// Asks the host to make an HTTP call to an allowlisted endpoint after the decision is
+    /// saved, and returns its ticket at once. The answer arrives in a later decision as an
+    /// `ExternalResponse` event with the ticket's `request_id`. `Err` means only a local
+    /// problem: the endpoint is not granted (`KernelCapabilities::external_requests` lists
+    /// `http:<endpoint>`), the request is outside its bounds, or the decision is full.
+    fn request_http(&mut self, _request: HttpRequest) -> KernelResult<RequestTicket> {
+        Err(KernelError::new(
+            "this host does not make external requests",
+        ))
+    }
+
+    /// Asks the host to run an allowlisted command (`command:<name>` in
+    /// `KernelCapabilities::external_requests`) after the decision is saved; see
+    /// [`Self::request_http`].
+    fn request_command(&mut self, _request: CommandRequest) -> KernelResult<RequestTicket> {
+        Err(KernelError::new(
+            "this host does not make external requests",
+        ))
     }
 }
 
@@ -340,7 +361,8 @@ pub struct KernelCapabilities {
     pub gauges: bool,
     /// `StrategyKernelTelemetry::annotate` is recorded.
     pub annotations: bool,
-    /// External request names the host allows, sorted. Empty until hosts grant any.
+    /// External requests the host allows, sorted: `http:<endpoint>` for an HTTP endpoint and
+    /// `command:<name>` for a command. Empty when the host grants none.
     pub external_requests: Vec<String>,
     /// The Broker admits Market sells. When false (live, until Phase 5) a Market sell is
     /// refused (`Refused { code: "market_sell_unsupported" }`); exit with a limit sell.

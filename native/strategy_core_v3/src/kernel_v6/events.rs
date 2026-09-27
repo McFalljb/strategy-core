@@ -2,9 +2,9 @@
 
 use chrono::{TimeZone, Utc};
 use strategy_core_kernel::{
-    EventProvenance, Extreme, ForecastUpdated, KernelResult, Observation, OracleScoresUpdated,
-    PriceUpdate, Report, StrategyEvent, StrategyEventView, StrategyKernelContext, TimerWake,
-    WeatherEvent,
+    EventProvenance, ExternalErrorKind, ExternalOutcome, ExternalResponse, Extreme,
+    ForecastUpdated, KernelResult, Observation, OracleScoresUpdated, PriceUpdate, Report,
+    StrategyEvent, StrategyEventView, StrategyKernelContext, TimerWake, WeatherEvent,
 };
 
 use super::projection::{
@@ -13,7 +13,10 @@ use super::projection::{
 };
 use super::{KernelTransactionError, TransactionKernel};
 use crate::decision_v4::{RankByV4, StationV4};
-use crate::decision_v6::{DecisionContextV6, DecisionV6Error, OwnerTriggerV6, TriggerV6};
+use crate::decision_v6::{
+    DecisionContextV6, DecisionV6Error, ExternalErrorKindV6, ExternalOutcomeV6, OwnerTriggerV6,
+    TriggerV6,
+};
 use crate::supplied_v6::{ExtremeKindV6, SuppliedEventV6};
 
 /// The station an event is projected from: the trigger's station when it names one, else the
@@ -132,6 +135,16 @@ impl KernelEvent {
                         event_type: "broker_state".to_owned(),
                         emitted_at: Some(decision_at),
                     }),
+                });
+            }
+            TriggerV6::ExternalResponse {
+                request_id,
+                outcome,
+            } => {
+                return Ok(Self {
+                    event: Some(StrategyEvent::ExternalResponse(external_response(
+                        request_id, outcome,
+                    ))),
                 });
             }
         };
@@ -372,5 +385,31 @@ impl KernelEvent {
     /// are only presented inside [`KernelEvent::run`] because they borrow per-market views.
     pub fn view(&self) -> Option<StrategyEventView<'_>> {
         self.event.as_ref().and_then(StrategyEvent::view)
+    }
+}
+
+/// Presents an external-response trigger to a kernel.
+pub fn external_response(request_id: &str, outcome: &ExternalOutcomeV6) -> ExternalResponse {
+    ExternalResponse {
+        request_id: request_id.to_owned(),
+        outcome: match outcome {
+            ExternalOutcomeV6::Ok { status, body } => ExternalOutcome::Ok {
+                status: *status,
+                body: body.clone(),
+            },
+            ExternalOutcomeV6::Err { kind, message } => ExternalOutcome::Err {
+                kind: match kind {
+                    ExternalErrorKindV6::Refused => ExternalErrorKind::Refused,
+                    ExternalErrorKindV6::Timeout => ExternalErrorKind::Timeout,
+                    ExternalErrorKindV6::Transport => ExternalErrorKind::Transport,
+                    ExternalErrorKindV6::Status(status) => ExternalErrorKind::Status(*status),
+                    ExternalErrorKindV6::TooLarge => ExternalErrorKind::TooLarge,
+                    ExternalErrorKindV6::Malformed => ExternalErrorKind::Malformed,
+                    ExternalErrorKindV6::Exit(code) => ExternalErrorKind::Exit(*code),
+                    ExternalErrorKindV6::Abandoned => ExternalErrorKind::Abandoned,
+                },
+                message: message.clone(),
+            },
+        },
     }
 }
