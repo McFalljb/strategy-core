@@ -11,7 +11,6 @@ fn run_native_decision(
     kernel: &mut NativeOnly,
     seen: &mut strategy_core_v3::decision_v6::RunnerSectionV6,
     context: &DecisionContextV6,
-    cap: impl Fn(&PlaceOrderRequest) -> Result<Option<u64>, KernelTransactionError>,
 ) -> Result<NativeDecision, KernelTransactionError> {
     let mut reference = KernelHost::new(context, Vec::new(), true)?;
     let finances = reference.broker().financial_state();
@@ -41,7 +40,6 @@ fn run_native_decision(
             orders_complete: context.orders_complete,
             receipts: &context.command_receipts,
         },
-        cap,
     )
 }
 
@@ -75,8 +73,7 @@ fn native_error_does_not_return_staged_commands_or_advance_delivery_bookkeeping(
         updates: Rc::default(),
     });
     let mut seen = Default::default();
-    let error =
-        run_native_decision(&mut kernel, &mut seen, &priced_context(), |_| Ok(None)).unwrap_err();
+    let error = run_native_decision(&mut kernel, &mut seen, &priced_context()).unwrap_err();
     assert!(error.to_string().contains("after staged order"));
     assert!(!seen.seeded);
     assert!(seen.entries.is_empty());
@@ -140,7 +137,6 @@ fn native_invocation_needs_no_transport_context_or_projection() {
             orders_complete: true,
             receipts: &[],
         },
-        |_| Ok(None),
     )
     .unwrap();
     assert!(result.commands.is_empty());
@@ -175,13 +171,7 @@ fn native_borrowed_views_are_the_same_complete_canonical_views() {
         seen: Rc::default(),
         updates: Rc::default(),
     });
-    run_native_decision(
-        &mut kernel,
-        &mut Default::default(),
-        &priced_context(),
-        |_| Ok(None),
-    )
-    .unwrap();
+    run_native_decision(&mut kernel, &mut Default::default(), &priced_context()).unwrap();
 }
 
 #[test]
@@ -195,7 +185,7 @@ fn resident_execution_matches_transactional_tickets_and_fill_updates_without_a_c
         updates: Rc::clone(&updates),
     });
     let mut seen = Default::default();
-    let native = run_native_decision(&mut kernel, &mut seen, &context, |_| Ok(None)).unwrap();
+    let native = run_native_decision(&mut kernel, &mut seen, &context).unwrap();
     let mut previous = decide(&context, place_yes).result;
     assert_eq!(native.commands, previous.commands);
     kernel.0.step = nothing;
@@ -228,7 +218,7 @@ fn resident_execution_matches_transactional_tickets_and_fill_updates_without_a_c
         // Deliberately supply no checkpoint: all native state belongs to the host.
         next.kernel_checkpoint = None;
         updates.borrow_mut().clear();
-        let native = run_native_decision(&mut kernel, &mut seen, &next, |_| Ok(None)).unwrap();
+        let native = run_native_decision(&mut kernel, &mut seen, &next).unwrap();
         assert_eq!(*updates.borrow(), reference.updates);
         assert_eq!(native.commands, reference.result.commands);
         assert_eq!(
@@ -312,8 +302,7 @@ fn native_external_requests_match_transactional_tickets_bounds_and_commands() {
         seen: Rc::clone(&seen),
         updates: Rc::default(),
     });
-    let native =
-        run_native_decision(&mut kernel, &mut Default::default(), &context, |_| Ok(None)).unwrap();
+    let native = run_native_decision(&mut kernel, &mut Default::default(), &context).unwrap();
     assert_eq!(native.commands, reference.result.commands);
     assert_eq!(*seen.borrow(), reference.seen);
     let seen = seen.borrow();
@@ -371,8 +360,7 @@ fn native_requests_need_the_external_requests_grant() {
         seen: Rc::clone(&seen),
         updates: Rc::default(),
     });
-    let native =
-        run_native_decision(&mut kernel, &mut Default::default(), &context, |_| Ok(None)).unwrap();
+    let native = run_native_decision(&mut kernel, &mut Default::default(), &context).unwrap();
     assert!(native.commands.is_empty());
     assert_eq!(*seen.borrow(), reference.seen);
     assert!(
@@ -427,8 +415,7 @@ fn a_native_external_response_is_delivered_and_acknowledged() {
             updates: Rc::default(),
         });
         let mut section = Default::default();
-        let native =
-            run_native_decision(&mut kernel, &mut section, &context, |_| Ok(None)).unwrap();
+        let native = run_native_decision(&mut kernel, &mut section, &context).unwrap();
         assert_eq!(*seen.borrow(), reference.seen);
         assert!(
             seen.borrow()[0].starts_with("event=ExternalResponse("),
@@ -445,7 +432,7 @@ fn a_native_external_response_is_delivered_and_acknowledged() {
             Err(strategy_core_kernel::KernelError::new("cannot parse"))
         }
         kernel.0.step = fail;
-        assert!(run_native_decision(&mut kernel, &mut section, &context, |_| Ok(None)).is_err());
+        assert!(run_native_decision(&mut kernel, &mut section, &context).is_err());
     }
 }
 
@@ -464,7 +451,7 @@ fn assert_native_matches_transaction(
         seen: Rc::clone(&outcomes),
         updates: Rc::clone(&updates),
     });
-    let native = run_native_decision(&mut kernel, &mut seen, context, |_| Ok(None)).unwrap();
+    let native = run_native_decision(&mut kernel, &mut seen, context).unwrap();
     assert_eq!(*updates.borrow(), reference.updates);
     assert_eq!(*outcomes.borrow(), reference.seen);
     assert_eq!(native.commands, reference.result.commands);
@@ -553,7 +540,7 @@ fn native_admission_reserves_the_result_bytes_of_evidence_and_acknowledgements()
         seen: Rc::default(),
         updates: Rc::default(),
     });
-    run_native_decision(&mut kernel, &mut seen, &context, |_| Ok(None)).unwrap();
+    run_native_decision(&mut kernel, &mut seen, &context).unwrap();
     let placed = decide(&context, place_yes).result;
     // The placed order filled, 255 other terminal orders and 256 receipts to acknowledge.
     let terminal = std::iter::once(order(&cid(1, 0), "yes-1", Filled, 300, 2))

@@ -10,7 +10,7 @@ use strategy_core_v3::decision_v6::{
     BrokerCommandKindV6, BrokerOrderStatusV6, BrokerOrderV6, CancelTargetV6, CommandOutcomeV6,
     CommandReceiptV6, ContractSideV6, DecisionResultV6, KernelCheckpointV5Layout,
     MAX_DECISION_PLAN_ROWS, MAX_STRATEGY_COMMANDS, OrderActionV6, OrderTypeV6, OrderUpdateStatusV6,
-    convert_v5_kernel_checkpoint, validate_decision_result_v6,
+    TimePolicyV6, convert_v5_kernel_checkpoint, validate_decision_result_v6,
 };
 
 #[path = "delivery.rs"]
@@ -138,6 +138,9 @@ pub(super) fn limit_buy(
         order_type: OrderType::Limit,
         quantity: ContractQuantity::from_hundredths(hundredths),
         limit_price: Some(price),
+        market_price_cap: None,
+        time_policy: TimePolicy::GoodTillCanceled,
+        post_only: false,
         expires_after_ms: None,
         reduce_only: false,
         signal_type: None,
@@ -1857,54 +1860,271 @@ fn a_provider_rejection_carries_the_provider_text() {
     }
 }
 
+thread_local! {
+    static REQUEST: RefCell<Option<PlaceOrderRequest>> = const { RefCell::new(None) };
+}
+
+/// Places the thread's `REQUEST` and records what the provisional view reserved for it, or the
+/// local error.
+fn place_the_request(
+    context: &mut dyn StrategyKernelContext,
+    seen: &mut Vec<String>,
+) -> KernelResult<()> {
+    let request = REQUEST.with(|request| request.borrow().clone()).unwrap();
+    let before = context.broker().financial_state().current_commitment_micros;
+    match context.broker().place_order(request) {
+        Ok(_) => seen.push(format!(
+            "reserved {}",
+            context.broker().financial_state().current_commitment_micros - before
+        )),
+        Err(error) => seen.push(error.to_string()),
+    }
+    Ok(())
+}
+
+/// The order terms reach the wire as the kernel set them, and the provisional view reserves
+/// what the Broker commits: a buy at its limit, a Market buy at its own cap (a dollar without
+/// one), a sell nothing. Terms that do not make one order are a local error. In live, as in
+/// paper, a Market sell goes to the Broker: 5 plan rows, like any place.
 #[test]
-fn a_live_market_sell_goes_to_the_broker_which_refuses_it() {
-    let mut live = priced_context();
-    live.deployment_mode = DeploymentModeV6::Live;
-    for (context, market_sell) in [(priced_context(), true), (live.clone(), false)] {
-        let decision = decide(&context, |context, seen| {
-            seen.push(context.capabilities().market_sell.to_string());
-            let mut sell = limit_buy("sell-1", ContractSide::Yes, 100, 0.4);
-            sell.action = OrderAction::Sell;
-            sell.order_type = OrderType::Market;
-            sell.limit_price = None;
-            sell.reduce_only = true;
-            context.broker().place_order(sell)?;
-            Ok(())
-        });
-        assert_eq!(decision.seen, [market_sell.to_string()]);
+fn order_terms_reach_the_wire_and_reserve_what_the_broker_commits() {
+    use TimePolicyV6::{FillOrKill as Fok, GoodTillCanceled as Gtc, ImmediateOrCancel as Ioc};
+    let quantity = ContractQuantity::from_hundredths(300);
+    let terms = fees::FeeTerms::new(fees::FeeType::Quadratic, 1_000_000);
+    let buy_at = |price| fees::buy_commitment_micros(price, quantity, terms).unwrap();
+    let sell = |request: PlaceOrderRequest| PlaceOrderRequest {
+        reduce_only: true,
+        ..request
+    };
+    // (name, request, the wire's (order type, limit, cap, time policy, post-only, expiry),
+    // reservation)
+    type Wire = (
+        OrderTypeV6,
+        Option<u64>,
+        Option<u64>,
+        TimePolicyV6,
+        bool,
+        Option<i64>,
+    );
+    let admitted: [(&str, PlaceOrderRequest, Wire, u64); 7] = [
+        (
+            "sweep: a Market buy at its own cap",
+            PlaceOrderRequest::sweep(MARKET, ContractSide::Yes, quantity, 0.6),
+            (OrderTypeV6::Market, None, Some(600_000), Ioc, false, None),
+            buy_at(600_000),
+        ),
+        (
+            "an uncapped Market buy reserves a dollar",
+            PlaceOrderRequest {
+                market_price_cap: None,
+                ..PlaceOrderRequest::sweep(MARKET, ContractSide::Yes, quantity, 0.6)
+            },
+            (OrderTypeV6::Market, None, None, Ioc, false, None),
+            buy_at(1_000_000),
+        ),
+        (
+            "a Market buy resting at its cap",
+            PlaceOrderRequest {
+                time_policy: TimePolicy::GoodTillCanceled,
+                expires_after_ms: Some(30_000),
+                ..PlaceOrderRequest::sweep(MARKET, ContractSide::Yes, quantity, 0.6)
+            },
+            (
+                OrderTypeV6::Market,
+                None,
+                Some(600_000),
+                Gtc,
+                false,
+                Some(30_000),
+            ),
+            buy_at(600_000),
+        ),
+        (
+            "direct: an IOC limit buy",
+            PlaceOrderRequest::direct(MARKET, OrderAction::Buy, ContractSide::Yes, quantity, 0.4),
+            (OrderTypeV6::Limit, Some(400_000), None, Ioc, false, None),
+            buy_at(400_000),
+        ),
+        (
+            "a fill-or-kill limit buy",
+            PlaceOrderRequest {
+                time_policy: TimePolicy::FillOrKill,
+                ..PlaceOrderRequest::direct(
+                    MARKET,
+                    OrderAction::Buy,
+                    ContractSide::Yes,
+                    quantity,
+                    0.4,
+                )
+            },
+            (OrderTypeV6::Limit, Some(400_000), None, Fok, false, None),
+            buy_at(400_000),
+        ),
+        (
+            "a stale-position exit: an IOC limit sell at its floor",
+            sell(PlaceOrderRequest::direct(
+                MARKET,
+                OrderAction::Sell,
+                ContractSide::Yes,
+                quantity,
+                0.2,
+            )),
+            (OrderTypeV6::Limit, Some(200_000), None, Ioc, false, None),
+            0,
+        ),
+        (
+            "a post-only resting sell with an expiry",
+            PlaceOrderRequest {
+                post_only: true,
+                expires_after_ms: Some(30_000),
+                ..sell(PlaceOrderRequest::resting_limit(
+                    MARKET,
+                    OrderAction::Sell,
+                    ContractSide::Yes,
+                    quantity,
+                    0.7,
+                ))
+            },
+            (
+                OrderTypeV6::Limit,
+                Some(700_000),
+                None,
+                Gtc,
+                true,
+                Some(30_000),
+            ),
+            0,
+        ),
+    ];
+    let context = priced_context();
+    for (name, request, wire, reserved) in admitted {
+        REQUEST.with(|slot| *slot.borrow_mut() = Some(request));
+        let decision = decide(&context, place_the_request);
+        assert_eq!(decision.seen, [format!("reserved {reserved}")], "{name}");
+        let [StrategyCommandV6::PlaceOrder(order)] = decision.result.commands.as_slice() else {
+            panic!("{name}: one place expected");
+        };
         assert_eq!(
-            decision.result.commands.len(),
-            1,
-            "the command is issued either way"
+            (
+                order.order_type,
+                order.limit_price_micros,
+                order.market_price_cap_micros,
+                order.time_policy,
+                order.post_only,
+                order.expires_after_ms,
+            ),
+            wire,
+            "{name}"
         );
     }
-    // The Broker refuses it per command; the kernel sees the refusal.
-    let placed = decide(&live, |context, _| {
-        let mut sell = limit_buy("sell-1", ContractSide::Yes, 100, 0.4);
-        sell.action = OrderAction::Sell;
-        sell.order_type = OrderType::Market;
-        sell.limit_price = None;
-        sell.reduce_only = true;
-        context.broker().place_order(sell)?;
-        Ok(())
+
+    let refused: [(&str, PlaceOrderRequest, &str); 6] = [
+        (
+            "a resting Market sell",
+            PlaceOrderRequest {
+                order_type: OrderType::Market,
+                limit_price: None,
+                ..sell(PlaceOrderRequest::resting_limit(
+                    MARKET,
+                    OrderAction::Sell,
+                    ContractSide::Yes,
+                    quantity,
+                    0.2,
+                ))
+            },
+            "a market sell is immediate-or-cancel or fill-or-kill",
+        ),
+        (
+            "a post-only Market buy",
+            PlaceOrderRequest {
+                post_only: true,
+                ..PlaceOrderRequest::sweep(MARKET, ContractSide::Yes, quantity, 0.6)
+            },
+            "a post-only order is a limit order",
+        ),
+        (
+            "a post-only IOC limit",
+            PlaceOrderRequest {
+                post_only: true,
+                ..PlaceOrderRequest::direct(
+                    MARKET,
+                    OrderAction::Buy,
+                    ContractSide::Yes,
+                    quantity,
+                    0.4,
+                )
+            },
+            "a post-only order is good-till-canceled",
+        ),
+        (
+            "an expiring IOC limit",
+            PlaceOrderRequest {
+                expires_after_ms: Some(30_000),
+                ..PlaceOrderRequest::direct(
+                    MARKET,
+                    OrderAction::Buy,
+                    ContractSide::Yes,
+                    quantity,
+                    0.4,
+                )
+            },
+            "only a good-till-canceled order expires",
+        ),
+        (
+            "a price cap on a limit order",
+            PlaceOrderRequest {
+                market_price_cap: Some(0.6),
+                ..PlaceOrderRequest::resting_limit(
+                    MARKET,
+                    OrderAction::Buy,
+                    ContractSide::Yes,
+                    quantity,
+                    0.4,
+                )
+            },
+            "only a market buy has a price cap",
+        ),
+        (
+            "a zero price cap",
+            PlaceOrderRequest::sweep(MARKET, ContractSide::Yes, quantity, 0.0),
+            "the price cap is not within (0, 1]",
+        ),
+    ];
+    for (name, request, reason) in refused {
+        REQUEST.with(|slot| *slot.borrow_mut() = Some(request));
+        let decision = decide(&context, place_the_request);
+        assert_eq!(
+            decision.seen,
+            [format!("invalid order: {reason}")],
+            "{name}"
+        );
+        assert!(decision.result.commands.is_empty(), "{name}");
+    }
+
+    let mut live = priced_context();
+    live.deployment_mode = DeploymentModeV6::Live;
+    REQUEST.with(|slot| {
+        *slot.borrow_mut() = Some(PlaceOrderRequest {
+            order_type: OrderType::Market,
+            limit_price: None,
+            ..sell(PlaceOrderRequest::direct(
+                MARKET,
+                OrderAction::Sell,
+                ContractSide::Yes,
+                quantity,
+                0.2,
+            ))
+        })
     });
-    let refusal = follow_up(
-        &live,
-        Some(&placed.result),
-        2,
-        vec![],
-        vec![refused(
-            &cid(1, 0),
-            BrokerCommandKindV6::PlaceOrder,
-            strategy_core_v3::decision_v6::MARKET_SELL_UNSUPPORTED_CODE,
-        )],
+    let decision = decide(&live, |context, seen| {
+        seen.push(context.capabilities().market_sell.to_string());
+        place_the_request(context, seen)
+    });
+    assert_eq!(decision.seen, ["true", "reserved 0"]);
+    assert_eq!(
+        strategy_core_v3::decision_v6::decision_plan_rows_v6(&live, &decision.result),
+        4 + 5
     );
-    let decision = decide(&refusal, nothing);
-    assert!(matches!(
-        &decision.updates[0].status,
-        OrderUpdateStatus::Refused { code, .. } if code == "market_sell_unsupported"
-    ));
 }
 
 #[test]

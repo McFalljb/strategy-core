@@ -1584,7 +1584,7 @@ Kernel action variants are:
 
 | Action | Payload |
 |---|---|
-| `PlaceOrder` | `PlaceOrderRequest { ticker, action, contract_side, order_type, quantity, limit_price, expires_after_ms, reduce_only, signal_type, signal_metadata, client_order_id }` |
+| `PlaceOrder` | `PlaceOrderRequest { ticker, action, contract_side, order_type, quantity, limit_price, market_price_cap, time_policy, post_only, expires_after_ms, reduce_only, signal_type, signal_metadata, client_order_id }`; constructors `resting_limit`, `direct`, `sweep` |
 | `CancelOrder` | `CancelOrderRequest { target: CancelTarget::OrderId(..) \| CancelTarget::ClientOrderId(..) }` |
 | `CancelAllOrders` | `CancelAllOrdersRequest {}` |
 | `WakeAt` | `WakeAtRequest { when, name }` |

@@ -61,7 +61,6 @@ pub fn run_native_decision<K: NativeKernel + ?Sized>(
     kernel: &mut K,
     seen: &mut RunnerSectionV6,
     context: &NativeInvocation<'_>,
-    market_buy_cap: impl Fn(&PlaceOrderRequest) -> Result<Option<u64>, KernelTransactionError>,
 ) -> Result<NativeDecision, KernelTransactionError> {
     let derived = updates::derive_from_section(
         context.broker,
@@ -82,7 +81,6 @@ pub fn run_native_decision<K: NativeKernel + ?Sized>(
     let acknowledgeable =
         updates::acknowledgeable(context.broker, context.receipts, external_response);
     let mut host = KernelHost::native(context, derived.entries(), !acknowledgeable.is_empty());
-    host.market_buy_cap = Some(&market_buy_cap);
     let issued_from = host.reserve(&derived, &evidence, &acknowledgeable);
     for index in delivery_order.into_iter().flatten() {
         if let Some(update) = &derived.steps[index].update {

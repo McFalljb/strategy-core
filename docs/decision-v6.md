@@ -134,6 +134,9 @@ requests"). `BrokerOutcome` is gone.
 disposition, kernel_checkpoint, commands, acknowledged_command_ids, evidence, diagnostics,
 telemetry }`.
 
+- A place carries its order terms: `order_type`, `limit_price_micros`,
+  `market_price_cap_micros`, `time_policy`, `post_only`, `expires_after_ms` and
+  `reduce_only` (see "Order terms").
 - Commands are `PlaceOrder`, `CancelOrder { target }`, `CancelAllOrders`, `ScheduleTimer`,
   `CancelTimer`, `Stop` and `ExternalRequest`, at most 64, all of which may be Broker
   commands (at most 8 external requests). The command at
@@ -177,6 +180,34 @@ and its codec stays the kernel's. The runner section is bounded separately: whet
 seeded, the newest Broker revision it has compared (`newest_view_revision`), and at most `MAX_RUNNER_SECTION_ENTRIES = 288` entries of bounded identifiers
 (`MAX_RUNNER_ENTRIES = 256` plus `MAX_TOMBSTONES = 32`), of which at most 32 are
 tombstones.
+
+## Order terms
+
+`PlaceOrderRequest` (and `PlaceOrderV6`) carry how an order executes:
+
+| Term | Kernel | Wire | Meaning |
+|---|---|---|---|
+| Time policy | `time_policy: TimePolicy` (default `GoodTillCanceled`) | `time_policy: TimePolicyV6` | `GoodTillCanceled`: the remainder rests. `ImmediateOrCancel`: fill what is there, cancel the rest. `FillOrKill`: fill the whole quantity at once or nothing. |
+| Post-only | `post_only: bool` | `post_only` | The order must not take liquidity; the Broker refuses one that would cross. |
+| Market buy cap | `market_price_cap: Option<f64>` (dollars) | `market_price_cap_micros` | The most a Market buy pays per contract. |
+| Expiry | `expires_after_ms` | `expires_after_ms` | Ends a resting order, buy or sell. |
+
+A place whose terms do not make one order is a local error of `place_order` (the reason
+is `place_order_terms_error`'s) and validation rejects it:
+
+- a Limit order has a limit price within [0, 1] and no cap; a Market order has no limit
+  price;
+- only a Market buy has a cap, within (0, 1]; without one it is reserved at a dollar;
+- a Market sell has no price to rest at: `ImmediateOrCancel` or `FillOrKill`;
+- `post_only` needs a `GoodTillCanceled` Limit order (a Market or immediate order takes
+  liquidity);
+- an expiry needs `GoodTillCanceled` (an immediate order leaves nothing to expire).
+
+A `GoodTillCanceled` Market buy rests at its cap. The execution styles are constructors:
+`PlaceOrderRequest::resting_limit` (a `GoodTillCanceled` Limit), `direct` (an
+`ImmediateOrCancel` Limit; a sell's limit is its price floor) and `sweep` (an
+`ImmediateOrCancel` Market buy at a cap). There is no total-cost cap (`max_cost`): quantity
+times the limit or cap, and the Sleeve's budget, bound a buy.
 
 ## External requests
 
@@ -231,8 +262,7 @@ answer); the host only does the I/O.
 
 The host admits a decision's Broker commands in one account plan limited to
 `MAX_DECISION_PLAN_ROWS = 512`. The runner counts the rows as the kernel issues commands:
-4 per decision, 5 per place (6 for a live Market sell, which the Broker refuses with a
-receipt), 3 per cancel (1 when the target is already final, which the
+4 per decision, 5 per place, 3 per cancel (1 when the target is already final, which the
 Broker refuses), for a cancel-all in paper 3 plus one per order open when it is issued (every
 open context order and every place issued before it), in live (where the Broker expands a
 cancel-all into per-order cancels on the priority lane) 3 per open context order plus 1 per
@@ -325,8 +355,9 @@ Within one decision the runner overlays the kernel's own commands on the Broker 
 | positions | unchanged |
 
 A buy reserves `fees::buy_commitment_micros(price, quantity, market.fee_terms())`, the
-Broker's own formula, at its limit price (a Market buy at the kernel's price cap, else one
-dollar). A sell reserves nothing. A cancel or cancel-all marks its targets, the decision's
+Broker's own formula, at its limit price (a Market buy at its own `market_price_cap`, else
+one dollar), whatever its time policy: an immediate order's remainder is released when the
+Broker cancels it. A sell reserves nothing. A cancel or cancel-all marks its targets, the decision's
 own orders included, `cancellation_requested`; their reservation stays until the Broker
 releases it. The Broker remains the authority: a wrong estimate is refused and the Strategy
 sees `Refused`.
@@ -335,22 +366,22 @@ Local errors from a Broker call: a Market outside the Sleeve's scope, an invalid
 price, a Market without valid fee terms, a client order id that is invalid, longer than 128
 bytes, starts with `tv3`, or is already used by an order in the context, the runner section
 or this decision; an open order past `max_open_orders(mode)`; a cancel naming no order the context or
-the decision knows; a cancel-all over a truncated view; the 65th command; the plan row
+the decision knows; order terms that do not make one order (see "Order terms"); a
+cancel-all over a truncated view; the 65th command; the plan row
 limit; the runner section bound; a command that would take the result past its size budget
 (the budget assumes the kernel's state at its 128 KiB bound). Timers need the timer
-capability. A live Market sell is not a local error: the Broker refuses it per command
-(`market_sell_unsupported`, until Phase 5) and the kernel sees a `Refused` update;
-`capabilities().market_sell` is false in live so a kernel can exit with a limit sell. Logs and telemetry fill only the room the checkpoint, commands and update
+capability. A Market sell goes to the Broker in paper and live; `capabilities().market_sell`
+is true in both. Logs and telemetry fill only the room the checkpoint, commands and update
 evidence leave; the rest is counted in a `kernel_telemetry_overflow` diagnostic.
 
 ## Kernel runner
 
 With the `kernel` feature, `strategy_core_v3::kernel_v6` presents a context to a
 `strategy_core_kernel::NativeKernel` and assembles the result. Strategy executables supply
-kernel construction, restore and checkpoint codecs through `TransactionKernelFactory`, and
-`TransactionKernel::market_buy_price_cap_micros`, which the runner asks once, when the kernel
-places a Market buy, of the kernel as restored for the decision. `TransactionKernel` needs no
-`Clone`: the runner restores kernels only through the factory and the kernel's codec.
+kernel construction, restore and checkpoint codecs through `TransactionKernelFactory`. A
+Market buy carries its own cap (`PlaceOrderRequest::market_price_cap`). `TransactionKernel`
+needs no `Clone`: the runner restores kernels only through the factory and the kernel's
+codec.
 
 The context is projected once into the kernel crate's owned model (`StationState`,
 `MarketState`, `StrategyEvent`): supplied originals first, the V4 owner projection otherwise,

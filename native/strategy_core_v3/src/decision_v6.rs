@@ -112,8 +112,6 @@ pub const MAX_OPEN_ORDERS: usize = 192;
 pub const MAX_OPEN_ORDERS_LIVE: usize =
     (MAX_DECISION_PLAN_ROWS - DECISION_PLAN_ROWS - ACKNOWLEDGEMENT_PLAN_ROWS - 3)
         / CANCEL_ORDER_PLAN_ROWS;
-/// The Broker's refusal code of a Market sell outside paper (until Phase 5).
-pub const MARKET_SELL_UNSUPPORTED_CODE: &str = "market_sell_unsupported";
 
 /// The open orders a Sleeve may hold in `mode`, so a cancel-all over them always fits the
 /// decision plan.
@@ -199,6 +197,17 @@ pub enum OrderActionV6 {
 pub enum OrderTypeV6 {
     Market,
     Limit,
+}
+
+/// How long an order may wait for a fill (Kalshi `time_in_force`).
+#[derive(Clone, Copy, Debug, Encode, Decode, Eq, PartialEq)]
+pub enum TimePolicyV6 {
+    /// What does not fill at once rests until it fills, is cancelled or expires.
+    GoodTillCanceled,
+    /// Fills what it can at once; the rest is cancelled.
+    ImmediateOrCancel,
+    /// Fills its whole quantity at once, or nothing.
+    FillOrKill,
 }
 
 #[derive(Clone, Copy, Debug, Encode, Decode, Eq, PartialEq)]
@@ -718,8 +727,13 @@ pub struct PlaceOrderV6 {
     pub order_type: OrderTypeV6,
     pub quantity_hundredths: u64,
     pub limit_price_micros: Option<u64>,
-    /// Authoritative maximum per-contract execution price for a Market buy.
+    /// Authoritative maximum per-contract execution price of a Market buy: the Broker
+    /// reserves the buy at it (at one dollar without it). Only on a Market buy.
     pub market_price_cap_micros: Option<u64>,
+    pub time_policy: TimePolicyV6,
+    /// The order must not take liquidity: the Broker refuses it if it would cross.
+    pub post_only: bool,
+    /// Ends a resting (`GoodTillCanceled`) order, buy or sell, after this long.
     pub expires_after_ms: Option<i64>,
     pub reduce_only: bool,
     /// The kernel's `client_order_id`, else [`derive_provider_client_id_v6`].
@@ -2186,7 +2200,7 @@ fn validate_command(command: &StrategyCommandV6) -> Result<(), DecisionV6Error> 
                 || !valid_optional_text(&order.signal_type, MAX_SHORT_TEXT_BYTES)
                 || !valid_optional_text(&order.signal_metadata, MAX_COMMAND_METADATA_BYTES)
                 || order.expires_after_ms.is_some_and(|ttl| ttl <= 0)
-                || !valid_place_order_prices(order)
+                || place_order_terms_error(order).is_some()
             {
                 return Err(DecisionV6Error::InvalidContract);
             }
@@ -2300,23 +2314,50 @@ pub fn valid_http_path(path: &str) -> bool {
             .all(|segment| segment != "." && segment != "..")
 }
 
-fn valid_place_order_prices(order: &PlaceOrderV6) -> bool {
+/// Why a place's prices and order terms do not make one order, or `None` when they do:
+///
+/// - a Limit order has a limit price within [0, 1] dollars and no price cap;
+/// - a Market order has no limit price; a Market buy may have a price cap within (0, 1],
+///   a Market sell has none;
+/// - a Market sell has no price to rest at: it is `ImmediateOrCancel` or `FillOrKill`;
+/// - `post_only` needs a `GoodTillCanceled` Limit order (an immediate or Market order takes
+///   liquidity);
+/// - an expiry ends a resting order: it needs `GoodTillCanceled`.
+pub fn place_order_terms_error(order: &PlaceOrderV6) -> Option<&'static str> {
+    let immediate = order.time_policy != TimePolicyV6::GoodTillCanceled;
     match (order.action, order.order_type) {
-        (OrderActionV6::Buy, OrderTypeV6::Market) => {
-            order.limit_price_micros.is_none()
-                && order
-                    .market_price_cap_micros
-                    .is_none_or(|price| (1..=MAX_PRICE_MICROS).contains(&price))
+        (_, OrderTypeV6::Limit) if order.limit_price_micros.is_none() => {
+            Some("a limit order needs a limit price")
         }
-        (OrderActionV6::Sell, OrderTypeV6::Market) => {
-            order.limit_price_micros.is_none() && order.market_price_cap_micros.is_none()
+        (_, OrderTypeV6::Limit) if order.limit_price_micros > Some(MAX_PRICE_MICROS) => {
+            Some("the limit price is not within [0, 1]")
         }
-        (_, OrderTypeV6::Limit) => {
-            order
-                .limit_price_micros
-                .is_some_and(|price| price <= MAX_PRICE_MICROS)
-                && order.market_price_cap_micros.is_none()
+        (_, OrderTypeV6::Market) if order.limit_price_micros.is_some() => {
+            Some("a market order has no limit price")
         }
+        (OrderActionV6::Buy, OrderTypeV6::Market)
+            if order
+                .market_price_cap_micros
+                .is_some_and(|cap| !(1..=MAX_PRICE_MICROS).contains(&cap)) =>
+        {
+            Some("the price cap is not within (0, 1]")
+        }
+        (OrderActionV6::Sell, _) | (_, OrderTypeV6::Limit)
+            if order.market_price_cap_micros.is_some() =>
+        {
+            Some("only a market buy has a price cap")
+        }
+        (OrderActionV6::Sell, OrderTypeV6::Market) if !immediate => {
+            Some("a market sell is immediate-or-cancel or fill-or-kill")
+        }
+        _ if order.post_only && order.order_type == OrderTypeV6::Market => {
+            Some("a post-only order is a limit order")
+        }
+        _ if order.post_only && immediate => Some("a post-only order is good-till-canceled"),
+        _ if order.expires_after_ms.is_some() && immediate => {
+            Some("only a good-till-canceled order expires")
+        }
+        _ => None,
     }
 }
 
@@ -2398,16 +2439,7 @@ impl DecisionPlanRows {
             StrategyCommandV6::PlaceOrder(order) => {
                 self.active_orders
                     .insert(format!("client:{}", order.provider_client_id));
-                // In live the Broker refuses a Market sell with a receipt (a row of its own).
-                let refused_market_sell = self.mode == DeploymentModeV6::Live
-                    && order.action == OrderActionV6::Sell
-                    && order.order_type == OrderTypeV6::Market;
                 PLACE_ORDER_PLAN_ROWS
-                    + if refused_market_sell {
-                        REFUSED_COMMAND_PLAN_ROWS
-                    } else {
-                        0
-                    }
             }
             StrategyCommandV6::CancelOrder {
                 target: CancelTargetV6::Order { order_id, .. },

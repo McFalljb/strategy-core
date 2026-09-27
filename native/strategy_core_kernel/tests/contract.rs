@@ -6,8 +6,8 @@ use strategy_core_kernel::{
     OrderStatusView, OrderTicket, OrderType, OrderUpdate, OrderUpdateStatus, ParameterValue,
     PlaceOrderRequest, PriceLevelView, PriceUpdateView, StrategyEvent, StrategyEventView,
     StrategyKernelBroker, StrategyKernelContext, StrategyKernelData, StrategyKernelRuntime,
-    StrategyKernelState, StrategyKernelTelemetry, StrategyParameters, TimerHandle, TimerWakeView,
-    WakeAtRequest,
+    StrategyKernelState, StrategyKernelTelemetry, StrategyParameters, TimePolicy, TimerHandle,
+    TimerWakeView, WakeAtRequest,
 };
 
 const YES_BID_LEVELS: [PriceLevelView; 1] = [PriceLevelView::whole(0.41, 12)];
@@ -56,6 +56,9 @@ impl NativeKernel for OrderKernel {
             order_type: OrderType::Limit,
             quantity: ContractQuantity::from_hundredths(125),
             limit_price: Some(0.42),
+            market_price_cap: None,
+            time_policy: TimePolicy::GoodTillCanceled,
+            post_only: true,
             expires_after_ms: Some(30_000),
             reduce_only: true,
             signal_type: Some("test_signal".to_string()),
@@ -217,7 +220,9 @@ fn kernel_can_emit_deterministic_place_order_action() {
         concat!(
             r#"{"type":"place_order","ticker":"KXHIGHMIA-26MAY30-B90","#,
             r#""action":"sell","contract_side":"yes","order_type":"limit","#,
-            r#""quantity":125,"limit_price":0.42,"expires_after_ms":30000,"reduce_only":true,"#,
+            r#""quantity":125,"limit_price":0.42,"market_price_cap":null,"#,
+            r#""time_policy":"good_till_canceled","post_only":true,"#,
+            r#""expires_after_ms":30000,"reduce_only":true,"#,
             r#""signal_type":"test_signal","#,
             r#""signal_metadata":"{\"source\":\"fixture\"}","client_order_id":"kernel-1"}"#
         ),
@@ -292,6 +297,9 @@ fn fractional_quantity_flows_through_broker_position_and_order_ticket() {
         order_type: OrderType::Limit,
         quantity: ContractQuantity::from_hundredths(125),
         limit_price: Some(0.42),
+        market_price_cap: None,
+        time_policy: TimePolicy::ImmediateOrCancel,
+        post_only: false,
         expires_after_ms: None,
         reduce_only: true,
         signal_type: None,
@@ -304,6 +312,90 @@ fn fractional_quantity_flows_through_broker_position_and_order_ticket() {
     assert_eq!(broker.placed.len(), 1);
     assert_eq!(broker.placed[0].quantity.hundredths(), 125);
     assert!(broker.placed[0].reduce_only);
+}
+
+/// The execution styles are constructors: a resting limit is GTC, a direct order an IOC limit
+/// (a sell's limit is its price floor), a sweep an IOC Market buy under a price cap.
+#[test]
+fn execution_style_constructors_set_order_type_price_and_time_policy() {
+    let quantity = ContractQuantity::from_hundredths(300);
+    let cases = [
+        (
+            PlaceOrderRequest::resting_limit(
+                "T",
+                OrderAction::Buy,
+                ContractSide::Yes,
+                quantity,
+                0.4,
+            ),
+            (
+                OrderAction::Buy,
+                OrderType::Limit,
+                Some(0.4),
+                None,
+                TimePolicy::GoodTillCanceled,
+            ),
+        ),
+        (
+            PlaceOrderRequest::direct("T", OrderAction::Buy, ContractSide::No, quantity, 0.55),
+            (
+                OrderAction::Buy,
+                OrderType::Limit,
+                Some(0.55),
+                None,
+                TimePolicy::ImmediateOrCancel,
+            ),
+        ),
+        (
+            PlaceOrderRequest::direct("T", OrderAction::Sell, ContractSide::Yes, quantity, 0.2),
+            (
+                OrderAction::Sell,
+                OrderType::Limit,
+                Some(0.2),
+                None,
+                TimePolicy::ImmediateOrCancel,
+            ),
+        ),
+        (
+            PlaceOrderRequest::sweep("T", ContractSide::Yes, quantity, 0.6),
+            (
+                OrderAction::Buy,
+                OrderType::Market,
+                None,
+                Some(0.6),
+                TimePolicy::ImmediateOrCancel,
+            ),
+        ),
+    ];
+    for (request, (action, order_type, limit_price, cap, time_policy)) in cases {
+        assert_eq!(request.ticker, "T");
+        assert_eq!(request.quantity, quantity);
+        assert_eq!(
+            (
+                request.action,
+                request.order_type,
+                request.limit_price,
+                request.market_price_cap,
+                request.time_policy
+            ),
+            (action, order_type, limit_price, cap, time_policy)
+        );
+        assert!(!request.post_only && !request.reduce_only);
+        assert_eq!(request.expires_after_ms, None);
+        assert_eq!(request.client_order_id, None);
+    }
+    // A request serialized before the order-intent fields keeps its meaning: a GTC order
+    // that may take liquidity, without a price cap.
+    let request: PlaceOrderRequest = serde_json::from_value(serde_json::json!({
+        "ticker": "T", "action": "buy", "contract_side": "yes", "order_type": "limit",
+        "quantity": 300, "limit_price": 0.4, "signal_type": null, "signal_metadata": null,
+        "client_order_id": null,
+    }))
+    .unwrap();
+    assert_eq!(
+        request,
+        PlaceOrderRequest::resting_limit("T", OrderAction::Buy, ContractSide::Yes, quantity, 0.4)
+    );
 }
 
 #[test]

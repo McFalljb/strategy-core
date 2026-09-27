@@ -16,7 +16,7 @@ use chrono::{DateTime, TimeZone, Utc};
 use strategy_core_kernel::{
     ContractQuantity, ContractSide, KernelAction, KernelResult, LogAction, NativeKernel,
     OrderAction, OrderType, PlaceOrderRequest, StrategyEventView, StrategyKernelContext,
-    StrategyKernelState, ValueOrigin,
+    StrategyKernelState, TimePolicy, ValueOrigin,
 };
 use strategy_core_v3::decision_v4::{
     BrokerV4, ConfigV4, DecisionContextV4, ExtremeV4, FenceV4, MarketComparisonV4,
@@ -671,6 +671,9 @@ impl NativeKernel for RecordingKernel {
                 order_type: OrderType::Limit,
                 quantity: ContractQuantity::from_hundredths(300),
                 limit_price: Some(0.4),
+                market_price_cap: None,
+                time_policy: TimePolicy::GoodTillCanceled,
+                post_only: false,
                 expires_after_ms: Some(30_000),
                 reduce_only: false,
                 signal_type: Some("fixture".to_owned()),

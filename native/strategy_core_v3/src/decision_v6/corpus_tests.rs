@@ -400,7 +400,48 @@ fn valid_results() -> Vec<(&'static str, &'static str, DecisionResultV6)> {
                 result
             },
         ),
+        (
+            "order-intent-terms",
+            "daily-high-recovery",
+            order_intent_result(&context()),
+        ),
     ]
+}
+
+/// Changes the terms of the result's place at `index`, keeping its runner entry in step.
+fn with_terms(result: &mut DecisionResultV6, index: usize, terms: impl FnOnce(&mut PlaceOrderV6)) {
+    let StrategyCommandV6::PlaceOrder(order) = &mut result.commands[index] else {
+        unreachable!()
+    };
+    terms(order);
+    let entry = place_entry(&result.commands[index]);
+    let checkpoint = result.kernel_checkpoint.as_mut().unwrap();
+    for issued in &mut checkpoint.runner.entries {
+        if issued.command_id == entry.command_id {
+            *issued = entry.clone();
+        }
+    }
+    *checkpoint = checkpoint.clone().seal();
+}
+
+/// A sweep (an IOC Market buy at its own price cap) and a post-only resting sell that
+/// expires.
+fn order_intent_result(context: &DecisionContextV6) -> DecisionResultV6 {
+    let mut result = multi_order_result(context);
+    with_terms(&mut result, 0, |order| {
+        order.order_type = OrderTypeV6::Market;
+        order.limit_price_micros = None;
+        order.market_price_cap_micros = Some(600_000);
+        order.time_policy = TimePolicyV6::ImmediateOrCancel;
+        order.expires_after_ms = None;
+    });
+    with_terms(&mut result, 1, |order| {
+        order.action = OrderActionV6::Sell;
+        order.limit_price_micros = Some(700_000);
+        order.post_only = true;
+        order.reduce_only = true;
+    });
+    result
 }
 
 /// In live a YES place then a cancel-all: 4 + 5 + (3 for the resting order + 1 for the
@@ -423,17 +464,18 @@ fn live_cancel_all_result(context: &DecisionContextV6) -> DecisionResultV6 {
     result
 }
 
-/// A live YES place replaced by a Market sell, without the (ungranted) timer: the Broker
-/// refuses it with a receipt, so it counts 5 + 1 plan rows.
+/// A live YES place replaced by an immediate Market sell, without the (ungranted) timer: 5
+/// plan rows, like any place.
 fn live_market_sell(context: &DecisionContextV6, result: &mut DecisionResultV6) {
     result.commands.truncate(4);
-    let StrategyCommandV6::PlaceOrder(order) = &mut result.commands[0] else {
-        unreachable!()
-    };
-    order.action = OrderActionV6::Sell;
-    order.order_type = OrderTypeV6::Market;
-    order.limit_price_micros = None;
-    order.reduce_only = true;
+    with_terms(result, 0, |order| {
+        order.action = OrderActionV6::Sell;
+        order.order_type = OrderTypeV6::Market;
+        order.limit_price_micros = None;
+        order.time_policy = TimePolicyV6::ImmediateOrCancel;
+        order.expires_after_ms = None;
+        order.reduce_only = true;
+    });
     result.state_fence = fence(context);
 }
 
@@ -785,6 +827,64 @@ fn invalid_results() -> Vec<(&'static str, &'static str, DecisionV6Error, Result
                 ));
             },
         ),
+        (
+            "post-only-immediate-or-cancel",
+            "daily-high-recovery",
+            DecisionV6Error::InvalidContract,
+            |_, result| {
+                with_terms(result, 0, |order| {
+                    order.post_only = true;
+                    order.time_policy = TimePolicyV6::ImmediateOrCancel;
+                    order.expires_after_ms = None;
+                })
+            },
+        ),
+        (
+            "post-only-market-buy",
+            "daily-high-recovery",
+            DecisionV6Error::InvalidContract,
+            |_, result| {
+                with_terms(result, 0, |order| {
+                    order.post_only = true;
+                    order.order_type = OrderTypeV6::Market;
+                    order.limit_price_micros = None;
+                    order.market_price_cap_micros = Some(600_000);
+                })
+            },
+        ),
+        (
+            "resting-market-sell",
+            "daily-high-recovery",
+            DecisionV6Error::InvalidContract,
+            |_, result| {
+                with_terms(result, 0, |order| {
+                    order.action = OrderActionV6::Sell;
+                    order.order_type = OrderTypeV6::Market;
+                    order.limit_price_micros = None;
+                    order.expires_after_ms = None;
+                })
+            },
+        ),
+        (
+            "expiring-fill-or-kill",
+            "daily-high-recovery",
+            DecisionV6Error::InvalidContract,
+            |_, result| {
+                with_terms(result, 0, |order| {
+                    order.time_policy = TimePolicyV6::FillOrKill;
+                })
+            },
+        ),
+        (
+            "price-cap-on-a-limit-order",
+            "daily-high-recovery",
+            DecisionV6Error::InvalidContract,
+            |_, result| {
+                with_terms(result, 0, |order| {
+                    order.market_price_cap_micros = Some(600_000);
+                })
+            },
+        ),
     ]
 }
 
@@ -909,7 +1009,7 @@ fn overlay_vectors() -> Vec<Value> {
     };
     // (id, fee type, multiplier, [(price micros, quantity hundredths)])
     type Case = (&'static str, fees::FeeType, u64, &'static [(u64, i64)]);
-    let cases: [Case; 4] = [
+    let cases: [Case; 5] = [
         (
             "yes-then-no-quadratic",
             fees::FeeType::Quadratic,
@@ -933,6 +1033,12 @@ fn overlay_vectors() -> Vec<Value> {
             fees::FeeType::Quadratic,
             1_000_000,
             &[(1_000_000, 100)],
+        ),
+        (
+            "market-buy-at-its-price-cap",
+            fees::FeeType::Quadratic,
+            1_000_000,
+            &[(600_000, 300)],
         ),
     ];
     cases
@@ -1093,7 +1199,7 @@ fn v6_corpus_is_current_and_every_vector_decodes_to_its_verdict() {
         }
     }
     let invalid = recorded["invalid"].as_array().unwrap();
-    assert_eq!(invalid.len(), 38);
+    assert_eq!(invalid.len(), 43);
     for entry in invalid {
         let id = entry["id"].as_str().unwrap();
         let bytes = bytes(entry);
