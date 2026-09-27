@@ -2,110 +2,84 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Shared strategy contract package for Python and Rust strategy code that runs across paper, replay, backtest, and live engines. Consumer repos (such as [`trader`](https://github.com/McFalljb/trader)) implement the runtime; this library defines the strategy-facing surface.
+The shared Strategy contract for the Trader V3 runtime and the Backtester. A Strategy is a
+Rust kernel that runs once per event; this library defines what it implements, what it
+sees, and what it may ask for. It is a **library, not an engine**: hosts build the context,
+deliver events, and own the Broker, providers, persistence and timers.
 
-This repo is a **library, not an engine**. It holds the canonical Python `run(ctx)` contract, typed events, shared value objects, runtime-neutral protocols, and Rust parity crates for native strategy adapters.
+## Crates
 
-## Status
+| Crate | Path | Role |
+|---|---|---|
+| `strategy-core-kernel` | `native/strategy_core_kernel` | The kernel contract: `NativeKernel` and `StrategyKernelContext`, the canonical state and event model, order and request values, and pure helpers (exact fees, stations and series tickers, climate days, freshness). |
+| `strategy-core-v3` | `native/strategy_core_v3` | The canonical profile, the Decision V6 wire, and (feature `kernel`) the runner that presents a V6 context to a kernel and assembles its result. |
 
-Version **0.1.x** is an early public contract. Breaking changes may land without a major bump until **1.0.0**. See [docs/contract-map.md](docs/contract-map.md) for how the shared package maps to engine code today.
+Both crates are version `0.1.x`; the API may change before `1.0.0`.
 
-## Prerequisites
+## Use
 
-- [uv](https://docs.astral.sh/uv/)
-- Python 3.12+ (see `.python-version`)
-- Rust 1.85+ when working on the optional native crates under `native/`
+Pin both crates to one git revision:
 
-## Quick start
+```toml
+[dependencies]
+strategy-core-kernel = { git = "https://github.com/McFalljb/strategy-core.git", rev = "<commit>", version = "=0.1.0" }
+strategy-core-v3 = { git = "https://github.com/McFalljb/strategy-core.git", rev = "<commit>", version = "=0.1.0", features = ["kernel"] }
+```
+
+`scripts/pin-digests.sh <commit>` prints the two digests consumers record with the
+revision: the `strategy-core-v3` source-tree archive and the Decision V6 conformance corpus.
+
+A minimal kernel:
+
+```rust
+use strategy_core_kernel::{KernelResult, NativeKernel, StrategyEventView, StrategyKernelContext};
+
+struct MyKernel;
+
+impl NativeKernel for MyKernel {
+    fn name(&self) -> &str {
+        "my-kernel"
+    }
+
+    fn on_event(
+        &mut self,
+        event: StrategyEventView<'_>,
+        ctx: &mut dyn StrategyKernelContext,
+    ) -> KernelResult<()> {
+        if let StrategyEventView::OrderUpdate(update) = event {
+            ctx.telemetry()
+                .counter("order_updates", 1.0, &[("client_order_id", &update.client_order_id)])?;
+        }
+        Ok(())
+    }
+}
+```
+
+## Develop
+
+Requires Rust 1.85 (`rust-toolchain.toml`).
 
 ```bash
-uv sync --group dev
-uv run ruff check . && uv run ruff format --check . && uv run mypy . && uv run pytest
 cargo fmt --manifest-path native/Cargo.toml --all -- --check
-cargo test --manifest-path native/Cargo.toml
+cargo clippy --manifest-path native/Cargo.toml --workspace --all-targets --all-features -- -D warnings
+cargo test --manifest-path native/Cargo.toml --workspace --all-features
 ```
-
-When you change dependencies in `pyproject.toml`, run `uv lock` (or `uv sync`) and commit `uv.lock` in the same change. CI uses `uv sync --frozen --group dev`.
-
-## Install
-
-**From a sibling checkout (development):**
-
-```toml
-[tool.uv.sources]
-strategy-core = { path = "../strategy-core", editable = true }
-```
-
-**From Git:**
-
-```toml
-[tool.uv.sources]
-strategy-core = { git = "https://github.com/McFalljb/strategy-core.git", rev = "main" }
-```
-
-## Public surface
-
-The contract centers on one strategy context with nested services:
-
-| Surface | Role |
-|---------|------|
-| `ctx.events()` | Async stream of typed engine events |
-| `ctx.state` | Read-only normalized snapshots and freshness |
-| `ctx.data` | Engine-owned MinuteTemp reads (typed models) |
-| `ctx.broker` | Orders, positions, buying power |
-| `ctx.http` | Optional HTTP client (when enabled) |
-| `ctx.runtime` | Scope, clock, `wake_at` one-shot timers |
-| `ctx.capabilities` | Feature flags for portable strategy code |
-| `ctx.config` | Strategy configuration mapping |
-| `ctx.telemetry` | Counters, gauges, structured logging hooks |
-
-`ctx.state` and `ctx.data` are intentionally separate: state is the fast latest-known view; data is explicit engine-owned reads against upstream APIs. `ctx.http` is optional and must be enabled by the runtime; strategies should check `ctx.capabilities.supports_http` before using it.
-
-Provider-aligned model modules for engine adapters:
-
-- `strategy_core.minutetemp` — MinuteTemp REST/WebSocket payload types
-- `strategy_core.kalshi` — Kalshi REST/WebSocket payload types
-
-### Example
-
-```python
-from strategy_core import ForecastUpdated, PriceUpdate, StrategyContext
-
-
-async def run(ctx: StrategyContext) -> None:
-    async for event in ctx.events():
-        if isinstance(event, ForecastUpdated):
-            await ctx.data.fetch_forecast(refresh=True)
-
-        if isinstance(event, PriceUpdate):
-            await ctx.broker.place_order(
-                ticker="DEMO-TICKER",
-                action="buy",
-                contract_side="yes",
-                order_type="market",
-                quantity=1,
-            )
-```
-
-Engines implement these protocols differently while keeping the same strategy-facing API.
 
 ## Repository layout
 
 ```text
-strategy_core/   # Importable Python package
-tests/           # Python pytest suite
-native/          # Rust strategy_core and strategy_core_kernel crates
-docs/            # Contract documentation and implementation plans
-AGENTS.md        # Contributor commands and conventions
+native/        # Rust workspace: strategy_core_kernel and strategy_core_v3
+conformance/   # Shared corpora: v3/vectors.json (canonical profile), v6/decision-transactions.json
+scripts/       # pin-digests.sh
+docs/          # Contract documentation
 ```
 
 ## Documentation
 
-- [docs/contract-map.md](docs/contract-map.md) — complete bot API, options, examples, native paths, and ownership rules
-- [docs/v3-contract.md](docs/v3-contract.md) — pure V3 semantic and canonical profile contract
-- [docs/decision-v6.md](docs/decision-v6.md) — Decision V6: one run per event, order updates, provisional view and wire contract
-- [docs/releases/strategy-core-v3.md](docs/releases/strategy-core-v3.md) — immutable V3 release qualification and publish procedure
+- [docs/contract-map.md](docs/contract-map.md): the kernel contract, from writing a kernel to the pure helpers
+- [docs/decision-v6.md](docs/decision-v6.md): Decision V6, one run per event: order updates, provisional view, order terms, external requests and wire
+- [docs/v3-contract.md](docs/v3-contract.md): the V3 canonical profile and value bounds
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT; see [LICENSE](LICENSE).
