@@ -533,33 +533,24 @@ pub(super) fn acknowledgements_from_view(
         .collect()
 }
 
-/// Whether a result over these views could acknowledge anything: a receipt, a terminal order
-/// or the answered external request. Equals `!acknowledgeable(context).is_empty()`.
-pub(super) fn any_acknowledgeable(
-    broker: &crate::decision_v6::BrokerDetailV6,
-    receipts: &[crate::decision_v6::CommandReceiptV6],
-    external_response: Option<&str>,
-) -> bool {
-    !receipts.is_empty()
-        || external_response.is_some()
-        || broker.orders.iter().any(|order| order.status.is_terminal())
-}
-
-/// Every receipt and terminal order a result could acknowledge, to size the result.
-pub(super) fn acknowledgeable(context: &DecisionContextV6) -> Vec<String> {
-    context
-        .command_receipts
+/// Every receipt and terminal order a result over these views could acknowledge, and the
+/// external request the decision's event answers, to size the result.
+pub(super) fn acknowledgeable<'a>(
+    broker: &'a crate::decision_v6::BrokerDetailV6,
+    receipts: &'a [crate::decision_v6::CommandReceiptV6],
+    external_response: Option<&'a str>,
+) -> Vec<&'a str> {
+    receipts
         .iter()
-        .map(|receipt| receipt.command_id.clone())
+        .map(|receipt| receipt.command_id.as_str())
         .chain(
-            context
-                .broker
+            broker
                 .orders
                 .iter()
                 .filter(|order| order.status.is_terminal())
-                .map(|order| order.command_id.clone()),
+                .map(|order| order.command_id.as_str()),
         )
-        .chain(context.external_response_id().map(str::to_owned))
+        .chain(external_response)
         .collect()
 }
 

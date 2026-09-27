@@ -75,13 +75,16 @@ pub fn run_native_decision<K: NativeKernel + ?Sized>(
         Some(StrategyEvent::ExternalResponse(response)) => Some(response.request_id.as_str()),
         _ => None,
     };
-    let acknowledgements =
-        updates::any_acknowledgeable(context.broker, context.receipts, external_response);
-    let mut host = KernelHost::native(context, derived.entries(), acknowledgements);
+    // Admission reserves what a transaction's result would carry besides its commands, so the
+    // same commands fit; the evidence itself is not returned.
+    let delivery_order = derived.delivery_order();
+    let evidence = update_evidence(&derived, &delivery_order)?;
+    let acknowledgeable =
+        updates::acknowledgeable(context.broker, context.receipts, external_response);
+    let mut host = KernelHost::native(context, derived.entries(), !acknowledgeable.is_empty());
     host.market_buy_cap = Some(&market_buy_cap);
-    let issued_from = host.runner.len();
-    host.derived_entries = issued_from;
-    for index in derived.delivery_order().into_iter().flatten() {
+    let issued_from = host.reserve(&derived, &evidence, &acknowledgeable);
+    for index in delivery_order.into_iter().flatten() {
         if let Some(update) = &derived.steps[index].update {
             StrategyEvent::OrderUpdate(order_update(update))
                 .with_view(|view| kernel.on_event(view, &mut host))

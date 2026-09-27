@@ -448,3 +448,139 @@ fn a_native_external_response_is_delivered_and_acknowledged() {
         assert!(run_native_decision(&mut kernel, &mut section, &context, |_| Ok(None)).is_err());
     }
 }
+
+/// Runs `step` natively over `seen` and transactionally over the context's checkpoint, and
+/// asserts both saw the same updates and refusals and issued the same commands.
+fn assert_native_matches_transaction(
+    context: &DecisionContextV6,
+    mut seen: strategy_core_v3::decision_v6::RunnerSectionV6,
+    step: Step,
+) -> Decision {
+    let reference = decide(context, step);
+    let outcomes = Rc::new(RefCell::new(Vec::new()));
+    let updates = Rc::new(RefCell::new(Vec::new()));
+    let mut kernel = NativeOnly(ScriptKernel {
+        step,
+        seen: Rc::clone(&outcomes),
+        updates: Rc::clone(&updates),
+    });
+    let native = run_native_decision(&mut kernel, &mut seen, context, |_| Ok(None)).unwrap();
+    assert_eq!(*updates.borrow(), reference.updates);
+    assert_eq!(*outcomes.borrow(), reference.seen);
+    assert_eq!(native.commands, reference.result.commands);
+    assert_eq!(
+        native.acknowledged_command_ids,
+        reference.result.acknowledged_command_ids
+    );
+    reference
+}
+
+/// With 256 live entries, an update that ends one does not free its slot for this decision's
+/// commands: a transaction keeps it for the entry a failed update would bring back, and
+/// native admission reserves the same slot.
+#[test]
+fn native_admission_reserves_the_runner_slot_of_an_ending_update() {
+    use BrokerOrderStatusV6::*;
+    fn one_more(
+        context: &mut dyn StrategyKernelContext,
+        seen: &mut Vec<String>,
+    ) -> KernelResult<()> {
+        let outcome =
+            context
+                .broker()
+                .place_order(limit_buy("one-more", ContractSide::Yes, 100, 0.01));
+        seen.push(format!("{:?}", outcome.map_err(|error| error.to_string())));
+        Ok(())
+    }
+    // 191 open orders and 65 cancels waiting for their receipts: 256 live entries. One order
+    // is now cancelled.
+    let (_, checkpoint) = crowded_with(191, 65, 0);
+    let orders = (0..191)
+        .map(|index| {
+            let (status, revision) = if index == 0 {
+                (Cancelled, 2)
+            } else {
+                (Resting, 1)
+            };
+            order(
+                &format!("command.old.{index:03}"),
+                &format!("old-{index:03}"),
+                status,
+                0,
+                revision,
+            )
+        })
+        .collect::<Vec<_>>();
+    let mut context = follow_up(&priced_context(), None, 2, orders, vec![]);
+    context.kernel_checkpoint = Some(checkpoint.clone());
+    context.validate().unwrap();
+    let reference = assert_native_matches_transaction(&context, checkpoint.runner, one_more);
+    assert_eq!(reference.updates.len(), 1, "the cancellation is reported");
+    assert_eq!(
+        reference.seen.last().unwrap(),
+        r#"Err("the runner tracks at most 256 orders and commands")"#
+    );
+}
+
+/// Near the result size bound, native admission reserves the bytes a transaction's result
+/// carries besides its commands (the order-update evidence and the acknowledgeable ids), so
+/// the same orders fit.
+#[test]
+fn native_admission_reserves_the_result_bytes_of_evidence_and_acknowledgements() {
+    use BrokerOrderStatusV6::*;
+    /// Fills the result with orders whose metadata halves on each refusal, down to one byte.
+    fn fill(context: &mut dyn StrategyKernelContext, seen: &mut Vec<String>) -> KernelResult<()> {
+        let mut size = 60 * 1024;
+        let mut index = 0;
+        while size > 0 {
+            let mut request = limit_buy(&format!("big-{index}"), ContractSide::Yes, 100, 0.01);
+            request.signal_metadata = Some("m".repeat(size));
+            index += 1;
+            match context.broker().place_order(request) {
+                Ok(ticket) => seen.push(format!("{size}: {}", ticket.command_id)),
+                Err(error) => {
+                    seen.push(format!("{size}: {error}"));
+                    size /= 2;
+                }
+            }
+        }
+        Ok(())
+    }
+    let context = priced_context();
+    let mut seen = Default::default();
+    let mut kernel = NativeOnly(ScriptKernel {
+        step: place_yes,
+        seen: Rc::default(),
+        updates: Rc::default(),
+    });
+    run_native_decision(&mut kernel, &mut seen, &context, |_| Ok(None)).unwrap();
+    let placed = decide(&context, place_yes).result;
+    // The placed order filled, 255 other terminal orders and 256 receipts to acknowledge.
+    let terminal = std::iter::once(order(&cid(1, 0), "yes-1", Filled, 300, 2))
+        .chain((0..255).map(|index| {
+            order(
+                &format!("t.{index:03}"),
+                &format!("t{index:03}"),
+                Filled,
+                300,
+                1,
+            )
+        }))
+        .collect();
+    let receipts = (0..256)
+        .map(|index| CommandReceiptV6 {
+            command_id: format!("c.{index:03}"),
+            kind: BrokerCommandKindV6::CancelOrder,
+            outcome: CommandOutcomeV6::Accepted,
+        })
+        .collect();
+    let next = follow_up(&context, Some(&placed), 2, terminal, receipts);
+    let reference = assert_native_matches_transaction(&next, seen, fill);
+    assert_eq!(reference.updates.len(), 1, "the fill is reported");
+    assert!(
+        reference.seen.iter().any(|outcome| outcome
+            .ends_with("the decision's commands would exceed the result size bound")),
+        "{:?}",
+        reference.seen
+    );
+}

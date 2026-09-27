@@ -10,6 +10,17 @@
 //! updates, bounds, external requests and their acknowledgement). The checkpoint/IPC
 //! transaction policy below is not a NativeKernel requirement.
 //!
+//! Native admission is the transaction's (`KernelHost::reserve`): commands are admitted
+//! against the same result-size reservation (the encoded order-update evidence and
+//! acknowledgeable ids of the views, the kernel's state at `MAX_KERNEL_CHECKPOINT_BYTES`, the
+//! fixed fields) and the same runner slots (live entries a failed update could bring back), so
+//! a native invocation admits exactly the commands a transaction over the same views admits.
+//! What stays transactional only: the checkpoint actually encoded (a kernel whose state
+//! exceeds `MAX_KERNEL_CHECKPOINT_BYTES`, or whose factory cannot snapshot or restore it,
+//! fails or rolls back a transaction but not a native invocation); per-update rollback,
+//! retry and deferral (a native kernel error invalidates the instance instead); and result
+//! assembly (validation and telemetry shedding, which never drops commands).
+//!
 //! One transactional run per event:
 //! 1. Restore the kernel from its checkpoint (or create it).
 //! 2. Compare the context's Broker state and command receipts with the checkpoint's runner
@@ -170,27 +181,15 @@ pub fn run_transaction<F: TransactionKernelFactory>(
     // Deferred updates first (the most deferred first), the others in issue order; a
     // cancel's update never before its target's.
     let delivery_order = derived.delivery_order();
-    let evidence = wire::order_update_evidence(
-        &delivery_order
-            .iter()
-            .flatten()
-            .filter_map(|index| derived.steps[*index].update.as_ref())
-            .map(evidence_record)
-            .collect::<Vec<_>>(),
-    )?;
-    let acknowledgeable = updates::acknowledgeable(context);
-    // Everything in the result but the commands, the runner entries and the kernel's
-    // telemetry, with the kernel's state at its bound: commands are admitted against the rest.
-    let fixed_bytes = wire::encoded_len(&evidence)
-        + wire::encoded_len(&acknowledgeable)
-        + wire::MAX_KERNEL_CHECKPOINT_BYTES
-        + RESULT_OVERHEAD_BYTES;
+    let evidence = update_evidence(&derived, &delivery_order)?;
+    let acknowledgeable = updates::acknowledgeable(
+        &context.broker,
+        &context.command_receipts,
+        context.external_response_id(),
+    );
     let mut host = KernelHost::new(context, derived.entries(), !acknowledgeable.is_empty())?;
     host.market_buy_cap = Some(&market_buy_cap);
-    host.fixed_bytes = fixed_bytes;
-    host.reinstatable_live = derived.reinstatable_live();
-    let issued_from = host.runner.len();
-    host.derived_entries = issued_from;
+    let issued_from = host.reserve(&derived, &evidence, &acknowledgeable);
 
     // Each update is delivered on its own. When the kernel fails on one, the kernel and the
     // decision go back to how they were before it and the failure is recorded; the update is
@@ -464,6 +463,21 @@ pub fn parameter_json(
         }
         StrategyParameterValueV6::String(value) => serde_json::Value::String(value.clone()),
     })
+}
+
+/// The result's evidence of the derived updates, in delivery order.
+fn update_evidence(
+    derived: &updates::Derived,
+    delivery_order: &[Vec<usize>],
+) -> Result<Vec<ResultEvidenceV6>, DecisionV6Error> {
+    wire::order_update_evidence(
+        &delivery_order
+            .iter()
+            .flatten()
+            .filter_map(|index| derived.steps[*index].update.as_ref())
+            .map(evidence_record)
+            .collect::<Vec<_>>(),
+    )
 }
 
 /// The update as recorded in the result's evidence: a refusal reason is cut to
@@ -853,6 +867,29 @@ impl<'a> KernelHost<'a> {
             update_start: None,
             deferrable: RefCell::new(None),
         }
+    }
+
+    /// Sets the admission bounds of a decision over `derived`, before any update is delivered;
+    /// transactional and native execution admit commands alike. Commands are admitted against
+    /// everything else a result carries (the updates' `evidence`, the `acknowledgeable` ids, the
+    /// kernel's state at its bound and the fixed fields) and against the live runner entries a
+    /// failed update could bring back. Returns where the decision's own runner entries start.
+    fn reserve(
+        &mut self,
+        derived: &updates::Derived,
+        evidence: &Vec<ResultEvidenceV6>,
+        acknowledgeable: &Vec<&str>,
+    ) -> usize {
+        // Everything in the result but the commands, the runner entries and the kernel's
+        // telemetry, with the kernel's state at its bound: commands are admitted against the
+        // rest.
+        self.fixed_bytes = wire::encoded_len(evidence)
+            + wire::encoded_len(acknowledgeable)
+            + wire::MAX_KERNEL_CHECKPOINT_BYTES
+            + RESULT_OVERHEAD_BYTES;
+        self.reinstatable_live = derived.reinstatable_live();
+        self.derived_entries = self.runner.len();
+        self.derived_entries
     }
 
     /// The commands issued so far, in issue order.
