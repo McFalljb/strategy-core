@@ -27,9 +27,9 @@ struct Case {
     accumulator_micros: u64,
     terms: FeeTerms,
     broker: Charge,
-    /// The legacy `strategy_core::calculate_fill_fee` result (whole quantities) or
+    /// The legacy crate's `calculate_fill_fee` result (whole quantities) or
     /// `calculate_fill_fee_hundredths` (fractional) for the same inputs, captured before the
-    /// legacy crate is deleted. Legacy defaults (`None` fee type and multiplier) are written
+    /// legacy crate was deleted. Legacy defaults (`None` fee type and multiplier) are written
     /// out as the terms they resolved to.
     legacy: Charge,
 }

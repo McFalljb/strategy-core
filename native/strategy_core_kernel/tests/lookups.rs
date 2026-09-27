@@ -1,6 +1,6 @@
 //! Pure station, climate-day and freshness helpers. Station and climate-day expectations are
 //! the legacy contract's examples (Python `test_stations.py`/`test_climate_day.py` and the
-//! legacy Rust contract tests), kept here before the legacy crate is deleted.
+//! legacy Rust contract tests), kept here when the legacy crate was deleted.
 
 use std::collections::BTreeMap;
 
