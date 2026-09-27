@@ -293,7 +293,10 @@ requests (HTTP and CLI) design").
     URL and cannot climb out of it: one leading `/`, no `.`/`..` segment nor `%2e` in the route, no `\`, no `#`.
 41. **Outstanding bound.** The context does not list outstanding requests (a new context
     field would break stored contexts), so the runner bounds requests per decision at 8
-    and the host enforces 8 outstanding per Sleeve, answering a request past it `Refused`.
+    and the host enforces 8 outstanding per Sleeve: a decision that would leave the Sleeve
+    more than 8 stored, unacknowledged requests fails whole (nothing is stored or answered)
+    and the Sleeve resumes through Recovery. traderv3 changed this from answering the excess
+    `Refused`, which bounded nothing: each answer could issue 8 more requests.
 42. **Errors are a closed kind plus a message.** `Status(code)` names a non-2xx status and
     `Exit(code)` a failed command, so a kernel can retry on 429/503 without parsing text.
     An `Ok` answer is always 2xx (or exit status 0).

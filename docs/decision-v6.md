@@ -207,12 +207,14 @@ answer); the host only does the I/O.
   1 ms to 120 s; at most 8 requests per decision (`MAX_OUTSTANDING_EXTERNAL_REQUESTS`). A
   response body is at most 256 KiB; an `Ok` status is 0 (a command) or 2xx, an error's
   message 1 byte to 4 KiB, and a `Status` error names a status outside 2xx.
-- **Errors.** `Refused` (not sent: not allowed, the Sleeve's 8 outstanding, shutdown),
+- **Errors.** `Refused` (not sent: not allowed, shutdown),
   `Timeout`, `Transport`, `Status(code)`, `TooLarge`, `Malformed`, `Exit(code)` and
   `Abandoned` (the host restarted while the request was in flight).
 - **Local errors.** A request not granted for its kind, outside the bounds, the ninth of a
   decision, or past the decision's command or byte budget is a local `Err`. Room refusals
-  inside an order update defer the update like any other.
+  inside an order update defer the update like any other. A decision that would leave its
+  Sleeve more than 8 unacknowledged requests is not answered `Refused`: the host fails the
+  whole decision and the Sleeve resumes through Recovery.
 - **Ordering and durability.** A request is not a Broker command: it has no fence, no runner
   entry and no plan rows, and may share a decision with orders. It leaves the host
   (`StrategyCommandV6::leaves_host`), so a decision with a request needs the durable write
