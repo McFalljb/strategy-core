@@ -104,6 +104,14 @@ fn station(index: usize) -> StationV4 {
         high_bias_millionths: Some(i64::MAX),
         low_bias_millionths: Some(i64::MAX),
         day_count: Some(u16::MAX),
+        error_distribution: Some(strategy_core_v3::decision_v6::OracleErrorDistributionV6 {
+            version: strategy_core_v3::supplied_v6::ORACLE_ERROR_DISTRIBUTION_VERSION.into(),
+            bin_edges_millionths: [i64::MAX; 22],
+            high_counts: [u64::MAX; 23],
+            low_counts: [u64::MAX; 23],
+            sample_count: u64::MAX,
+            day_count: u16::MAX,
+        }),
     };
     StationV4 {
         contract_version: "1.0.0".into(),

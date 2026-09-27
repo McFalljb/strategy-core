@@ -20,7 +20,10 @@ use crate::current_v6::CurrentInputsV6;
 use crate::decision_v4::{
     DecisionContextV4, DecisionV4Error, MAX_STATIONS, TriggerV4, decision_fence_v4_sha256,
 };
-use crate::supplied_v6::{ExtremeKindV6, SuppliedEventV6, SuppliedInputsV6};
+use crate::supplied_v6::{
+    ExtremeKindV6, ORACLE_ERROR_BIN_EDGES, ORACLE_ERROR_BINS, ORACLE_ERROR_DISTRIBUTION_VERSION,
+    SuppliedEventV6, SuppliedInputsV6,
+};
 
 pub const DECISION_CONTEXT_V6_MAGIC: &[u8; 8] = b"SDCTXV6A";
 pub const DECISION_RESULT_V6_MAGIC: &[u8; 8] = b"SDRESV6A";
@@ -159,7 +162,6 @@ const DECISION_ID_DOMAIN: &[u8] = b"trader-v3/decision-id/v1\0";
 const INTENT_ID_DOMAIN: &[u8] = b"trader-v3/intent-id/v1\0";
 const CHECKPOINT_DIGEST_DOMAIN: &[u8] = b"strategy-core/decision-v6/checkpoint/v1\0";
 const STATE_FENCE_DOMAIN: &[u8] = b"strategy-core/decision-v6/state-fence/v1\0";
-const V5_CHECKPOINT_DIGEST_DOMAIN: &[u8] = b"strategy-core/decision-v5/checkpoint/v1\0";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DecisionV6Error {
@@ -478,8 +480,8 @@ impl RunnerEntryV6 {
 /// The runner's record of the Strategy's orders and commands, in issue order.
 #[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct RunnerSectionV6 {
-    /// False before the first decision (and after converting a V5 checkpoint): that
-    /// decision records the Sleeve's open orders as seen, without updates.
+    /// False before the first decision: that decision records the Sleeve's open orders as
+    /// seen, without updates.
     pub seeded: bool,
     /// The highest Broker revision of a view the section was compared with. An open order
     /// the section does not track is adopted only from a newer view: a view at or below it
@@ -518,21 +520,6 @@ impl KernelCheckpointV6 {
         self.state_sha256 = kernel_checkpoint_v6_sha256(&self);
         self
     }
-}
-
-/// A Decision V5 kernel checkpoint, in the V5 field order, as a host stored it before the V6
-/// cutover. Decode stored bytes into it with the codec that wrote them, then convert it with
-/// [`convert_v5_kernel_checkpoint`].
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
-pub struct KernelCheckpointV5Layout {
-    pub codec_profile: String,
-    pub codec_version: u32,
-    pub strategy_id: String,
-    pub strategy_profile: String,
-    pub profile_and_calculator_digest: String,
-    pub sequence: u64,
-    pub state: Vec<u8>,
-    pub state_sha256: [u8; 32],
 }
 
 #[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
@@ -999,6 +986,68 @@ pub struct DecisionResultV6 {
     pub telemetry: Vec<TelemetryEntryV6>,
 }
 
+/// A model's signed forecast errors (forecast − observed, °F) on a canonical oracle row, the
+/// fixed-point form of [`crate::supplied_v6::SuppliedOracleErrorDistributionV6`]: underflow
+/// below the first edge, one band per pair of edges (lower edge included), overflow at or above
+/// the last edge. Every scored forecast run adds one high and one low sample, so the histogram
+/// is run-weighted where MAE and bias weight days equally. Histograms merge by summing their
+/// counters.
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
+pub struct OracleErrorDistributionV6 {
+    /// [`ORACLE_ERROR_DISTRIBUTION_VERSION`].
+    pub version: String,
+    pub bin_edges_millionths: [i64; ORACLE_ERROR_BIN_EDGES],
+    pub high_counts: [u64; ORACLE_ERROR_BINS],
+    pub low_counts: [u64; ORACLE_ERROR_BINS],
+    /// The sum of `high_counts`, and separately of `low_counts`.
+    pub sample_count: u64,
+    /// Scored days the histogram covers; fewer than the row's `day_count` is partial coverage.
+    pub day_count: u16,
+}
+
+impl OracleErrorDistributionV6 {
+    /// Checks the distribution against its row's `day_count`. A context holding one that fails
+    /// is invalid, so the host drops a malformed provider distribution to `None` first.
+    pub fn validate(&self, row_day_count: Option<u16>) -> Result<(), DecisionV6Error> {
+        if valid_error_distribution(
+            &self.version,
+            &self.bin_edges_millionths,
+            [&self.high_counts, &self.low_counts],
+            self.sample_count,
+            i64::from(self.day_count),
+            row_day_count.map(i64::from),
+        ) {
+            Ok(())
+        } else {
+            Err(DecisionV6Error::InvalidContract)
+        }
+    }
+}
+
+/// The rules of an oracle error distribution at either precision: the known version, strictly
+/// increasing edges, each counter array summing to `sample_count` ≥ 1 without overflow, and
+/// `1 ≤ day_count ≤` the row's `day_count` when the row has one.
+pub(crate) fn valid_error_distribution<E: PartialOrd>(
+    version: &str,
+    edges: &[E],
+    counts: [&[u64; ORACLE_ERROR_BINS]; 2],
+    sample_count: u64,
+    day_count: i64,
+    row_day_count: Option<i64>,
+) -> bool {
+    version == ORACLE_ERROR_DISTRIBUTION_VERSION
+        && edges.windows(2).all(|pair| pair[0] < pair[1])
+        && sample_count >= 1
+        && counts.iter().all(|counts| {
+            counts
+                .iter()
+                .try_fold(0_u64, |sum, count| sum.checked_add(*count))
+                == Some(sample_count)
+        })
+        && day_count >= 1
+        && row_day_count.is_none_or(|row| day_count <= row)
+}
+
 // ---------------------------------------------------------------------------------------------
 // Context validation
 // ---------------------------------------------------------------------------------------------
@@ -1022,6 +1071,7 @@ impl DecisionContextV6 {
             validate_kernel_checkpoint(&self.strategy, checkpoint)?;
         }
         crate::current_v6::validate(self)?;
+        validate_oracle_rows(self)?;
         validate_trigger(self)?;
         crate::supplied_v6::validate_supplied_inputs(&self.supplied)?;
         validate_supplied(self)?;
@@ -1760,6 +1810,28 @@ fn validate_owner_trigger(
 }
 
 /// Binds a present supplied block to the owner projection and the owner trigger.
+/// The error distributions of the owner projection's oracle rows and of the current tables.
+fn validate_oracle_rows(context: &DecisionContextV6) -> Result<(), DecisionV6Error> {
+    let current = context
+        .current_inputs
+        .iter()
+        .flat_map(|current| &current.stations)
+        .flat_map(|station| &station.oracles)
+        .map(|input| &input.table);
+    let tables = context
+        .owner_state
+        .stations
+        .iter()
+        .map(|station| &station.oracle)
+        .chain(current);
+    for row in tables.flat_map(|table| &table.rows) {
+        if let Some(distribution) = &row.error_distribution {
+            distribution.validate(row.day_count)?;
+        }
+    }
+    Ok(())
+}
+
 fn validate_supplied(context: &DecisionContextV6) -> Result<(), DecisionV6Error> {
     let supplied = &context.supplied;
     if supplied.is_absent() {
@@ -2763,44 +2835,6 @@ pub fn decode_order_update_evidence(
         return Err(DecisionV6Error::InvalidContract);
     }
     Ok(records)
-}
-
-/// Converts a checkpoint saved under Decision V5. The kernel's state bytes carry over unchanged
-/// (each kernel's codec owns its versions) and the runner section starts empty, so the first
-/// decision records the current Broker state as seen without emitting updates.
-pub fn convert_v5_kernel_checkpoint(
-    checkpoint: KernelCheckpointV5Layout,
-) -> Result<KernelCheckpointV6, DecisionV6Error> {
-    let mut hasher = Sha256::new();
-    hasher.update(V5_CHECKPOINT_DIGEST_DOMAIN);
-    hash_component(&mut hasher, checkpoint.codec_profile.as_bytes());
-    hasher.update(checkpoint.codec_version.to_be_bytes());
-    hash_component(&mut hasher, checkpoint.strategy_id.as_bytes());
-    hash_component(&mut hasher, checkpoint.strategy_profile.as_bytes());
-    hash_component(
-        &mut hasher,
-        checkpoint.profile_and_calculator_digest.as_bytes(),
-    );
-    hasher.update(checkpoint.sequence.to_be_bytes());
-    hash_component(&mut hasher, &checkpoint.state);
-    let v5_digest: [u8; 32] = hasher.finalize().into();
-    if checkpoint.state_sha256 != v5_digest {
-        return Err(DecisionV6Error::InvalidContract);
-    }
-    let converted = KernelCheckpointV6 {
-        codec_profile: checkpoint.codec_profile,
-        codec_version: checkpoint.codec_version,
-        strategy_id: checkpoint.strategy_id,
-        strategy_profile: checkpoint.strategy_profile,
-        profile_and_calculator_digest: checkpoint.profile_and_calculator_digest,
-        sequence: checkpoint.sequence,
-        state: checkpoint.state,
-        runner: RunnerSectionV6::default(),
-        state_sha256: [0; 32],
-    }
-    .seal();
-    converted.validate()?;
-    Ok(converted)
 }
 
 pub(crate) fn wire_config() -> bincode::config::Configuration<

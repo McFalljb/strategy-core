@@ -1260,54 +1260,60 @@ fn runner_section_entries_are_bounded_and_never_terminal() {
 }
 
 #[test]
-fn a_v5_checkpoint_converts_with_its_state_and_an_empty_runner_section() {
-    let mut v5 = KernelCheckpointV5Layout {
-        codec_profile: "trader-strategies.dsm-reaction-v12.v3".to_owned(),
-        codec_version: 3,
-        strategy_id: "dsm_reaction_v12".to_owned(),
-        strategy_profile: "daily-high".to_owned(),
-        profile_and_calculator_digest: DIGEST.to_owned(),
-        sequence: 41,
-        state: b"v12-private-state".to_vec(),
-        state_sha256: [0; 32],
+fn an_oracle_error_distribution_is_checked_against_its_row() {
+    let mut counts = [0; ORACLE_ERROR_BINS];
+    counts[10] = 4;
+    counts[11] = 6;
+    let valid = OracleErrorDistributionV6 {
+        version: ORACLE_ERROR_DISTRIBUTION_VERSION.to_owned(),
+        bin_edges_millionths: std::array::from_fn(|index| index as i64 * 1_000_000 - 10_500_000),
+        high_counts: counts,
+        low_counts: counts,
+        sample_count: 10,
+        day_count: 5,
     };
-    // The V5 digest: domain, then each field, variable ones length-prefixed.
-    let mut hasher = Sha256::new();
-    hasher.update(b"strategy-core/decision-v5/checkpoint/v1\0");
-    hash_component(&mut hasher, v5.codec_profile.as_bytes());
-    hasher.update(v5.codec_version.to_be_bytes());
-    hash_component(&mut hasher, v5.strategy_id.as_bytes());
-    hash_component(&mut hasher, v5.strategy_profile.as_bytes());
-    hash_component(&mut hasher, v5.profile_and_calculator_digest.as_bytes());
-    hasher.update(v5.sequence.to_be_bytes());
-    hash_component(&mut hasher, &v5.state);
-    v5.state_sha256 = hasher.finalize().into();
-
-    // A host decodes its stored bytes into the V5 layout with the codec it wrote them with.
-    let stored = bincode::encode_to_vec(&v5, bincode::config::standard()).unwrap();
-    let (decoded, _): (KernelCheckpointV5Layout, usize) =
-        bincode::decode_from_slice(&stored, bincode::config::standard()).unwrap();
-    let converted = convert_v5_kernel_checkpoint(decoded).unwrap();
-    assert_eq!(converted.state, b"v12-private-state");
-    assert_eq!(converted.sequence, 41);
-    assert_eq!(converted.codec_profile, v5.codec_profile);
-    assert_eq!(converted.codec_version, 3);
-    assert!(converted.runner.entries.is_empty());
+    assert_eq!(valid.validate(Some(7)), Ok(()));
+    assert_eq!(valid.validate(Some(5)), Ok(()));
     assert_eq!(
-        converted.state_sha256,
-        kernel_checkpoint_v6_sha256(&converted)
+        valid.validate(None),
+        Ok(()),
+        "a row without days bounds none"
     );
-    assert_ne!(
-        converted.state_sha256, v5.state_sha256,
-        "V6 digests its own domain"
-    );
-
-    let mut tampered = v5;
-    tampered.state.push(0);
-    assert_eq!(
-        convert_v5_kernel_checkpoint(tampered),
-        Err(DecisionV6Error::InvalidContract)
-    );
+    type Mutation = fn(&mut OracleErrorDistributionV6);
+    let cases: [(&str, Mutation); 8] = [
+        ("unknown version", |d| {
+            d.version = "signed-error-f-v2".to_owned()
+        }),
+        ("edges not increasing", |d| {
+            d.bin_edges_millionths[5] = d.bin_edges_millionths[4];
+        }),
+        ("high counts miss the sample count", |d| {
+            d.high_counts[0] += 1
+        }),
+        ("low counts miss the sample count", |d| {
+            d.low_counts[11] -= 1
+        }),
+        ("no samples", |d| {
+            d.high_counts = [0; ORACLE_ERROR_BINS];
+            d.low_counts = [0; ORACLE_ERROR_BINS];
+            d.sample_count = 0;
+        }),
+        ("counters overflow to the sample count", |d| {
+            d.high_counts[0] = u64::MAX;
+            d.high_counts[1] = 1;
+        }),
+        ("no covered day", |d| d.day_count = 0),
+        ("more days than the row", |d| d.day_count = 8),
+    ];
+    for (case, mutate) in cases {
+        let mut distribution = valid.clone();
+        mutate(&mut distribution);
+        assert_eq!(
+            distribution.validate(Some(7)),
+            Err(DecisionV6Error::InvalidContract),
+            "{case}"
+        );
+    }
 }
 
 #[test]

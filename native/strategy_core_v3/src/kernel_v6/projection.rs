@@ -9,9 +9,9 @@ use chrono::{DateTime, TimeZone, Utc};
 use strategy_core_kernel::{
     Book, BookLevel, ClimateDay, ComponentAuthority, ComponentMeta, ContractQuantity,
     DailyExtremes, EventProvenance, Extreme, FinalFact, Forecast, ForecastModel, ForecastPoint,
-    LastTrade, MarketComponents, MarketLifecycle, MarketState, Observation, OracleScore,
-    OracleTable, Report, StationComponents, StationIdentity, StationState, StationWeatherView,
-    TickerQuote, ValueOrigin, WeatherEvent, WeatherEventSource,
+    LastTrade, MarketComponents, MarketLifecycle, MarketState, Observation,
+    OracleErrorDistribution, OracleScore, OracleTable, Report, StationComponents, StationIdentity,
+    StationState, StationWeatherView, TickerQuote, ValueOrigin, WeatherEvent, WeatherEventSource,
 };
 
 use super::KernelTransactionError;
@@ -734,6 +734,18 @@ pub(super) fn derived_oracle(
                 high_bias: millionths(row.high_bias_millionths),
                 low_bias: millionths(row.low_bias_millionths),
                 day_count: row.day_count.map(i64::from),
+                error_distribution: row.error_distribution.as_ref().map(|distribution| {
+                    OracleErrorDistribution {
+                        version: distribution.version.clone(),
+                        bin_edges_f: distribution
+                            .bin_edges_millionths
+                            .map(|edge| edge as f64 / 1_000_000.0),
+                        high_counts: distribution.high_counts,
+                        low_counts: distribution.low_counts,
+                        sample_count: distribution.sample_count,
+                        day_count: i64::from(distribution.day_count),
+                    }
+                }),
             })
             .collect(),
         meta: ComponentMeta::default(),

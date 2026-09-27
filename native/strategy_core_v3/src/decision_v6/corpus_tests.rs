@@ -14,7 +14,11 @@ use strategy_core_kernel::{BrokerFinancialState, ContractQuantity, fees};
 
 use super::tests::*;
 use super::*;
-use crate::decision_v4::{StationV4, TriggerV4};
+use crate::decision_v4::{OracleQueryV4, OracleRowV4, StationV4, TriggerV4};
+use crate::supplied_v6::{
+    DecimalV6, SUPPLIED_INPUTS_CONTRACT_VERSION, SuppliedOracleErrorDistributionV6,
+    SuppliedOracleScoreV6, SuppliedOracleTableV6, SuppliedStationV6,
+};
 
 const SCHEMA: &str = "strategy-core-decision-v6-corpus/1";
 
@@ -102,29 +106,114 @@ fn multi_station_context() -> DecisionContextV6 {
     context
 }
 
-fn converted_context() -> DecisionContextV6 {
+/// Five covered days of the row's seven, 10 runs: high errors from -3 °F to +2 °F, low errors
+/// from -2 °F to +1 °F (bin `k` of 1..=21 is `[k - 11.5, k - 10.5)`).
+const HIGH_COUNTS: [u64; 23] = [
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+];
+const LOW_COUNTS: [u64; 23] = [
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 4, 4, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+];
+
+/// KSEA's day-of oracle table in both views: `hrrr` with an error distribution, `gfs`
+/// without one (`None` is unavailable, never zero error).
+fn oracle_distribution_context() -> DecisionContextV6 {
     let mut context = context();
-    let mut v5 = KernelCheckpointV5Layout {
-        codec_profile: "dsm-reaction-v10-checkpoint".to_owned(),
-        codec_version: 1,
-        strategy_id: "dsm_reaction_v10".to_owned(),
-        strategy_profile: "daily-high".to_owned(),
-        profile_and_calculator_digest: DIGEST.to_owned(),
-        sequence: 17,
-        state: b"v5-kernel-state".to_vec(),
-        state_sha256: [0; 32],
+    let edges = std::array::from_fn::<i64, 22, _>(|index| index as i64 * 1_000_000 - 10_500_000);
+    let station = &mut context.owner_state.stations[0];
+    station.oracle.query = OracleQueryV4 {
+        station_id: "KSEA".to_owned(),
+        mode: "day_of".to_owned(),
+        days: 7,
+        ..Default::default()
     };
-    let mut hasher = Sha256::new();
-    hasher.update(V5_CHECKPOINT_DIGEST_DOMAIN);
-    hash_component(&mut hasher, v5.codec_profile.as_bytes());
-    hasher.update(v5.codec_version.to_be_bytes());
-    hash_component(&mut hasher, v5.strategy_id.as_bytes());
-    hash_component(&mut hasher, v5.strategy_profile.as_bytes());
-    hash_component(&mut hasher, v5.profile_and_calculator_digest.as_bytes());
-    hasher.update(v5.sequence.to_be_bytes());
-    hash_component(&mut hasher, &v5.state);
-    v5.state_sha256 = hasher.finalize().into();
-    context.kernel_checkpoint = Some(convert_v5_kernel_checkpoint(v5).unwrap());
+    station.oracle.range_start = "2026-08-23".to_owned();
+    station.oracle.range_end = "2026-08-29".to_owned();
+    station.oracle.rows = vec![
+        OracleRowV4 {
+            rank: 1,
+            model_id: "hrrr".to_owned(),
+            model_name: "HRRR".to_owned(),
+            high_mae_millionths: Some(1_250_000),
+            high_bias_millionths: Some(250_000),
+            day_count: Some(7),
+            error_distribution: Some(OracleErrorDistributionV6 {
+                version: ORACLE_ERROR_DISTRIBUTION_VERSION.to_owned(),
+                bin_edges_millionths: edges,
+                high_counts: HIGH_COUNTS,
+                low_counts: LOW_COUNTS,
+                sample_count: 10,
+                day_count: 5,
+            }),
+            ..Default::default()
+        },
+        OracleRowV4 {
+            rank: 2,
+            model_id: "gfs".to_owned(),
+            model_name: "GFS".to_owned(),
+            high_mae_millionths: Some(1_750_000),
+            day_count: Some(7),
+            error_distribution: None,
+            ..Default::default()
+        },
+    ];
+    let supplied_edges =
+        edges.map(|edge| DecimalV6::parse(&(edge as f64 / 1e6).to_string()).unwrap());
+    context.supplied = SuppliedInputsV6 {
+        contract_version: SUPPLIED_INPUTS_CONTRACT_VERSION.to_owned(),
+        stations: vec![SuppliedStationV6 {
+            station_id: "KSEA".to_owned(),
+            oracle_tables: vec![SuppliedOracleTableV6 {
+                source: "minutetemp.rest.oracle".to_owned(),
+                received_at_unix_ns: 1_788_000_000_000_000_000,
+                station_id: "KSEA".to_owned(),
+                range_start: "2026-08-23".to_owned(),
+                range_end: "2026-08-29".to_owned(),
+                days_requested: Some(7),
+                score_mode: Some("day_of".to_owned()),
+                rank_by: Some("high".to_owned()),
+                scores: vec![
+                    SuppliedOracleScoreV6 {
+                        rank: Some(1),
+                        model_id: "hrrr".to_owned(),
+                        model_name: "HRRR".to_owned(),
+                        high_mae: DecimalV6::parse("1.25").ok(),
+                        high_bias: DecimalV6::parse("0.25").ok(),
+                        day_count: Some(7),
+                        error_distribution: Some(SuppliedOracleErrorDistributionV6 {
+                            version: ORACLE_ERROR_DISTRIBUTION_VERSION.to_owned(),
+                            bin_edges_f: supplied_edges,
+                            high_counts: HIGH_COUNTS,
+                            low_counts: LOW_COUNTS,
+                            sample_count: 10,
+                            day_count: 5,
+                        }),
+                        ..Default::default()
+                    },
+                    SuppliedOracleScoreV6 {
+                        rank: Some(2),
+                        model_id: "gfs".to_owned(),
+                        model_name: "GFS".to_owned(),
+                        high_mae: DecimalV6::parse("1.75").ok(),
+                        day_count: Some(7),
+                        error_distribution: None,
+                        ..Default::default()
+                    },
+                ],
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+        originating_event: None,
+    };
+    context
+}
+
+/// The same table with no distribution on any row.
+fn oracle_without_distribution_context() -> DecisionContextV6 {
+    let mut context = oracle_distribution_context();
+    context.owner_state.stations[0].oracle.rows[0].error_distribution = None;
+    context.supplied.stations[0].oracle_tables[0].scores[0].error_distribution = None;
     context
 }
 
@@ -227,13 +316,17 @@ fn valid_contexts() -> Vec<(&'static str, DecisionContextV6)> {
         ("daily-high-recovery", context()),
         ("receipts-broker-state", receipts_context()),
         ("multi-station-observation", multi_station_context()),
-        ("converted-v5-checkpoint", converted_context()),
         ("live-request-grants", live_context()),
         ("row-limit-view", row_limit_case().0),
         ("truncated-order-view", truncated_context()),
         ("provider-rejection-reason", provider_rejection_context()),
         ("external-response-ok", external_response_context()),
         ("external-response-abandoned", abandoned_response_context()),
+        ("oracle-error-distribution", oracle_distribution_context()),
+        (
+            "oracle-without-error-distribution",
+            oracle_without_distribution_context(),
+        ),
     ]
 }
 
@@ -308,55 +401,6 @@ fn rejected_result(context: &DecisionContextV6) -> DecisionResultV6 {
     }
 }
 
-fn converted_result(context: &DecisionContextV6) -> DecisionResultV6 {
-    let previous = context.kernel_checkpoint.as_ref().unwrap();
-    let order = &context.broker.orders[0];
-    // The open V5 order is recorded as seen without an update.
-    let adopted = RunnerEntryV6 {
-        command_id: order.command_id.clone(),
-        kind: BrokerCommandKindV6::PlaceOrder,
-        client_order_id: Some(order.provider_client_id.clone()),
-        order_id: Some(order.order_id.clone()),
-        market_id: Some(order.market_id.clone()),
-        action: Some(order.action),
-        side: Some(order.side),
-        requested_quantity_hundredths: order.quantity_hundredths,
-        last_status: Some(OrderUpdateStatusV6::PartiallyFilled),
-        filled_quantity_hundredths: order.filled_quantity_hundredths,
-        order_revision: order.revision,
-        issued_broker_revision: 0,
-        vanished: false,
-        vanished_revision: 0,
-        absent_views: 0,
-        delivery_failures: 0,
-        delivery_deferrals: 0,
-    };
-    DecisionResultV6 {
-        delivery_id: context.owner_state.delivery_id.clone(),
-        sleeve_identity: context.owner_state.sleeve.sleeve_id.clone(),
-        state_fence: fence(context),
-        expected_broker_revision: context.broker.revision,
-        disposition: DecisionDispositionV6::Completed,
-        kernel_checkpoint: Some(
-            KernelCheckpointV6 {
-                sequence: previous.sequence + 1,
-                runner: RunnerSectionV6 {
-                    seeded: true,
-                    newest_view_revision: 0,
-                    entries: vec![adopted],
-                },
-                ..previous.clone()
-            }
-            .seal(),
-        ),
-        commands: vec![],
-        acknowledged_command_ids: vec![],
-        evidence: vec![],
-        diagnostics: vec![],
-        telemetry: vec![],
-    }
-}
-
 /// `(id, context id, result)`.
 fn valid_results() -> Vec<(&'static str, &'static str, DecisionResultV6)> {
     vec![
@@ -374,11 +418,6 @@ fn valid_results() -> Vec<(&'static str, &'static str, DecisionResultV6)> {
             "rejected-keeps-checkpoint",
             "daily-high-recovery",
             rejected_result(&context()),
-        ),
-        (
-            "converted-checkpoint-adopts-open-order",
-            "converted-v5-checkpoint",
-            converted_result(&converted_context()),
         ),
         (
             "live-cancel-all-expands-per-order",
@@ -599,6 +638,24 @@ fn invalid_contexts() -> Vec<(&'static str, DecisionV6Error, ContextMutation)> {
                         body: vec![b' '; MAX_EXTERNAL_RESPONSE_BODY_BYTES + 1],
                     },
                 };
+            },
+        ),
+        (
+            "oracle-error-counts-miss-sample-count",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = oracle_distribution_context();
+                let row = &mut context.owner_state.stations[0].oracle.rows[0];
+                row.error_distribution.as_mut().unwrap().high_counts[11] += 1;
+            },
+        ),
+        (
+            "supplied-oracle-error-counts-miss-sample-count",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = oracle_distribution_context();
+                let score = &mut context.supplied.stations[0].oracle_tables[0].scores[0];
+                score.error_distribution.as_mut().unwrap().low_counts[11] += 1;
             },
         ),
     ]
@@ -1199,7 +1256,7 @@ fn v6_corpus_is_current_and_every_vector_decodes_to_its_verdict() {
         }
     }
     let invalid = recorded["invalid"].as_array().unwrap();
-    assert_eq!(invalid.len(), 43);
+    assert_eq!(invalid.len(), 45);
     for entry in invalid {
         let id = entry["id"].as_str().unwrap();
         let bytes = bytes(entry);
@@ -1268,14 +1325,6 @@ fn corpus_builders_are_what_the_ids_say() {
     assert_ne!(
         multi.strategy.station_id, "KBFI",
         "the trigger is not the primary station"
-    );
-    assert!(
-        converted_context()
-            .kernel_checkpoint
-            .unwrap()
-            .runner
-            .entries
-            .is_empty()
     );
     let _: StationV4 = station("KSEA");
 }

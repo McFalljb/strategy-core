@@ -20,9 +20,10 @@ use crate::events::{
     WeatherEventSourceView, WeatherEventView,
 };
 use crate::supplied::{
-    EventEnvelope, ExtremeKind, SuppliedDailyExtremes, SuppliedExtreme, SuppliedForecast,
-    SuppliedForecastModel, SuppliedForecastPoint, SuppliedObservation, SuppliedOracleScore,
-    SuppliedOracleTable, SuppliedReport, SuppliedWeatherEvent, SuppliedWeatherEventSource,
+    EventEnvelope, ExtremeKind, ORACLE_ERROR_BIN_EDGES, ORACLE_ERROR_BINS, SuppliedDailyExtremes,
+    SuppliedExtreme, SuppliedForecast, SuppliedForecastModel, SuppliedForecastPoint,
+    SuppliedObservation, SuppliedOracleErrorDistribution, SuppliedOracleScore, SuppliedOracleTable,
+    SuppliedReport, SuppliedWeatherEvent, SuppliedWeatherEventSource,
 };
 
 /// Host authority of one state component at delivery time.
@@ -828,6 +829,36 @@ pub struct OracleScore {
     pub high_bias: Option<f64>,
     pub low_bias: Option<f64>,
     pub day_count: Option<i64>,
+    /// `None` means unavailable, never zero error.
+    pub error_distribution: Option<OracleErrorDistribution>,
+}
+
+/// A model's signed forecast errors (forecast − observed, °F) as a histogram: underflow below
+/// the first edge, one band per pair of edges (lower edge included), overflow at or above the
+/// last edge. Run-weighted, unlike MAE and bias; merge histograms by summing their counters.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct OracleErrorDistribution {
+    pub version: String,
+    pub bin_edges_f: [f64; ORACLE_ERROR_BIN_EDGES],
+    pub high_counts: [u64; ORACLE_ERROR_BINS],
+    pub low_counts: [u64; ORACLE_ERROR_BINS],
+    /// The sum of `high_counts`, and separately of `low_counts`.
+    pub sample_count: u64,
+    /// Scored days the histogram covers; fewer than the row's `day_count` is partial coverage.
+    pub day_count: i64,
+}
+
+impl OracleErrorDistribution {
+    pub fn from_supplied(distribution: &SuppliedOracleErrorDistribution) -> Self {
+        Self {
+            version: distribution.version.clone(),
+            bin_edges_f: distribution.bin_edges_f.map(Decimal::to_f64),
+            high_counts: distribution.high_counts,
+            low_counts: distribution.low_counts,
+            sample_count: distribution.sample_count,
+            day_count: distribution.day_count,
+        }
+    }
 }
 
 impl OracleScore {
@@ -843,6 +874,10 @@ impl OracleScore {
             high_bias: f64_of(score.high_bias),
             low_bias: f64_of(score.low_bias),
             day_count: score.day_count,
+            error_distribution: score
+                .error_distribution
+                .as_ref()
+                .map(OracleErrorDistribution::from_supplied),
         }
     }
 
@@ -857,6 +892,7 @@ impl OracleScore {
             high_bias: self.high_bias,
             low_bias: self.low_bias,
             day_count: self.day_count,
+            error_distribution: self.error_distribution.as_ref(),
         }
     }
 }

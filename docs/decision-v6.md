@@ -318,9 +318,7 @@ when the provider gave none. Kernels classify transient rejections by that text;
 result's evidence records at most 512 bytes of it, cut on a character boundary. A cancellation request or a recovery hold is not news of its own: the order keeps
 its last status (`PartiallyFilled` once anything filled).
 
-Seeding: a Sleeve's first decision (or the first after `convert_v5_kernel_checkpoint`,
-which keeps the kernel's bytes and starts an unseeded section), over a complete or a
-truncated view, records the open orders as seen, from their current status, without
+Seeding: a Sleeve's first decision, over a complete or a truncated view, records the open orders as seen, from their current status, without
 updates, so no Strategy receives a burst of updates for old orders. Afterwards an open
 order the section does not track (its tombstone expired or was evicted) is adopted the same
 way from a view newer than `newest_view_revision`, the highest Broker revision the section
@@ -414,6 +412,35 @@ Numbers are `DecimalV6 { coefficient, scale }`, supplied times are `*_unix_ns`, 
 embedded V4 owner projection keeps its frozen positional observation and weather layout
 (`decision_v4::observation_codec`), encoded with the enclosing variable-integer
 configuration.
+
+## Oracle error distributions
+
+Every oracle row carries `error_distribution`, MinuteTemp's `OracleErrorDistribution`: the
+canonical row (`OracleRowV4`, in the owner projection and in `current_inputs`) as
+`Option<OracleErrorDistributionV6>` with edges in millionths of a degree, the supplied score
+(`SuppliedOracleScoreV6`) as `Option<SuppliedOracleErrorDistributionV6>` with `DecimalV6`
+edges, and the kernel's `OracleScore` / `OracleModelScoreSnapshot` as
+`Option<OracleErrorDistribution>` with `f64` edges.
+
+- The error is forecast − observed in °F (positive is warm). `version` is
+  `signed-error-f-v1`. The 22 `bin_edges` run from −10.5 to +10.5; `high_counts` and
+  `low_counts` hold 23 counters each: underflow below the first edge, 21 one-degree bands
+  that include their lower edge, overflow at or above the last edge.
+- Each scored forecast run adds one high and one low sample, so the histogram is
+  run-weighted; the row's MAE and bias weight days equally. `sample_count` is the sum of
+  `high_counts`, and separately of `low_counts` (not their combined sum). `day_count` counts
+  the days with histogram coverage; fewer than the row's `day_count` means partial coverage.
+- `None` means the distribution is unavailable, never zero error.
+- Merge distributions (across days or tables) by summing their counters, never by averaging
+  percentiles.
+
+Validation (`OracleErrorDistributionV6::validate`, `supplied_v6::validate_error_distribution`)
+requires the known version, strictly increasing edges (canonical `DecimalV6` edges when
+supplied), both counter arrays summing to `sample_count` ≥ 1 without overflow, and
+`1 ≤ day_count ≤` the row's `day_count` when the row has one. A context holding a
+distribution that fails is `InvalidContract`, so the host drops a malformed provider
+distribution to `None` (keeping the row's scores) before it builds the context. Supplied
+scores and canonical rows are not compared value by value, as for the other oracle fields.
 
 ## Conformance
 

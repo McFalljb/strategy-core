@@ -50,13 +50,15 @@ pub use events::{
 pub use state::{
     Book, BookLevel, BrokerFinancialState, ClimateDay, ComponentAuthority, ComponentMeta,
     DailyExtremes, EventProvenance, Extreme, FinalFact, Forecast, ForecastModel, ForecastPoint,
-    LastTrade, MarketComponents, MarketLifecycle, MarketState, Observation, OracleScore,
-    OracleTable, Report, StationComponents, StationIdentity, StationState, TickerQuote,
-    WeatherEvent, WeatherEventSource,
+    LastTrade, MarketComponents, MarketLifecycle, MarketState, Observation,
+    OracleErrorDistribution, OracleScore, OracleTable, Report, StationComponents, StationIdentity,
+    StationState, TickerQuote, WeatherEvent, WeatherEventSource,
 };
 pub use supplied::{
-    EventEnvelope, ExtremeKind, SUPPLIED_INPUTS_CONTRACT_VERSION, SuppliedDailyExtremes,
+    EventEnvelope, ExtremeKind, ORACLE_ERROR_BIN_EDGES, ORACLE_ERROR_BINS,
+    ORACLE_ERROR_DISTRIBUTION_VERSION, SUPPLIED_INPUTS_CONTRACT_VERSION, SuppliedDailyExtremes,
     SuppliedEvent, SuppliedExtreme, SuppliedForecast, SuppliedForecastModel, SuppliedForecastPoint,
-    SuppliedInputs, SuppliedObservation, SuppliedOracleScore, SuppliedOracleTable, SuppliedReport,
-    SuppliedStation, SuppliedWeatherEvent, SuppliedWeatherEventSource,
+    SuppliedInputs, SuppliedObservation, SuppliedOracleErrorDistribution, SuppliedOracleScore,
+    SuppliedOracleTable, SuppliedReport, SuppliedStation, SuppliedWeatherEvent,
+    SuppliedWeatherEventSource,
 };
