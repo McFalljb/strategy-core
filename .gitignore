@@ -1,31 +1,5 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-*.egg-info/
-*.egg
-dist/
-build/
-.eggs/
+# Rust
 target/
-
-# Virtual environments
-.venv/
-venv/
-
-# Type checking
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-
-# Ruff
-.ruff_cache/
 
 # IDE
 .vscode/

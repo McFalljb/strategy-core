@@ -1,7 +1,6 @@
 [workspace]
 resolver = "3"
 members = [
-    "strategy_core",
     "strategy_core_kernel",
     "strategy_core_v3",
 ]

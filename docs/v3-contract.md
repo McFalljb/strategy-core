@@ -1,6 +1,6 @@
 # Strategy Core V3 semantic contract
 
-`strategy_core_v3` and the Rust `strategy-core-v3` crate are separately named, runtime-neutral V3 surfaces. They do not replace or change the existing Python `strategy_core` or Rust `strategy-core`/`strategy-core-kernel` APIs.
+The root module of the Rust `strategy-core-v3` crate (`native/strategy_core_v3`) defines the runtime-neutral V3 semantics: the canonical profile and the bounded V3 value types. The same crate carries the Decision V6 wire and, with the `kernel` feature, its runner ([Decision V6](decision-v6.md)), plus the frozen V4 owner-projection codec (`decision_v4`) that V6 contexts embed. The kernel API itself is `strategy-core-kernel` ([contract map](contract-map.md)).
 
 ## Ownership boundary
 
@@ -12,7 +12,7 @@ A `ScheduleTimerRequest` is only Strategy meaning: key, signed UTC scheduled epo
 
 ## Bounds
 
-The profile constants exported in both languages are normative:
+The profile constants the crate exports are normative:
 
 | Item | Bound |
 |---|---:|
@@ -44,8 +44,8 @@ A frame is one ASCII type byte, a four-byte unsigned big-endian payload length, 
 
 Canonical encoding enforces the complete byte bound incrementally and allows at most 64 nested list/map levels (a root scalar is depth 0). Exceeding either limit fails with a normalized canonical error before recursive growth can become unbounded.
 
-`conformance/v3/vectors.json` is the shared Python/Rust corpus. Its manifest pins the exact corpus digest and includes Unicode, map order, signed i128 boundaries and overflow, negative/positive instants, decimal, timer schedule/cancel, diagnostic boundary, size/nesting overflow, and normalization cases.
+`conformance/v3/vectors.json` is the profile's corpus, checked by `native/strategy_core_v3/tests/conformance.rs`. It includes Unicode, map order, signed i128 boundaries and overflow, negative/positive instants, decimal, timer schedule/cancel, diagnostic boundary, size/nesting overflow, and normalization cases.
 
 ## Dependency exclusions
 
-The Python package import allowlist is exact: `__future__`, `collections`, `dataclasses`, `enum`, `hashlib`, `re`, and `unicodedata`, plus package-relative imports. The Rust crate dependency allowlist is exactly `sha2` and `unicode-normalization`, with `serde_json` as its sole dev dependency. Any other dependency—including requests/Trader runtime or reqwest/tokio edges—is rejected by both conformance suites.
+The crate's required dependencies are exactly `bincode`, `sha2`, `strategy-core-kernel` and `unicode-normalization`. Its only feature, `kernel`, adds the optional `chrono` and `serde_json`, and `serde_json` is its sole dev dependency. The conformance suite enforces this allowlist and rejects any other dependency, such as a Trader runtime, reqwest or tokio edge.
