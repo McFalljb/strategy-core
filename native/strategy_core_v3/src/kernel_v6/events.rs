@@ -3,15 +3,15 @@
 use chrono::{TimeZone, Utc};
 use strategy_core_kernel::{
     EventProvenance, ExternalErrorKind, ExternalOutcome, ExternalResponse, Extreme,
-    ForecastUpdated, KernelResult, Observation, OracleScoresUpdated, PriceUpdate, Report,
-    StrategyEvent, StrategyEventView, StrategyKernelContext, TimerWake, WeatherEvent,
+    ForecastUpdated, KernelResult, NativeKernel, Observation, OracleScoresUpdated, PriceUpdate,
+    Report, StrategyEvent, StrategyEventView, StrategyKernelContext, TimerWake, WeatherEvent,
 };
 
+use super::KernelTransactionError;
 use super::projection::{
     component_meta, derived_extreme, derived_observation, derived_report, derived_weather_event,
     market_state, millis, station_state,
 };
-use super::{KernelTransactionError, TransactionKernel};
 use crate::decision_v4::{RankByV4, StationV4};
 use crate::decision_v6::{
     DecisionContextV6, DecisionV6Error, ExternalErrorKindV6, ExternalOutcomeV6, OwnerTriggerV6,
@@ -370,7 +370,7 @@ impl KernelEvent {
         self.event.as_ref()
     }
 
-    pub fn run<K: TransactionKernel>(
+    pub fn run<K: NativeKernel + ?Sized>(
         &self,
         kernel: &mut K,
         context: &mut dyn StrategyKernelContext,

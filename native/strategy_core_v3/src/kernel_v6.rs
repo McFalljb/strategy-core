@@ -4,7 +4,24 @@
 //! to a `strategy_core_kernel::NativeKernel` and how one run becomes a [`DecisionResultV6`].
 //! Hosts and Strategy executables consume it instead of re-interpreting fields.
 //!
-//! One run per event:
+//! In-process replay hosts can instead use [`run_native_decision`]: retain the bot instance,
+//! borrow host-owned canonical views directly, and fail the instance on error without
+//! checkpointing or rollback. It shares the host code below (tickets, provisional view, order
+//! updates, bounds, external requests and their acknowledgement). The checkpoint/IPC
+//! transaction policy below is not a NativeKernel requirement.
+//!
+//! Native admission is the transaction's (`KernelHost::reserve`): commands are admitted
+//! against the same result-size reservation (the encoded order-update evidence and
+//! acknowledgeable ids of the views, the kernel's state at `MAX_KERNEL_CHECKPOINT_BYTES`, the
+//! fixed fields) and the same runner slots (live entries a failed update could bring back), so
+//! a native invocation admits exactly the commands a transaction over the same views admits.
+//! What stays transactional only: the checkpoint actually encoded (a kernel whose state
+//! exceeds `MAX_KERNEL_CHECKPOINT_BYTES`, or whose factory cannot snapshot or restore it,
+//! fails or rolls back a transaction but not a native invocation); per-update rollback,
+//! retry and deferral (a native kernel error invalidates the instance instead); and result
+//! assembly (validation and telemetry shedding, which never drops commands).
+//!
+//! One transactional run per event:
 //! 1. Restore the kernel from its checkpoint (or create it).
 //! 2. Compare the context's Broker state and command receipts with the checkpoint's runner
 //!    section and deliver one `OrderUpdate` per change, in the order the commands were issued
@@ -31,6 +48,7 @@
 //!   be any contributor station of the Sleeve's event.
 
 mod events;
+mod native;
 mod projection;
 mod updates;
 
@@ -51,6 +69,7 @@ use strategy_core_kernel::{
 };
 
 pub use self::events::{KernelEvent, external_response};
+pub use self::native::{NativeDecision, NativeIdentity, NativeInvocation, run_native_decision};
 use self::projection::{
     hundredths_quantity, market_state, millis, price, price_micros, station_state,
 };
@@ -162,27 +181,15 @@ pub fn run_transaction<F: TransactionKernelFactory>(
     // Deferred updates first (the most deferred first), the others in issue order; a
     // cancel's update never before its target's.
     let delivery_order = derived.delivery_order();
-    let evidence = wire::order_update_evidence(
-        &delivery_order
-            .iter()
-            .flatten()
-            .filter_map(|index| derived.steps[*index].update.as_ref())
-            .map(evidence_record)
-            .collect::<Vec<_>>(),
-    )?;
-    let acknowledgeable = updates::acknowledgeable(context);
-    // Everything in the result but the commands, the runner entries and the kernel's
-    // telemetry, with the kernel's state at its bound: commands are admitted against the rest.
-    let fixed_bytes = wire::encoded_len(&evidence)
-        + wire::encoded_len(&acknowledgeable)
-        + wire::MAX_KERNEL_CHECKPOINT_BYTES
-        + RESULT_OVERHEAD_BYTES;
+    let evidence = update_evidence(&derived, &delivery_order)?;
+    let acknowledgeable = updates::acknowledgeable(
+        &context.broker,
+        &context.command_receipts,
+        context.external_response_id(),
+    );
     let mut host = KernelHost::new(context, derived.entries(), !acknowledgeable.is_empty())?;
     host.market_buy_cap = Some(&market_buy_cap);
-    host.fixed_bytes = fixed_bytes;
-    host.reinstatable_live = derived.reinstatable_live();
-    let issued_from = host.runner.len();
-    host.derived_entries = issued_from;
+    let issued_from = host.reserve(&derived, &evidence, &acknowledgeable);
 
     // Each update is delivered on its own. When the kernel fails on one, the kernel and the
     // decision go back to how they were before it and the failure is recorded; the update is
@@ -376,7 +383,7 @@ pub fn run_transaction<F: TransactionKernelFactory>(
                 .seal(),
             );
             result.commands = std::mem::take(&mut host.commands);
-            append_notes(&notes, &mut result);
+            append_notes(&notes, &mut result.diagnostics);
             overflow = append_outputs(&host.outputs, None, &mut result);
         }
         Err(error) => {
@@ -426,7 +433,7 @@ pub fn strategy_parameters_json(
     Ok(parameters)
 }
 
-fn parameter_value(value: &StrategyParameterValueV6) -> ParameterValue {
+pub fn parameter_value(value: &StrategyParameterValueV6) -> ParameterValue {
     match value {
         StrategyParameterValueV6::Null => ParameterValue::Null,
         StrategyParameterValueV6::Bool(value) => ParameterValue::Bool(*value),
@@ -440,7 +447,7 @@ fn parameter_value(value: &StrategyParameterValueV6) -> ParameterValue {
     }
 }
 
-fn parameter_json(
+pub fn parameter_json(
     value: &StrategyParameterValueV6,
 ) -> Result<serde_json::Value, KernelTransactionError> {
     Ok(match value {
@@ -456,6 +463,21 @@ fn parameter_json(
         }
         StrategyParameterValueV6::String(value) => serde_json::Value::String(value.clone()),
     })
+}
+
+/// The result's evidence of the derived updates, in delivery order.
+fn update_evidence(
+    derived: &updates::Derived,
+    delivery_order: &[Vec<usize>],
+) -> Result<Vec<ResultEvidenceV6>, DecisionV6Error> {
+    wire::order_update_evidence(
+        &delivery_order
+            .iter()
+            .flatten()
+            .filter_map(|index| derived.steps[*index].update.as_ref())
+            .map(evidence_record)
+            .collect::<Vec<_>>(),
+    )
 }
 
 /// The update as recorded in the result's evidence: a refusal reason is cut to
@@ -532,31 +554,8 @@ impl KernelSnapshot {
             .owner_state
             .stations
             .iter()
-            .map(|station| {
-                let station_id = &station.identity.station_id;
-                station_state(
-                    station,
-                    context.supplied.station(station_id),
-                    context
-                        .current_weather
-                        .iter()
-                        .flatten()
-                        .find(|weather| weather.station_id == *station_id)
-                        .map(|weather| &weather.facts),
-                    context
-                        .forecast_issuance
-                        .iter()
-                        .flatten()
-                        .find(|issued| issued.station_id == *station_id)
-                        .map(|issued| issued.models.as_slice()),
-                    context.current_inputs.as_ref().and_then(|current| {
-                        current
-                            .stations
-                            .iter()
-                            .find(|input| input.station_id == *station_id)
-                    }),
-                )
-            })
+            .enumerate()
+            .map(|(index, _)| Self::station_at(context, index))
             .collect::<Result<Vec<_>, _>>()?;
         let markets = context
             .owner_state
@@ -564,6 +563,43 @@ impl KernelSnapshot {
             .iter()
             .map(|market| market_state(market, &context.strategy.event_date, context))
             .collect::<Result<Vec<_>, _>>()?;
+        let mut snapshot = Self::metadata(context)?;
+        snapshot.stations = stations;
+        snapshot.markets = markets;
+        Ok(snapshot)
+    }
+
+    fn station_at(
+        context: &DecisionContextV6,
+        index: usize,
+    ) -> Result<StationState, KernelTransactionError> {
+        let station = &context.owner_state.stations[index];
+        let station_id = &station.identity.station_id;
+        station_state(
+            station,
+            context.supplied.station(station_id),
+            context
+                .current_weather
+                .iter()
+                .flatten()
+                .find(|weather| weather.station_id == *station_id)
+                .map(|weather| &weather.facts),
+            context
+                .forecast_issuance
+                .iter()
+                .flatten()
+                .find(|issued| issued.station_id == *station_id)
+                .map(|issued| issued.models.as_slice()),
+            context.current_inputs.as_ref().and_then(|current| {
+                current
+                    .stations
+                    .iter()
+                    .find(|input| input.station_id == *station_id)
+            }),
+        )
+    }
+
+    fn metadata(context: &DecisionContextV6) -> Result<Self, KernelTransactionError> {
         let mut capabilities = KernelCapabilities::default();
         capabilities.mode = Some(match context.deployment_mode {
             DeploymentModeV6::Paper => RuntimeMode::Paper,
@@ -579,8 +615,8 @@ impl KernelSnapshot {
         Ok(Self {
             now: millis(Some(context.decision_time_unix_ms))?
                 .ok_or(KernelTransactionError::InvalidTime)?,
-            stations,
-            markets,
+            stations: Vec::new(),
+            markets: Vec::new(),
             parameters: context
                 .strategy
                 .parameters
@@ -682,10 +718,33 @@ struct SavedDecision {
 type MarketBuyCap<'a> =
     &'a dyn Fn(&PlaceOrderRequest) -> Result<Option<u64>, KernelTransactionError>;
 
+/// Shared broker/ticket inputs; neither replay nor the broker implementation needs an owner
+/// state envelope. Transactional and native adapters borrow the same records here.
+#[derive(Clone, Copy)]
+struct HostInvocation<'a> {
+    identity: NativeIdentity<'a>,
+    broker: &'a BrokerDetailV6,
+    orders_complete: bool,
+    deployment_mode: DeploymentModeV6,
+    timers: bool,
+    /// Granted external requests, `http:<endpoint>` / `command:<name>`.
+    external_requests: &'a [String],
+}
+
+impl HostInvocation<'_> {
+    fn command_id(self, ordinal: usize) -> String {
+        self.identity.command_id(ordinal)
+    }
+    fn timer_generation(self) -> String {
+        self.identity.timer_generation()
+    }
+}
+
 /// The context handed to the kernel for one decision.
 pub struct KernelHost<'a> {
     pub snapshot: KernelSnapshot,
-    context: &'a DecisionContextV6,
+    native: Option<&'a NativeInvocation<'a>>,
+    context: HostInvocation<'a>,
     finances: BrokerFinancialState,
     provisional: Vec<ProvisionalOrder>,
     /// Context orders a cancel in this decision marked, by order id.
@@ -720,34 +779,117 @@ impl<'a> KernelHost<'a> {
         acknowledgements: bool,
     ) -> Result<Self, KernelTransactionError> {
         let broker = &context.owner_state.broker;
-        Ok(Self {
-            snapshot: KernelSnapshot::from_context(context)?,
-            context,
-            finances: BrokerFinancialState {
+        Ok(Self::from_inputs(
+            HostInvocation {
+                identity: NativeIdentity {
+                    sleeve_id: &context.owner_state.sleeve.sleeve_id,
+                    incarnation: context.owner_state.sleeve.incarnation,
+                    delivery_id: &context.owner_state.delivery_id,
+                },
+                broker: &context.broker,
+                orders_complete: context.orders_complete,
+                deployment_mode: context.deployment_mode,
+                timers: context.capabilities.timers,
+                external_requests: &context.capabilities.external_requests,
+            },
+            KernelSnapshot::from_context(context)?,
+            BrokerFinancialState {
                 allowance_limit_micros: broker.allowance_limit,
                 current_commitment_micros: broker.current_commitment,
                 provider_available_balance_micros: broker.provider_available_balance,
                 locally_reserved_cash_micros: broker.locally_reserved_cash,
             },
+            runner,
+            acknowledgements,
+            None,
+        ))
+    }
+
+    fn native(
+        context: &'a NativeInvocation<'a>,
+        runner: Vec<RunnerEntryV6>,
+        acknowledgements: bool,
+    ) -> Self {
+        Self::from_inputs(
+            HostInvocation {
+                identity: context.identity,
+                broker: context.broker,
+                orders_complete: context.orders_complete,
+                deployment_mode: context.deployment_mode,
+                timers: context.capabilities.timers,
+                external_requests: &context.capabilities.external_requests,
+            },
+            KernelSnapshot {
+                now: context.now,
+                stations: Vec::new(),
+                markets: Vec::new(),
+                parameters: Default::default(),
+                contributor_stations: Vec::new(),
+                capabilities: Default::default(),
+                pending_timers: Vec::new(),
+            },
+            context.finances,
+            runner,
+            acknowledgements,
+            Some(context),
+        )
+    }
+
+    fn from_inputs(
+        context: HostInvocation<'a>,
+        snapshot: KernelSnapshot,
+        finances: BrokerFinancialState,
+        runner: Vec<RunnerEntryV6>,
+        acknowledgements: bool,
+        native: Option<&'a NativeInvocation<'a>>,
+    ) -> Self {
+        Self {
+            snapshot,
+            native,
+            context,
+            finances,
             provisional: Vec::new(),
             cancellation_requested: BTreeSet::new(),
             commands: Vec::new(),
             runner,
-            rows: DecisionPlanRows::new(&context.broker, acknowledgements, context.deployment_mode),
+            rows: DecisionPlanRows::new(context.broker, acknowledgements, context.deployment_mode),
             timer_keys: BTreeSet::new(),
             outputs: Vec::new(),
             market_buy_cap: None,
             fixed_bytes: RESULT_OVERHEAD_BYTES + wire::MAX_KERNEL_CHECKPOINT_BYTES,
             reinstatable_live: 0,
             empty_rows: DecisionPlanRows::new(
-                &context.broker,
+                context.broker,
                 acknowledgements,
                 context.deployment_mode,
             ),
             derived_entries: 0,
             update_start: None,
             deferrable: RefCell::new(None),
-        })
+        }
+    }
+
+    /// Sets the admission bounds of a decision over `derived`, before any update is delivered;
+    /// transactional and native execution admit commands alike. Commands are admitted against
+    /// everything else a result carries (the updates' `evidence`, the `acknowledgeable` ids, the
+    /// kernel's state at its bound and the fixed fields) and against the live runner entries a
+    /// failed update could bring back. Returns where the decision's own runner entries start.
+    fn reserve(
+        &mut self,
+        derived: &updates::Derived,
+        evidence: &Vec<ResultEvidenceV6>,
+        acknowledgeable: &Vec<&str>,
+    ) -> usize {
+        // Everything in the result but the commands, the runner entries and the kernel's
+        // telemetry, with the kernel's state at its bound: commands are admitted against the
+        // rest.
+        self.fixed_bytes = wire::encoded_len(evidence)
+            + wire::encoded_len(acknowledgeable)
+            + wire::MAX_KERNEL_CHECKPOINT_BYTES
+            + RESULT_OVERHEAD_BYTES;
+        self.reinstatable_live = derived.reinstatable_live();
+        self.derived_entries = self.runner.len();
+        self.derived_entries
     }
 
     /// The commands issued so far, in issue order.
@@ -790,7 +932,7 @@ impl<'a> KernelHost<'a> {
     }
 
     fn broker_detail(&self) -> &BrokerDetailV6 {
-        &self.context.broker
+        self.context.broker
     }
 
     /// Starts an order update in a delivery unit that began at `unit` (now, if not yet):
@@ -889,7 +1031,7 @@ impl<'a> KernelHost<'a> {
         entry: RunnerEntryV6,
     ) -> KernelResult<()> {
         self.check_result_bytes(&command, Some(&entry))?;
-        let rows = self.rows.with(&command, &self.context.broker);
+        let rows = self.rows.with(&command, self.context.broker);
         if rows.total() > wire::MAX_DECISION_PLAN_ROWS {
             return Err(self.capacity_error(
                 format!(
@@ -903,9 +1045,9 @@ impl<'a> KernelHost<'a> {
                     };
                     let mut alone = host.empty_rows.clone();
                     for issued in &host.commands[start.commands..] {
-                        alone.add(issued, &host.context.broker);
+                        alone.add(issued, host.context.broker);
                     }
-                    alone.with(&command, &host.context.broker).total()
+                    alone.with(&command, host.context.broker).total()
                         <= wire::MAX_DECISION_PLAN_ROWS
                 },
             ));
@@ -928,7 +1070,7 @@ impl<'a> KernelHost<'a> {
     fn place(&mut self, request: PlaceOrderRequest) -> KernelResult<OrderTicket> {
         let ordinal = self.next_ordinal()?;
         let invalid = |reason: &str| Err(KernelError::new(format!("invalid order: {reason}")));
-        let Some(market) = self.snapshot.market(&request.ticker) else {
+        let Some(market) = self.state().market(&request.ticker) else {
             return invalid("the market is not in the Sleeve's scope");
         };
         let quantity = match u64::try_from(request.quantity.hundredths()) {
@@ -981,9 +1123,9 @@ impl<'a> KernelHost<'a> {
             Some(client) => client.clone(),
             None => wire::derive_provider_client_id_v6(
                 context.deployment_mode,
-                &context.owner_state.sleeve.sleeve_id,
-                context.owner_state.sleeve.incarnation,
-                &context.owner_state.delivery_id,
+                context.identity.sleeve_id,
+                context.identity.incarnation,
+                context.identity.delivery_id,
                 u32::try_from(ordinal).expect("bounded ordinal"),
             )
             .ok_or_else(|| KernelError::new("the Sleeve id cannot derive a client order id"))?,
@@ -1236,7 +1378,7 @@ impl<'a> KernelHost<'a> {
 
     /// Open context orders plus this decision's places.
     fn open_orders(&self) -> usize {
-        wire::open_orders(&self.context.broker) + self.provisional.len()
+        wire::open_orders(self.context.broker) + self.provisional.len()
     }
 
     fn view_status(&self, order: &BrokerOrderV6) -> BrokerOrderStatus {
@@ -1249,7 +1391,7 @@ impl<'a> KernelHost<'a> {
     }
 
     fn check_timer_key(&self, key: &str) -> KernelResult<()> {
-        if !self.context.capabilities.timers {
+        if !self.context.timers {
             return Err(KernelError::new("this Sleeve is not granted timers"));
         }
         if !wire::valid_identifier(key) {
@@ -1274,7 +1416,7 @@ impl<'a> KernelHost<'a> {
     ) -> KernelResult<RequestTicket> {
         let invalid = |reason: String| Err(KernelError::new(format!("invalid request: {reason}")));
         let grant = format!("{}{target}", kind.grant_prefix());
-        if !self.context.capabilities.grants_request(&kind, &target) {
+        if !wire::grants_external_request(self.context.external_requests, &kind, &target) {
             return invalid(format!("{grant:?} is not granted to this Sleeve"));
         }
         if timeout_ms == 0 || timeout_ms > wire::MAX_EXTERNAL_REQUEST_TIMEOUT_MS {
@@ -1348,16 +1490,25 @@ fn owned_fields(fields: &[(&str, &str)]) -> Vec<(String, String)> {
 
 impl StrategyKernelContext for KernelHost<'_> {
     fn state(&self) -> &dyn StrategyKernelState {
-        &self.snapshot
+        self.native
+            .map_or(&self.snapshot as &dyn StrategyKernelState, |native| {
+                native.state
+            })
     }
     fn parameters(&self) -> &StrategyParameters {
-        &self.snapshot.parameters
+        self.native
+            .map_or(&self.snapshot.parameters, |native| native.parameters)
     }
     fn capabilities(&self) -> KernelCapabilities {
-        self.snapshot.capabilities.clone()
+        self.native
+            .map_or(&self.snapshot.capabilities, |native| native.capabilities)
+            .clone()
     }
     fn contributor_stations(&self) -> &[String] {
-        &self.snapshot.contributor_stations
+        self.native
+            .map_or(self.snapshot.contributor_stations.as_slice(), |native| {
+                native.contributor_stations
+            })
     }
     fn data(&self) -> &dyn StrategyKernelData {
         &self.snapshot
@@ -1576,7 +1727,11 @@ impl StrategyKernelRuntime for KernelHost<'_> {
         Ok(())
     }
     fn pending_timers(&self) -> Vec<PendingTimer> {
-        self.snapshot.pending_timers.clone()
+        self.native
+            .map_or(self.snapshot.pending_timers.as_slice(), |native| {
+                native.pending_timers
+            })
+            .to_vec()
     }
     fn request_http(&mut self, request: HttpRequest) -> KernelResult<RequestTicket> {
         self.request(
@@ -1904,7 +2059,7 @@ fn fit_result(
 /// Reports what the order-update comparison did, one diagnostic per kind.
 /// One diagnostic per note code. An abandoned update is an error: the kernel was never told
 /// of the fill it carried, which the diagnostic reports.
-fn append_notes(notes: &[updates::Note], result: &mut DecisionResultV6) {
+fn append_notes(notes: &[updates::Note], diagnostics: &mut Vec<ResultDiagnosticV6>) {
     let mut by_code = BTreeMap::<&str, Vec<&updates::Note>>::new();
     for note in notes {
         by_code.entry(note.code).or_default().push(note);
@@ -1932,7 +2087,7 @@ fn append_notes(notes: &[updates::Note], result: &mut DecisionResultV6) {
         } else {
             "warn"
         };
-        result.diagnostics.push(ResultDiagnosticV6 {
+        diagnostics.push(ResultDiagnosticV6 {
             severity: severity.to_owned(),
             code: code.to_owned(),
             message: message.to_string(),

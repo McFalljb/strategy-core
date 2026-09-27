@@ -360,6 +360,19 @@ from the primary station. A Broker-state trigger delivers `Unknown { event_type:
 "broker_state" }` after its updates. Event `emitted_at` is the provider's publication time,
 never the decision clock.
 
+**Resident native execution.** An in-process replay host may instead retain one kernel per
+Sleeve and call `kernel_v6::run_native_decision` with a borrowed `NativeInvocation`: identity
+and time, the event (`None` for startup), host-owned canonical views, parameters,
+capabilities, timers, finances and the Sleeve's Broker records and receipts. It needs no
+`TransactionKernelFactory`, codec or checkpoint: the host keeps the `RunnerSectionV6` of
+seen updates, and an error fails that kernel instance (no rollback, no staged commands
+returned). Tickets, the provisional view, order-update derivation and acknowledgements, plan
+rows and every command bound are the transaction's own code, so are external requests: the
+same grant check against `capabilities.external_requests`, the same bounds and local errors,
+the same `ExternalRequest` commands, and an `ExternalResponse` event is acknowledged like a
+`TriggerV6::ExternalResponse`. The host owns everything outside the decision: admitting the
+commands, the Sleeve's outstanding-request bound, and answering each request.
+
 ## Supplied inputs
 
 `supplied: SuppliedInputsV6` carries the provider's retained fields at supplied precision
