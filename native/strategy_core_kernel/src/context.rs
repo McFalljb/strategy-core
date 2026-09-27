@@ -364,7 +364,8 @@ pub struct KernelCapabilities {
     /// External requests the host allows, sorted: `http:<endpoint>` for an HTTP endpoint and
     /// `command:<name>` for a command. Empty when the host grants none.
     pub external_requests: Vec<String>,
-    /// The Broker admits Market sells. When false (live, until Phase 5) a Market sell is
-    /// refused (`Refused { code: "market_sell_unsupported" }`); exit with a limit sell.
+    /// The Broker admits Market sells. When false a Market sell is refused
+    /// (`Refused { code: "market_sell_unsupported" }`); exit with a limit sell. The V6 runner
+    /// sets it in paper and live.
     pub market_sell: bool,
 }

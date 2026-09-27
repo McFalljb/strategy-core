@@ -64,8 +64,8 @@ use strategy_core_kernel::{
     OrderType, OrderUpdate, OrderUpdateStatus, ParameterValue, PendingOrderView, PendingTimer,
     PlaceOrderRequest, RequestTicket, RuntimeMode, StationState, StrategyEvent,
     StrategyKernelBroker, StrategyKernelContext, StrategyKernelData, StrategyKernelRuntime,
-    StrategyKernelState, StrategyKernelTelemetry, StrategyParameters, TimerHandle, WakeAtRequest,
-    fees,
+    StrategyKernelState, StrategyKernelTelemetry, StrategyParameters, TimePolicy, TimerHandle,
+    WakeAtRequest, fees,
 };
 
 pub use self::events::{KernelEvent, external_response};
@@ -81,7 +81,7 @@ use crate::decision_v6::{
     DecisionPlanRows, DecisionResultV6, DecisionV6Error, DeploymentModeV6, ExternalRequestKindV6,
     HttpMethodV6, KernelCheckpointV6, OrderActionV6, OrderTypeV6, OrderUpdateRecordV6,
     OrderUpdateStatusV6, PlaceOrderV6, ResultDiagnosticV6, ResultEvidenceV6, RunnerEntryV6,
-    RunnerSectionV6, StrategyCommandV6, StrategyParameterValueV6, TelemetryEntryV6,
+    RunnerSectionV6, StrategyCommandV6, StrategyParameterValueV6, TelemetryEntryV6, TimePolicyV6,
 };
 
 /// Prefix of the client order ids the host derives; a kernel's own ids may not use it.
@@ -133,14 +133,6 @@ pub struct KernelCheckpointCodec {
 pub trait TransactionKernel: NativeKernel {
     /// Opaque private state for the checkpoint (at most `MAX_KERNEL_CHECKPOINT_BYTES`).
     fn encode_checkpoint_state(&self) -> Result<Vec<u8>, KernelTransactionError>;
-    /// Authoritative maximum per-contract price of a Market buy, asked once when the kernel
-    /// places it. The runner asks the kernel as it was restored for this decision.
-    fn market_buy_price_cap_micros(
-        &self,
-        _request: &PlaceOrderRequest,
-    ) -> Result<Option<u64>, KernelTransactionError> {
-        Ok(None)
-    }
 }
 
 /// Constructs and restores kernels for one Strategy identity.
@@ -172,10 +164,6 @@ pub fn run_transaction<F: TransactionKernelFactory>(
         None => factory.create(context),
     };
     let mut kernel = restore()?;
-    // The Market-buy cap is asked of the kernel as restored for this decision.
-    let restored = restore()?;
-    let market_buy_cap =
-        |request: &PlaceOrderRequest| restored.market_buy_price_cap_micros(request);
     let derived = updates::derive(context)?;
     let event = KernelEvent::from_context(context)?;
     // Deferred updates first (the most deferred first), the others in issue order; a
@@ -188,7 +176,6 @@ pub fn run_transaction<F: TransactionKernelFactory>(
         context.external_response_id(),
     );
     let mut host = KernelHost::new(context, derived.entries(), !acknowledgeable.is_empty())?;
-    host.market_buy_cap = Some(&market_buy_cap);
     let issued_from = host.reserve(&derived, &evidence, &acknowledgeable);
 
     // Each update is delivered on its own. When the kernel fails on one, the kernel and the
@@ -610,8 +597,7 @@ impl KernelSnapshot {
         capabilities.gauges = true;
         capabilities.annotations = true;
         capabilities.external_requests = context.capabilities.external_requests.clone();
-        // The Broker refuses a Market sell outside paper (until Phase 5), per command.
-        capabilities.market_sell = context.deployment_mode == DeploymentModeV6::Paper;
+        capabilities.market_sell = true;
         Ok(Self {
             now: millis(Some(context.decision_time_unix_ms))?
                 .ok_or(KernelTransactionError::InvalidTime)?,
@@ -715,9 +701,6 @@ struct SavedDecision {
     outputs_len: usize,
 }
 
-type MarketBuyCap<'a> =
-    &'a dyn Fn(&PlaceOrderRequest) -> Result<Option<u64>, KernelTransactionError>;
-
 /// Shared broker/ticket inputs; neither replay nor the broker implementation needs an owner
 /// state envelope. Transactional and native adapters borrow the same records here.
 #[derive(Clone, Copy)]
@@ -754,7 +737,6 @@ pub struct KernelHost<'a> {
     rows: DecisionPlanRows,
     timer_keys: BTreeSet<String>,
     outputs: Vec<HostOutput>,
-    market_buy_cap: Option<MarketBuyCap<'a>>,
     /// Encoded bytes the result needs besides its commands and runner entries.
     fixed_bytes: usize,
     /// Live runner entries a failed order update could bring back.
@@ -855,7 +837,6 @@ impl<'a> KernelHost<'a> {
             rows: DecisionPlanRows::new(context.broker, acknowledgements, context.deployment_mode),
             timer_keys: BTreeSet::new(),
             outputs: Vec::new(),
-            market_buy_cap: None,
             fixed_bytes: RESULT_OVERHEAD_BYTES + wire::MAX_KERNEL_CHECKPOINT_BYTES,
             reinstatable_live: 0,
             empty_rows: DecisionPlanRows::new(
@@ -1077,25 +1058,44 @@ impl<'a> KernelHost<'a> {
             Ok(quantity) if quantity > 0 => quantity,
             _ => return invalid("the quantity is not positive"),
         };
-        let limit_price_micros = match (&request.order_type, request.limit_price) {
-            (OrderType::Limit, Some(price)) => match price_micros(price) {
-                Ok(micros) => Some(micros),
-                Err(_) => return invalid("the limit price is not within [0, 1]"),
+        let Ok(limit_price_micros) = request.limit_price.map(price_micros).transpose() else {
+            return invalid("the limit price is not within [0, 1]");
+        };
+        let Ok(market_price_cap_micros) = request.market_price_cap.map(price_micros).transpose()
+        else {
+            return invalid("the price cap is not within (0, 1]");
+        };
+        let order_type = match request.order_type {
+            OrderType::Market => OrderTypeV6::Market,
+            OrderType::Limit => OrderTypeV6::Limit,
+        };
+        let order = PlaceOrderV6 {
+            command_id: String::new(),
+            market_id: request.ticker.clone(),
+            action: order_action_v6(&request.action),
+            side: contract_side_v6(&request.contract_side),
+            order_type,
+            quantity_hundredths: quantity,
+            limit_price_micros,
+            market_price_cap_micros,
+            time_policy: match request.time_policy {
+                TimePolicy::GoodTillCanceled => TimePolicyV6::GoodTillCanceled,
+                TimePolicy::ImmediateOrCancel => TimePolicyV6::ImmediateOrCancel,
+                TimePolicy::FillOrKill => TimePolicyV6::FillOrKill,
             },
-            (OrderType::Limit, None) => return invalid("a limit order needs a limit price"),
-            (OrderType::Market, None) => None,
-            (OrderType::Market, Some(_)) => return invalid("a market order has no limit price"),
+            post_only: request.post_only,
+            expires_after_ms: request.expires_after_ms,
+            reduce_only: request.reduce_only,
+            provider_client_id: String::new(),
+            signal_type: request.signal_type,
+            signal_metadata: request.signal_metadata,
+            metadata: Vec::new(),
         };
-        let market_price_cap_micros = if request.action == OrderAction::Buy
-            && request.order_type == OrderType::Market
-        {
-            match self.market_buy_cap {
-                Some(cap) => cap(&request).map_err(|error| KernelError::new(error.to_string()))?,
-                None => None,
-            }
-        } else {
-            None
-        };
+        if let Some(reason) = wire::place_order_terms_error(&order) {
+            return invalid(reason);
+        }
+        // What the Broker commits: a buy at its limit price, a Market buy at its cap (one
+        // dollar without one); a sell nothing.
         let commitment_micros = if request.action == OrderAction::Buy {
             let terms = market
                 .fee_terms()
@@ -1152,22 +1152,8 @@ impl<'a> KernelHost<'a> {
         let command_id = context.command_id(ordinal);
         let command = StrategyCommandV6::PlaceOrder(PlaceOrderV6 {
             command_id: command_id.clone(),
-            market_id: request.ticker.clone(),
-            action: order_action_v6(&request.action),
-            side: contract_side_v6(&request.contract_side),
-            order_type: match request.order_type {
-                OrderType::Market => OrderTypeV6::Market,
-                OrderType::Limit => OrderTypeV6::Limit,
-            },
-            quantity_hundredths: quantity,
-            limit_price_micros,
-            market_price_cap_micros,
-            expires_after_ms: request.expires_after_ms,
-            reduce_only: request.reduce_only,
             provider_client_id: provider_client_id.clone(),
-            signal_type: request.signal_type.clone(),
-            signal_metadata: request.signal_metadata.clone(),
-            metadata: Vec::new(),
+            ..order
         });
         if wire::validate_command_v6(&command).is_err() {
             return invalid("the request is outside the command bounds");

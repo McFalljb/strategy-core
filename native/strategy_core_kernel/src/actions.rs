@@ -193,6 +193,31 @@ impl core::fmt::Display for ContractQuantity {
     }
 }
 
+/// How long an order may wait for a fill.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TimePolicy {
+    /// What does not fill at once rests until it fills, is cancelled or expires.
+    #[default]
+    GoodTillCanceled,
+    /// Fills what it can at once; the rest is cancelled.
+    ImmediateOrCancel,
+    /// Fills its whole quantity at once, or nothing.
+    FillOrKill,
+}
+
+/// An order the Strategy asks the Broker to place.
+///
+/// - `limit_price` is required for a Limit order and absent for a Market order.
+/// - `market_price_cap` is the most a Market buy pays per contract, in dollars. The runner
+///   reserves the buy at it (at one dollar without it); it is absent on every other order.
+///   A Market buy that is not immediate (`GoodTillCanceled`) rests at its cap.
+/// - A Market sell has no price to rest at: it is `ImmediateOrCancel` or `FillOrKill`.
+/// - `post_only` (the order must not take liquidity) needs a `GoodTillCanceled` Limit order.
+/// - `expires_after_ms` ends a resting order, buy or sell: it needs `GoodTillCanceled`.
+///
+/// Anything else is a local error of `place_order`. [`resting_limit`](Self::resting_limit),
+/// [`direct`](Self::direct) and [`sweep`](Self::sweep) build the common shapes.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PlaceOrderRequest {
     pub ticker: String,
@@ -202,12 +227,77 @@ pub struct PlaceOrderRequest {
     pub quantity: ContractQuantity,
     pub limit_price: Option<f64>,
     #[serde(default)]
+    pub market_price_cap: Option<f64>,
+    #[serde(default)]
+    pub time_policy: TimePolicy,
+    #[serde(default)]
+    pub post_only: bool,
+    #[serde(default)]
     pub expires_after_ms: Option<i64>,
     #[serde(default)]
     pub reduce_only: bool,
     pub signal_type: Option<String>,
     pub signal_metadata: Option<String>,
     pub client_order_id: Option<String>,
+}
+
+impl PlaceOrderRequest {
+    /// A Limit order at `limit_price` whose remainder rests (`GoodTillCanceled`).
+    pub fn resting_limit(
+        ticker: impl Into<String>,
+        action: OrderAction,
+        contract_side: ContractSide,
+        quantity: ContractQuantity,
+        limit_price: f64,
+    ) -> Self {
+        Self {
+            ticker: ticker.into(),
+            action,
+            contract_side,
+            order_type: OrderType::Limit,
+            quantity,
+            limit_price: Some(limit_price),
+            market_price_cap: None,
+            time_policy: TimePolicy::GoodTillCanceled,
+            post_only: false,
+            expires_after_ms: None,
+            reduce_only: false,
+            signal_type: None,
+            signal_metadata: None,
+            client_order_id: None,
+        }
+    }
+
+    /// A Limit order that fills what it can at once at `limit_price` or better and cancels
+    /// the rest (`ImmediateOrCancel`). A sell's `limit_price` is its price floor.
+    pub fn direct(
+        ticker: impl Into<String>,
+        action: OrderAction,
+        contract_side: ContractSide,
+        quantity: ContractQuantity,
+        limit_price: f64,
+    ) -> Self {
+        Self {
+            time_policy: TimePolicy::ImmediateOrCancel,
+            ..Self::resting_limit(ticker, action, contract_side, quantity, limit_price)
+        }
+    }
+
+    /// A Market buy that takes what it can at once, paying at most `price_cap` per contract,
+    /// and cancels the rest (`ImmediateOrCancel`).
+    pub fn sweep(
+        ticker: impl Into<String>,
+        contract_side: ContractSide,
+        quantity: ContractQuantity,
+        price_cap: f64,
+    ) -> Self {
+        Self {
+            order_type: OrderType::Market,
+            limit_price: None,
+            market_price_cap: Some(price_cap),
+            ..Self::direct(ticker, OrderAction::Buy, contract_side, quantity, price_cap)
+        }
+    }
 }
 
 /// The order a cancel names.

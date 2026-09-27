@@ -221,9 +221,8 @@ traderv3 and strategies must build to these choices or change them here first.
 27. **Cancels keep the reservation.** A cancel marks its target `cancellation_requested`
     but the overlay keeps its reservation until the Broker releases it (the conservative
     estimate).
-28. **Market buys** reserve at the kernel's price cap, else one dollar. The cap is asked
-    once, when the kernel places the order, of the kernel as restored for the decision (the
-    kernel cannot be called while it runs).
+28. **Market buys** reserve at their own price cap, else one dollar (point 47; the
+    per-Strategy `market_buy_price_cap_micros` hook is gone).
 29. **Local errors** (not Broker refusals): a Market outside scope; a bad quantity or
     price; a Market without valid fee terms (no reservation can be computed); a client order
     id that is invalid, over 128 bytes (the Broker's bound), starts with `tv3` (reserved for
@@ -232,11 +231,9 @@ traderv3 and strategies must build to these choices or change them here first.
     decision knows (V5 failed the whole transaction); a cancel-all over a truncated view; the
     65th command; the row limit; live entry 257; the result size budget. Kernel client ids
     must be unique for the account's lifetime: the runner cannot see acknowledged orders that
-    left the view, and the Broker refuses a reused id. A live Market sell is not a local
-    error (that cost a kernel using `?` its whole decision): it goes to the Broker, which
-    refuses it per command (`market_sell_unsupported`) until Phase 5, and the kernel sees a
-    `Refused` update; `KernelCapabilities::market_sell` is false in live so a kernel can
-    exit with a limit sell instead.
+    left the view, and the Broker refuses a reused id. Order terms that do not make one
+    order are local errors too (point 46); a live Market sell is not: it goes to the Broker
+    (point 49).
 30. **Cancel targets.** `CancelTarget::ClientOrderId` naming an order the context already
     reports is sent as an `Order` target with that order's revision; only an order placed
     in the same decision goes on the wire by client id.
@@ -247,7 +244,6 @@ traderv3 and strategies must build to these choices or change them here first.
     one. In live the Broker expands a cancel-all into per-order cancels on the priority
     lane, so a live cancel-all counts 3 per open context order it cancels plus 1 per own
     place it collapses (at least 1, for its receipt); paper keeps 3 plus the open orders.
-    A live Market sell counts 5 + 1 rows (the place and its refusal receipt).
     Acknowledgements add 1 row whenever there are any: traderv3 removes acknowledged
     receipts and orders with one statement in dedicated tables, never per-order plan rows.
     `decision_plan_rows_v6` is public for traderv3's parity test (runner count >= owner
@@ -308,3 +304,40 @@ requests (HTTP and CLI) design").
     table, written in the decision's transaction), so `decision_plan_rows_v6` does not count
     them. `StrategyCommandV6::leaves_host` tells the host that a decision with a request
     needs the durable write even without a Broker command.
+
+## Order intent (Phase 5)
+
+Branch `phase5/order-intent`, from decision 5 and the "Order intent gap" of
+`traderv3/docs/plans/2026-09-24-strategy-core-parity-and-legacy-removal.md`; the per-repo
+steps are in [plans/2026-09-27-phase5-order-intent.md](plans/2026-09-27-phase5-order-intent.md).
+
+45. **Extended in place.** V6 is deployed nowhere and the paper cutover starts from an empty
+    store, so `PlaceOrderV6` gains `time_policy` and `post_only` without a new version: the
+    magics stay `SDCTXV6A`/`SDRESV6A`, and results encoded before this change do not decode.
+    The corpus and its digest changed with it.
+46. **Terms that make no sense are local errors.** `place_order_terms_error` gives the reason
+    for the runner and validation alike: `post_only` needs a `GoodTillCanceled` Limit order
+    (a Market or immediate order takes liquidity), an expiry needs `GoodTillCanceled` (an
+    `ImmediateOrCancel` or `FillOrKill` order leaves nothing resting to expire; Kalshi's
+    `expiration_time` goes with `good_till_canceled`), a Market sell is immediate (it has no
+    price to rest at), and a cap belongs to a Market buy. The tick grid (whole cents for
+    Strategy orders in traderv3's signer) depends on the Market and stays the Broker's check.
+47. **The Market buy cap is per order.** `PlaceOrderRequest::market_price_cap` fills the
+    existing `market_price_cap_micros` and replaces the per-Strategy hook
+    `TransactionKernel::market_buy_price_cap_micros` and the cap closure of
+    `run_native_decision`. Its only Strategy user, `dsm_reaction`, set it to its `max_pay`
+    for every Market buy; it now sets it on the request. The runner no longer restores a
+    second kernel to ask it. A Market buy without a cap is still reserved at one dollar.
+48. **Time policy does not change the reservation.** An immediate order reserves what a
+    resting one does (the Broker commits it at admission and releases the unfilled rest when
+    it cancels it), so the provisional view equals the Broker's commitment for every term.
+    A `GoodTillCanceled` Market buy rests at its cap, as traderv3 dispatches Market buys
+    today.
+49. **Live Market sells.** Phase 5 gives live Strategy sells a dispatch path, so the runner
+    no longer counts a refusal receipt row for a live Market sell (5 rows, like any place)
+    and `capabilities().market_sell` is true in live; `MARKET_SELL_UNSUPPORTED_CODE` is gone.
+    Until traderv3 lifts `market_sell_unsupported`, the Broker still refuses it per command
+    and the kernel sees `Refused`, as before.
+50. **Execution styles are constructors.** `resting_limit`, `direct` and `sweep` build a GTC
+    Limit, an IOC Limit and an IOC capped Market buy; nothing about them reaches the wire.
+    `max_cost` is not ported.

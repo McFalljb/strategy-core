@@ -29,7 +29,8 @@ pub use actions::{
     CommandRequest, CommandTicket, ContractQuantity, ContractSide, ExternalErrorKind,
     ExternalOutcome, ExternalResponse, HttpMethod, HttpRequest, KernelAction, LogAction,
     OrderAction, OrderStatusView, OrderTicket, OrderType, OrderUpdate, OrderUpdateStatus,
-    PendingOrderView, PlaceOrderRequest, RequestTicket, StopAction, TelemetryAction, WakeAtRequest,
+    PendingOrderView, PlaceOrderRequest, RequestTicket, StopAction, TelemetryAction, TimePolicy,
+    WakeAtRequest,
 };
 pub use context::{
     AnnotationValue, KernelCapabilities, NativeKernel, ParameterValue, PendingTimer, RuntimeMode,

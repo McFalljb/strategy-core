@@ -225,6 +225,8 @@ pub(super) fn place(
         quantity_hundredths: 300,
         limit_price_micros: Some(400_000),
         market_price_cap_micros: None,
+        time_policy: TimePolicyV6::GoodTillCanceled,
+        post_only: false,
         expires_after_ms: Some(30_000),
         reduce_only: false,
         provider_client_id: client.to_owned(),
@@ -492,6 +494,161 @@ fn result_contract_violations_are_rejected() {
         Err(DecisionV6Error::InvalidContract),
         "timers need the timer capability"
     );
+}
+
+/// Order terms: the time policy, post-only, expiry and the Market buy cap make one order or
+/// the command is invalid. The base is a GTC limit buy with an expiry.
+#[test]
+fn place_order_terms_combine_into_one_order() {
+    use OrderActionV6::{Buy, Sell};
+    use OrderTypeV6::{Limit, Market};
+    use TimePolicyV6::{FillOrKill as Fok, GoodTillCanceled as Gtc, ImmediateOrCancel as Ioc};
+    type Terms = (
+        OrderActionV6,
+        OrderTypeV6,
+        Option<u64>,
+        Option<u64>,
+        TimePolicyV6,
+        bool,
+        Option<i64>,
+    );
+    let cases: [(&str, Terms, Option<&str>); 22] = [
+        (
+            "resting limit buy",
+            (Buy, Limit, Some(400_000), None, Gtc, false, Some(30_000)),
+            None,
+        ),
+        (
+            "resting limit sell with an expiry",
+            (Sell, Limit, Some(400_000), None, Gtc, false, Some(30_000)),
+            None,
+        ),
+        (
+            "post-only resting limit",
+            (Buy, Limit, Some(400_000), None, Gtc, true, Some(30_000)),
+            None,
+        ),
+        (
+            "post-only resting limit sell",
+            (Sell, Limit, Some(600_000), None, Gtc, true, None),
+            None,
+        ),
+        (
+            "direct limit buy",
+            (Buy, Limit, Some(400_000), None, Ioc, false, None),
+            None,
+        ),
+        (
+            "direct limit sell at a floor",
+            (Sell, Limit, Some(200_000), None, Ioc, false, None),
+            None,
+        ),
+        (
+            "fill-or-kill limit",
+            (Buy, Limit, Some(400_000), None, Fok, false, None),
+            None,
+        ),
+        (
+            "capped sweep",
+            (Buy, Market, None, Some(600_000), Ioc, false, None),
+            None,
+        ),
+        (
+            "uncapped market buy",
+            (Buy, Market, None, None, Ioc, false, None),
+            None,
+        ),
+        (
+            "market buy resting at its cap",
+            (Buy, Market, None, Some(600_000), Gtc, false, Some(30_000)),
+            None,
+        ),
+        (
+            "immediate market sell",
+            (Sell, Market, None, None, Ioc, false, None),
+            None,
+        ),
+        (
+            "fill-or-kill market sell",
+            (Sell, Market, None, None, Fok, false, None),
+            None,
+        ),
+        (
+            "limit without a price",
+            (Buy, Limit, None, None, Gtc, false, None),
+            Some("a limit order needs a limit price"),
+        ),
+        (
+            "limit above a dollar",
+            (Buy, Limit, Some(1_000_001), None, Gtc, false, None),
+            Some("the limit price is not within [0, 1]"),
+        ),
+        (
+            "market with a limit price",
+            (Buy, Market, Some(400_000), None, Ioc, false, None),
+            Some("a market order has no limit price"),
+        ),
+        (
+            "zero price cap",
+            (Buy, Market, None, Some(0), Ioc, false, None),
+            Some("the price cap is not within (0, 1]"),
+        ),
+        (
+            "price cap on a limit",
+            (Buy, Limit, Some(400_000), Some(600_000), Gtc, false, None),
+            Some("only a market buy has a price cap"),
+        ),
+        (
+            "price cap on a market sell",
+            (Sell, Market, None, Some(600_000), Ioc, false, None),
+            Some("only a market buy has a price cap"),
+        ),
+        (
+            "resting market sell",
+            (Sell, Market, None, None, Gtc, false, None),
+            Some("a market sell is immediate-or-cancel or fill-or-kill"),
+        ),
+        (
+            "post-only market buy",
+            (Buy, Market, None, Some(600_000), Gtc, true, None),
+            Some("a post-only order is a limit order"),
+        ),
+        (
+            "post-only immediate limit",
+            (Buy, Limit, Some(400_000), None, Ioc, true, None),
+            Some("a post-only order is good-till-canceled"),
+        ),
+        (
+            "fill-or-kill with an expiry",
+            (Buy, Limit, Some(400_000), None, Fok, false, Some(30_000)),
+            Some("only a good-till-canceled order expires"),
+        ),
+    ];
+    let context = context();
+    for (name, (action, order_type, limit, cap, time_policy, post_only, expiry), expected) in cases
+    {
+        let StrategyCommandV6::PlaceOrder(mut order) =
+            place(&context, 0, ContractSideV6::Yes, "fixture-terms")
+        else {
+            unreachable!()
+        };
+        order.action = action;
+        order.order_type = order_type;
+        order.limit_price_micros = limit;
+        order.market_price_cap_micros = cap;
+        order.time_policy = time_policy;
+        order.post_only = post_only;
+        order.expires_after_ms = expiry;
+        assert_eq!(place_order_terms_error(&order), expected, "{name}");
+        assert_eq!(
+            validate_command_v6(&StrategyCommandV6::PlaceOrder(order)),
+            match expected {
+                Some(_) => Err(DecisionV6Error::InvalidContract),
+                None => Ok(()),
+            },
+            "{name}"
+        );
+    }
 }
 
 #[test]
