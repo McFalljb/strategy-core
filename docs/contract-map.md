@@ -128,7 +128,12 @@ is the full export list.
   conveniences `get_price(ticker)`, `get_weather(station_id)`,
   `latest_forecast(station_id)` and
   `latest_oracle_scores(station_id, mode, rank_by, days)` derive from those models.
-  Getters do not fetch provider data.
+  Getters must not fetch live provider data. A replay host may load recorded history
+  on demand from its historical storage, restricted to the invocation's fixed read fence
+  and scope. Repeated reads must retain consistent views for the invocation. A loading
+  failure must fail the invocation before admitting any commands or other effects; it
+  must not silently become `None` in a successful decision. This is a replay-host policy,
+  not a change to Trader's delivered-context policy or the bot-facing method signatures.
 - `StrategyKernelContext::parameters() -> &StrategyParameters`: the Strategy's
   configured parameters, read-only, by key (`get`, `iter`); each is a
   `ParameterValue` (`Null`, `Bool`, `I64`, `U64`, exact `Decimal { coefficient,

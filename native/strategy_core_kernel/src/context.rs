@@ -63,7 +63,10 @@ pub trait StrategyKernelContext {
 ///
 /// Hosts must provide the canonical model, including supplied originals, derived facts,
 /// authority, revisions and provenance. Absent or out-of-scope state returns `None`.
-/// References remain valid for this invocation; access must not fetch provider data.
+/// References remain valid for this invocation; access must not fetch live provider data.
+/// A replay host may load recorded history on demand at the invocation's fixed read fence.
+/// It must retain consistent views for repeated reads and fail the invocation before admitting
+/// any effects if loading fails; a failed read must not become a successful missing-state read.
 /// Convenience access lives on the trait object below, so hosts cannot override it with
 /// independent reduced mappings.
 pub trait StrategyKernelState {
