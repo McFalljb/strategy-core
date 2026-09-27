@@ -65,12 +65,20 @@ cargo clippy --manifest-path native/Cargo.toml --workspace --all-targets --all-f
 cargo test --manifest-path native/Cargo.toml --workspace --all-features
 ```
 
+`scripts/legacy-free-check.sh` (run in CI) is the legacy-free gate. It fails on the legacy
+`strategy-core`, `trader-core` or `trader-bot-ipc` crates in a `Cargo.lock`; `strategy_core::` in Rust
+(the kernel is `strategy_core_kernel::`) or `import`/`from strategy_core` in Python; the
+`legacy-kernels` or `v2-bot` features; a path dependency on `../trader`; and the deleted Decision V4 IPC
+and V5 continuation and checkpoint symbols. The V4 types Decision V6 embeds
+(`strategy_core_v3::decision_v4::*`) are allowed. `docs/` and Markdown are not checked. The symbol
+list and its allowlist are in the script; strategies and traderv3 enforce the same rules.
+
 ## Repository layout
 
 ```text
 native/        # Rust workspace: strategy_core_kernel and strategy_core_v3
 conformance/   # Shared corpora: v3/vectors.json (canonical profile), v6/decision-transactions.json
-scripts/       # pin-digests.sh
+scripts/       # pin-digests.sh, legacy-free-check.sh
 docs/          # Contract documentation
 ```
 

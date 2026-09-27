@@ -9,7 +9,7 @@ Rust-only: do not add Python packages, tooling or lockfiles.
 strategy-core/
   native/         # Rust workspace: strategy_core_kernel (kernel contract), strategy_core_v3 (canonical profile, Decision V6 wire and runner)
   conformance/    # v3/vectors.json and v6/decision-transactions.json, checked by the Rust tests
-  scripts/        # pin-digests.sh: the digests consumers pin for a revision
+  scripts/        # pin-digests.sh: the digests consumers pin for a revision; legacy-free-check.sh: the legacy-free gate
   docs/           # Contract documentation
 ```
 
@@ -30,6 +30,9 @@ cargo test --manifest-path native/Cargo.toml -p strategy-core-v3 -- --ignored wr
 
 # Digests consumers pin for a revision
 scripts/pin-digests.sh <commit>
+
+# Legacy-free gate (CI): no legacy crates, imports, features or deleted V4/V5 symbols
+scripts/legacy-free-check.sh
 ```
 
 ## Conventions
