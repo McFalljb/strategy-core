@@ -29,18 +29,19 @@ forbidden_symbols=(
   encode_v5_checkpoint StoredStrategyCheckpoint strategy_continuations
   migrate_decision_v5_ledger
 )
-# Where a forbidden symbol may stay: "symbol exact-file-path".
+# Where a forbidden symbol may stay: "symbol exact-file-path audited-count". More occurrences in
+# that file fail.
 allowed=(
   # The V5 kernel checkpoint converter in the V6 crate and its tests. traderv3 deleted its only
   # caller in Phase 8; removing it changes the pinned crate digest.
-  "KernelCheckpointV5Layout native/strategy_core_v3/src/decision_v6.rs"
-  "KernelCheckpointV5Layout native/strategy_core_v3/src/decision_v6/corpus_tests.rs"
-  "KernelCheckpointV5Layout native/strategy_core_v3/src/decision_v6/tests.rs"
-  "KernelCheckpointV5Layout native/strategy_core_v3/tests/kernel_projection/decisions.rs"
-  "convert_v5_kernel_checkpoint native/strategy_core_v3/src/decision_v6.rs"
-  "convert_v5_kernel_checkpoint native/strategy_core_v3/src/decision_v6/corpus_tests.rs"
-  "convert_v5_kernel_checkpoint native/strategy_core_v3/src/decision_v6/tests.rs"
-  "convert_v5_kernel_checkpoint native/strategy_core_v3/tests/kernel_projection/decisions.rs"
+  "KernelCheckpointV5Layout native/strategy_core_v3/src/decision_v6.rs 2"
+  "KernelCheckpointV5Layout native/strategy_core_v3/src/decision_v6/corpus_tests.rs 1"
+  "KernelCheckpointV5Layout native/strategy_core_v3/src/decision_v6/tests.rs 2"
+  "KernelCheckpointV5Layout native/strategy_core_v3/tests/kernel_projection/decisions.rs 3"
+  "convert_v5_kernel_checkpoint native/strategy_core_v3/src/decision_v6.rs 2"
+  "convert_v5_kernel_checkpoint native/strategy_core_v3/src/decision_v6/corpus_tests.rs 1"
+  "convert_v5_kernel_checkpoint native/strategy_core_v3/src/decision_v6/tests.rs 2"
+  "convert_v5_kernel_checkpoint native/strategy_core_v3/tests/kernel_projection/decisions.rs 2"
 )
 
 self=scripts/legacy-free-check.sh
@@ -53,11 +54,11 @@ fail() {
 }
 
 # check MESSAGE GIT_GREP_ARGUMENTS...: reports every match of `git grep` over tracked and
-# untracked (not ignored) files.
+# untracked (not ignored) files, binary ones included (-a).
 check() {
   local message=$1 hits rc=0
   shift
-  hits=$(git grep --untracked -n -I "$@") || rc=$?
+  hits=$(git grep --untracked -n -a "$@") || rc=$?
   if ((rc == 0)); then
     fail "$message" "$hits"
   elif ((rc != 1)); then
@@ -103,8 +104,14 @@ done
 for symbol in "${forbidden_symbols[@]}"; do
   excludes=()
   for entry in ${allowed[@]+"${allowed[@]}"}; do
-    if [[ ${entry%% *} == "$symbol" ]]; then
-      excludes+=(":(exclude)${entry#* }")
+    read -r allowed_symbol allowed_path audited <<<"$entry"
+    if [[ $allowed_symbol == "$symbol" ]]; then
+      excludes+=(":(exclude)$allowed_path")
+      hits=$(git grep --untracked -o -a -w -F -e "$symbol" -- "$allowed_path") || [[ $? == 1 ]]
+      count=$(grep -c . <<<"$hits" || true)
+      if ((count > audited)); then
+        fail "\`$symbol\` beyond its $audited audited occurrence(s)" "$allowed_path: $count"
+      fi
     fi
   done
   check "deleted Decision V4 IPC or V5 symbol \`$symbol\`" \
