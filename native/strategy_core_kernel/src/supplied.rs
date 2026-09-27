@@ -237,6 +237,32 @@ pub struct SuppliedOracleScore {
     pub low_bias: Option<Decimal>,
     pub combined_mae: Option<Decimal>,
     pub day_count: Option<i64>,
+    /// `None` means the provider has no distribution for the row, never zero error.
+    pub error_distribution: Option<SuppliedOracleErrorDistribution>,
+}
+
+/// Version of the signed-error histogram MinuteTemp scores oracle rows with.
+pub const ORACLE_ERROR_DISTRIBUTION_VERSION: &str = "signed-error-f-v1";
+/// Edges of an oracle error histogram: −10.5 °F to +10.5 °F.
+pub const ORACLE_ERROR_BIN_EDGES: usize = 22;
+/// Counters of an oracle error histogram: underflow, 21 one-degree bands, overflow.
+pub const ORACLE_ERROR_BINS: usize = 23;
+
+/// A model's signed forecast errors (forecast − observed, °F) as a histogram, as supplied.
+///
+/// Every scored forecast run adds one high and one low sample (MAE and bias weight days
+/// equally instead). Interior bins include their lower edge. Histograms merge by summing
+/// their counters.
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
+pub struct SuppliedOracleErrorDistribution {
+    pub version: String,
+    pub bin_edges_f: [Decimal; ORACLE_ERROR_BIN_EDGES],
+    pub high_counts: [u64; ORACLE_ERROR_BINS],
+    pub low_counts: [u64; ORACLE_ERROR_BINS],
+    /// The sum of `high_counts`, and separately of `low_counts`.
+    pub sample_count: u64,
+    /// Scored days the histogram covers; fewer than the row's `day_count` is partial coverage.
+    pub day_count: i64,
 }
 
 #[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]

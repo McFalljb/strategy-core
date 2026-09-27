@@ -31,18 +31,7 @@ forbidden_symbols=(
 )
 # Where a forbidden symbol may stay: "symbol exact-file-path audited-count". More occurrences in
 # that file fail.
-allowed=(
-  # The V5 kernel checkpoint converter in the V6 crate and its tests. traderv3 deleted its only
-  # caller in Phase 8; removing it changes the pinned crate digest.
-  "KernelCheckpointV5Layout native/strategy_core_v3/src/decision_v6.rs 2"
-  "KernelCheckpointV5Layout native/strategy_core_v3/src/decision_v6/corpus_tests.rs 1"
-  "KernelCheckpointV5Layout native/strategy_core_v3/src/decision_v6/tests.rs 2"
-  "KernelCheckpointV5Layout native/strategy_core_v3/tests/kernel_projection/decisions.rs 3"
-  "convert_v5_kernel_checkpoint native/strategy_core_v3/src/decision_v6.rs 2"
-  "convert_v5_kernel_checkpoint native/strategy_core_v3/src/decision_v6/corpus_tests.rs 1"
-  "convert_v5_kernel_checkpoint native/strategy_core_v3/src/decision_v6/tests.rs 2"
-  "convert_v5_kernel_checkpoint native/strategy_core_v3/tests/kernel_projection/decisions.rs 2"
-)
+allowed=()
 
 self=scripts/legacy-free-check.sh
 scope=(-- . ':(exclude)docs' ':(exclude)*.md' ":(exclude)$self")

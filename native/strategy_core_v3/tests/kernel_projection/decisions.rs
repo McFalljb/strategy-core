@@ -8,9 +8,9 @@ use strategy_core_kernel::{
 };
 use strategy_core_v3::decision_v6::{
     BrokerCommandKindV6, BrokerOrderStatusV6, BrokerOrderV6, CancelTargetV6, CommandOutcomeV6,
-    CommandReceiptV6, ContractSideV6, DecisionResultV6, KernelCheckpointV5Layout,
-    MAX_DECISION_PLAN_ROWS, MAX_STRATEGY_COMMANDS, OrderActionV6, OrderTypeV6, OrderUpdateStatusV6,
-    TimePolicyV6, convert_v5_kernel_checkpoint, validate_decision_result_v6,
+    CommandReceiptV6, ContractSideV6, DecisionResultV6, MAX_DECISION_PLAN_ROWS,
+    MAX_STRATEGY_COMMANDS, OrderActionV6, OrderTypeV6, OrderUpdateStatusV6, TimePolicyV6,
+    validate_decision_result_v6,
 };
 
 #[path = "delivery.rs"]
@@ -1264,117 +1264,6 @@ fn seeding_covers_a_truncated_view_which_drops_only_terminal_orders() {
         third.updates.iter().map(summary).collect::<Vec<_>>(),
         [(OrderUpdateStatus::Filled, 300, 0, true)]
     );
-}
-
-#[test]
-fn a_converted_v5_checkpoint_records_open_orders_as_seen_without_updates() {
-    let context = priced_context();
-    // A V5 checkpoint as the host stored it, converted at cutover.
-    let mut v5 = KernelCheckpointV5Layout {
-        codec_profile: "script.checkpoint.v1".to_owned(),
-        codec_version: 1,
-        strategy_id: "fixture".to_owned(),
-        strategy_profile: "daily-high".to_owned(),
-        profile_and_calculator_digest: DIGEST.to_owned(),
-        sequence: 7,
-        state: b"v5-state".to_vec(),
-        state_sha256: [0; 32],
-    };
-    v5.state_sha256 = v5_digest(&v5);
-    let converted = convert_v5_kernel_checkpoint(v5).unwrap();
-
-    let mut cutover = follow_up(
-        &context,
-        None,
-        2,
-        vec![
-            order(
-                "command.v5-resting",
-                "v5-resting",
-                BrokerOrderStatusV6::Resting,
-                0,
-                4,
-            ),
-            order(
-                "command.v5-filled",
-                "v5-filled",
-                BrokerOrderStatusV6::Filled,
-                300,
-                9,
-            ),
-        ],
-        vec![refused(
-            "command.v5-refused",
-            BrokerCommandKindV6::PlaceOrder,
-            "price_moved",
-        )],
-    );
-    cutover.owner_state.trigger = strategy_core_v3::decision_v4::TriggerV4::Recovery;
-    cutover.trigger = TriggerV6::Owner(OwnerTriggerV6::Recovery);
-    cutover.kernel_checkpoint = Some(converted);
-    let first = decide(&cutover, nothing);
-    assert!(
-        first.updates.is_empty(),
-        "no burst of updates for old orders"
-    );
-    assert_eq!(first.seen, Vec::<String>::new(), "Recovery runs on_start");
-    let checkpoint = first.result.kernel_checkpoint.as_ref().unwrap();
-    assert_eq!(checkpoint.sequence, 8);
-    assert_eq!(checkpoint.state, b"script");
-    assert_eq!(
-        checkpoint
-            .runner
-            .entries
-            .iter()
-            .map(|entry| entry.command_id.as_str())
-            .collect::<Vec<_>>(),
-        ["command.v5-resting"]
-    );
-    assert_eq!(
-        first.result.acknowledged_command_ids,
-        ["command.v5-refused", "command.v5-filled"]
-    );
-
-    // From then on the old order's changes are news.
-    let filled = follow_up(
-        &context,
-        Some(&first.result),
-        3,
-        vec![order(
-            "command.v5-resting",
-            "v5-resting",
-            BrokerOrderStatusV6::Filled,
-            300,
-            5,
-        )],
-        vec![],
-    );
-    let decision = decide(&filled, nothing);
-    assert_eq!(
-        decision.updates.iter().map(summary).collect::<Vec<_>>(),
-        [(OrderUpdateStatus::Filled, 300, 0, true)]
-    );
-}
-
-fn v5_digest(checkpoint: &KernelCheckpointV5Layout) -> [u8; 32] {
-    use sha2::{Digest, Sha256};
-    let component = |hasher: &mut Sha256, value: &[u8]| {
-        hasher.update((value.len() as u64).to_be_bytes());
-        hasher.update(value);
-    };
-    let mut hasher = Sha256::new();
-    hasher.update(b"strategy-core/decision-v5/checkpoint/v1\0");
-    component(&mut hasher, checkpoint.codec_profile.as_bytes());
-    hasher.update(checkpoint.codec_version.to_be_bytes());
-    component(&mut hasher, checkpoint.strategy_id.as_bytes());
-    component(&mut hasher, checkpoint.strategy_profile.as_bytes());
-    component(
-        &mut hasher,
-        checkpoint.profile_and_calculator_digest.as_bytes(),
-    );
-    hasher.update(checkpoint.sequence.to_be_bytes());
-    component(&mut hasher, &checkpoint.state);
-    hasher.finalize().into()
 }
 
 #[test]

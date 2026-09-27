@@ -87,17 +87,19 @@ traderv3 and strategies must build to these choices or change them here first.
 14. **Handshake.** strategy-core defines no handshake; `HANDSHAKE_CAPABILITIES_V6`
     (`decision-v6`, `kernel-checkpoint`, `liveness`) is exported for the executable and host
     to share.
-15. **V5 checkpoint conversion** is the only V5-named code left:
+15. **V5 checkpoint conversion** was the last V5-named code:
     `KernelCheckpointV5Layout` (the V5 field order, for the host to decode its stored bytes
-    with its own codec) and `convert_v5_kernel_checkpoint`, which checks the V5 digest,
-    keeps the kernel bytes and sequence, and starts an unseeded runner section. It goes when
-    the cutover is done.
+    with its own codec) and `convert_v5_kernel_checkpoint`, which checked the V5 digest,
+    kept the kernel bytes and sequence, and started an unseeded runner section. traderv3
+    deleted its only caller in Phase 8, and Phase 10a deleted both (point 48).
 16. **No V5 decoding.** strategy-core has no V5 context or result decoder. The equivalence
     harness reads recorded V5 contexts and results by depending on strategy-core revision
     c2f654b under a renamed dependency. Its V5 → V6 context conversion fills
     `BrokerOrderV6.fees_micros` from the V5 fill data (0 where absent), leaves
     `command_receipts` empty, fills `rejection_reason` from the V5 outcome's reason, sets
     `orders_complete` true, and converts the checkpoint with `convert_v5_kernel_checkpoint`.
+    Historical: that harness and the converter are gone; strategy-core `1025824` is the last
+    revision with the converter (point 15).
 17. **Truncated views.** The context carries `orders_complete`; the host sets it false when
     it had to truncate the Sleeve's order view. A truncated view reports no order as
     vanished and allows no cancel-all (a local error; validation rejects one). Host
@@ -146,7 +148,8 @@ traderv3 and strategies must build to these choices or change them here first.
     is account-wide and moves with other Sleeves; the tombstone makes a false vanish
     recoverable. Orders are matched by command id only.
 23. **Seeding and adoption.** The runner section records whether it is seeded. The seeding
-    decision (a Sleeve's first, or the first after converting a V5 checkpoint), over a
+    decision (a Sleeve's first; until strategy-core `1025824`, also the first after
+    converting a V5 checkpoint), over a
     complete or a truncated view, records the open orders as seen without updates. Since
     the Sleeve's view holds only its own orders, an open order the section does not track
     later (its tombstone expired or was evicted) is adopted the same way, reported as
@@ -341,3 +344,26 @@ steps are in [plans/2026-09-27-phase5-order-intent.md](plans/2026-09-27-phase5-o
 50. **Execution styles are constructors.** `resting_limit`, `direct` and `sweep` build a GTC
     Limit, an IOC Limit and an IOC capped Market buy; nothing about them reaches the wire.
     `max_cost` is not ported.
+
+## Oracle error distributions (Phase 10a)
+
+From the Phase 10a section of
+`traderv3/docs/plans/2026-09-24-strategy-core-parity-and-legacy-removal.md` and MinuteTemp's
+`OracleErrorDistribution` (`go/api/docs/specs/openapi.yaml`).
+
+48. **Extended in place.** As in point 45, `OracleRowV4` and `SuppliedOracleScoreV6` gain
+    `error_distribution` without a new version: the magics stay `SDCTXV6A`/`SDRESV6A`, and
+    contexts encoded before this change do not decode. The corpus and its digest changed
+    with it. The same change deleted the V5 checkpoint converter (point 15) and its vectors
+    `converted-v5-checkpoint` and `converted-checkpoint-adopts-open-order`; seeding from a
+    first decision is covered by the kernel projection suite.
+49. **Fixed arrays.** Edges and counters are `[_; 22]` and `[_; 23]`, so their lengths are
+    part of the type: the host rejects a provider array of another length while parsing. Canonical edges are millionths of a
+    degree like the MAE fields; supplied edges are `DecimalV6`; the kernel view has `f64`.
+    Counters and `sample_count` are `u64` (the provider's are non-negative int64);
+    `day_count` is `u16` on the canonical row and `i64` beside the supplied row's `i64`.
+50. **Invalid is the host's to drop.** A malformed distribution makes the context invalid.
+    The host checks each with `OracleErrorDistributionV6::validate` or
+    `supplied_v6::validate_error_distribution` and drops one that fails to `None` with a
+    recorded reason, keeping the row's scores. Supplied and canonical rows are not compared
+    value by value, as for the other oracle fields.

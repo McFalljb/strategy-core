@@ -10,6 +10,7 @@ use std::borrow::Cow;
 use chrono::{DateTime, Utc};
 
 use crate::actions::{ContractQuantity, ExternalResponse, OrderUpdate};
+use crate::state::OracleErrorDistribution;
 use crate::supplied::{
     SuppliedExtreme, SuppliedForecast, SuppliedForecastModel, SuppliedObservation,
     SuppliedOracleTable, SuppliedReport, SuppliedWeatherEvent,
@@ -294,6 +295,8 @@ pub struct OracleModelScoreSnapshot<'a> {
     pub high_bias: Option<f64>,
     pub low_bias: Option<f64>,
     pub day_count: Option<i64>,
+    /// `None` means unavailable, never zero error.
+    pub error_distribution: Option<&'a OracleErrorDistribution>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]

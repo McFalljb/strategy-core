@@ -247,6 +247,13 @@ Convenience views over them are `TickerPriceView` (`get_price`), `StationWeather
 (`latest_oracle_scores`). `native/strategy_core_kernel/src/events.rs`
 and `state.rs` list every field.
 
+Each oracle score (`OracleScore`, `OracleModelScoreSnapshot`) may carry `error_distribution`:
+a run-weighted histogram of the model's signed errors (forecast − observed, °F), with 22
+`bin_edges_f` from −10.5 to +10.5 and 23 `high_counts` / `low_counts` (underflow, 21
+one-degree bands that include their lower edge, overflow), each summing to `sample_count`,
+over `day_count` covered days. `None` means unavailable, never zero error. Merge histograms by
+summing their counters. See [Decision V6](decision-v6.md#oracle-error-distributions).
+
 Kernel views borrow strings and slices where possible. They are valid only for the event or
 state borrow that produced them; copy owned data before retaining it beyond that call.
 

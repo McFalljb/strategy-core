@@ -9,16 +9,21 @@
 
 use std::collections::BTreeSet;
 
-pub use strategy_core_kernel::supplied::SUPPLIED_INPUTS_CONTRACT_VERSION;
+pub use strategy_core_kernel::supplied::{
+    ORACLE_ERROR_BIN_EDGES, ORACLE_ERROR_BINS, ORACLE_ERROR_DISTRIBUTION_VERSION,
+    SUPPLIED_INPUTS_CONTRACT_VERSION,
+};
 pub use strategy_core_kernel::{
     Decimal as DecimalV6, EventEnvelope as EventEnvelopeV6, ExtremeKind as ExtremeKindV6,
     SuppliedDailyExtremes as SuppliedDailyExtremesV6, SuppliedEvent as SuppliedEventV6,
     SuppliedExtreme as SuppliedExtremeV6, SuppliedForecast as SuppliedForecastV6,
     SuppliedForecastModel as SuppliedForecastModelV6,
     SuppliedForecastPoint as SuppliedForecastPointV6, SuppliedInputs as SuppliedInputsV6,
-    SuppliedObservation as SuppliedObservationV6, SuppliedOracleScore as SuppliedOracleScoreV6,
-    SuppliedOracleTable as SuppliedOracleTableV6, SuppliedReport as SuppliedReportV6,
-    SuppliedStation as SuppliedStationV6, SuppliedWeatherEvent as SuppliedWeatherEventV6,
+    SuppliedObservation as SuppliedObservationV6,
+    SuppliedOracleErrorDistribution as SuppliedOracleErrorDistributionV6,
+    SuppliedOracleScore as SuppliedOracleScoreV6, SuppliedOracleTable as SuppliedOracleTableV6,
+    SuppliedReport as SuppliedReportV6, SuppliedStation as SuppliedStationV6,
+    SuppliedWeatherEvent as SuppliedWeatherEventV6,
     SuppliedWeatherEventSource as SuppliedWeatherEventSourceV6,
 };
 
@@ -407,8 +412,38 @@ pub(crate) fn validate_oracle_table(table: &SuppliedOracleTableV6) -> Result<(),
         ] {
             optional_decimal(value)?;
         }
+        if let Some(distribution) = &score.error_distribution {
+            validate_error_distribution(distribution, score.day_count)?;
+        }
     }
     Ok(())
+}
+
+/// Checks a supplied error distribution against its row's `day_count` by the rules of
+/// [`crate::decision_v6::OracleErrorDistributionV6::validate`], its edges exactly the canonical
+/// decimals −10.5, −9.5, …, +10.5. A context
+/// holding one that fails is invalid, so the host drops a malformed provider distribution to
+/// `None` first.
+pub fn validate_error_distribution(
+    distribution: &SuppliedOracleErrorDistributionV6,
+    row_day_count: Option<i64>,
+) -> Result<(), DecisionV6Error> {
+    if crate::decision_v6::valid_error_distribution(
+        &distribution.version,
+        distribution.bin_edges_f
+            == std::array::from_fn(|index| DecimalV6 {
+                coefficient: index as i64 * 10 - 105,
+                scale: 1,
+            }),
+        [&distribution.high_counts, &distribution.low_counts],
+        distribution.sample_count,
+        distribution.day_count,
+        row_day_count,
+    ) {
+        Ok(())
+    } else {
+        Err(DecisionV6Error::InvalidContract)
+    }
 }
 
 fn identifier(value: &str) -> Result<(), DecisionV6Error> {

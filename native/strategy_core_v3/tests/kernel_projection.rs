@@ -33,11 +33,11 @@ use strategy_core_v3::kernel_v6::{
     TransactionKernelFactory, run_transaction,
 };
 use strategy_core_v3::supplied_v6::{
-    DecimalV6, EventEnvelopeV6, ExtremeKindV6, SUPPLIED_INPUTS_CONTRACT_VERSION,
-    SuppliedDailyExtremesV6, SuppliedEventV6, SuppliedExtremeV6, SuppliedForecastModelV6,
-    SuppliedForecastPointV6, SuppliedForecastV6, SuppliedInputsV6, SuppliedObservationV6,
-    SuppliedOracleScoreV6, SuppliedOracleTableV6, SuppliedReportV6, SuppliedStationV6,
-    SuppliedWeatherEventV6,
+    DecimalV6, EventEnvelopeV6, ExtremeKindV6, ORACLE_ERROR_DISTRIBUTION_VERSION,
+    SUPPLIED_INPUTS_CONTRACT_VERSION, SuppliedDailyExtremesV6, SuppliedEventV6, SuppliedExtremeV6,
+    SuppliedForecastModelV6, SuppliedForecastPointV6, SuppliedForecastV6, SuppliedInputsV6,
+    SuppliedObservationV6, SuppliedOracleErrorDistributionV6, SuppliedOracleScoreV6,
+    SuppliedOracleTableV6, SuppliedReportV6, SuppliedStationV6, SuppliedWeatherEventV6,
 };
 
 #[path = "kernel_projection/host_services.rs"]
@@ -343,6 +343,16 @@ fn supplied_station(observation: SuppliedObservationV6) -> SuppliedStationV6 {
                 model_name: "HRRR".to_owned(),
                 high_mae: decimal("0.123456789012345678"),
                 day_count: Some(7),
+                error_distribution: Some(SuppliedOracleErrorDistributionV6 {
+                    version: ORACLE_ERROR_DISTRIBUTION_VERSION.to_owned(),
+                    bin_edges_f: std::array::from_fn(|index| {
+                        decimal(&format!("{}", index as f64 - 10.5)).unwrap()
+                    }),
+                    high_counts: std::array::from_fn(|index| u64::from(index == 11) * 12),
+                    low_counts: std::array::from_fn(|index| u64::from(index == 10) * 12),
+                    sample_count: 12,
+                    day_count: 6,
+                }),
                 ..Default::default()
             }],
             ..Default::default()
@@ -619,6 +629,15 @@ impl NativeKernel for RecordingKernel {
             Some(1_788_000_000_000_000_987)
         );
         assert_eq!(oracle.supplied.unwrap().scores[0].rank, Some(1));
+        let distribution = oracle.scores[0].error_distribution.unwrap();
+        assert_eq!(distribution.bin_edges_f[0], -10.5);
+        assert_eq!(distribution.bin_edges_f[21], 10.5);
+        assert_eq!(
+            (distribution.high_counts[11], distribution.low_counts[10]),
+            (12, 12),
+            "high errors in [-0.5, 0.5) °F, low errors in [-1.5, -0.5) °F"
+        );
+        assert_eq!(distribution.day_count, 6);
         assert!(
             context
                 .state()

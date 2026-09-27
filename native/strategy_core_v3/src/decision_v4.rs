@@ -6,6 +6,8 @@
 
 use bincode::{Decode, Encode};
 
+use crate::decision_v6::OracleErrorDistributionV6;
+
 mod observation_codec;
 #[doc(hidden)]
 pub use observation_codec::{RetainedObservationEncodingV4, RetainedWeatherEncodingV4};
@@ -321,6 +323,8 @@ pub struct OracleRowV4 {
     pub high_bias_millionths: Option<i64>,
     pub low_bias_millionths: Option<i64>,
     pub day_count: Option<u16>,
+    /// `None` means unavailable, never zero error.
+    pub error_distribution: Option<OracleErrorDistributionV6>,
 }
 #[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct OracleTableV4 {

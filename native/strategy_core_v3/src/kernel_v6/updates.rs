@@ -438,9 +438,9 @@ pub(super) fn derive_from_section(
     }
 
     // Every open order of the Sleeve is tracked. The host's view, even truncated, holds every
-    // open order (it drops terminal ones only), so the first decision (or the first after
-    // converting a V5 checkpoint) records them as seen, from their current status, without
-    // updates, and the result acknowledges the terminal ones. Later, an open order the section
+    // open order (it drops terminal ones only), so the first decision records them as seen,
+    // from their current status, without updates, and the result acknowledges the terminal
+    // ones. Later, an open order the section
     // does not track (its tombstone expired or was evicted) is adopted the same way, and
     // reported, from a view newer than any the section has seen: an older one may show an
     // order the Strategy already saw further along, even final.
