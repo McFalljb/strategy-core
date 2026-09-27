@@ -98,6 +98,8 @@ traderv3 and strategies must build to these choices or change them here first.
     `BrokerOrderV6.fees_micros` from the V5 fill data (0 where absent), leaves
     `command_receipts` empty, fills `rejection_reason` from the V5 outcome's reason, sets
     `orders_complete` true, and converts the checkpoint with `convert_v5_kernel_checkpoint`.
+    Historical: that harness and the converter are gone; strategy-core `1025824` is the last
+    revision with the converter (point 15).
 17. **Truncated views.** The context carries `orders_complete`; the host sets it false when
     it had to truncate the Sleeve's order view. A truncated view reports no order as
     vanished and allows no cancel-all (a local error; validation rejects one). Host
@@ -146,7 +148,8 @@ traderv3 and strategies must build to these choices or change them here first.
     is account-wide and moves with other Sleeves; the tombstone makes a false vanish
     recoverable. Orders are matched by command id only.
 23. **Seeding and adoption.** The runner section records whether it is seeded. The seeding
-    decision (a Sleeve's first, or the first after converting a V5 checkpoint), over a
+    decision (a Sleeve's first; until strategy-core `1025824`, also the first after
+    converting a V5 checkpoint), over a
     complete or a truncated view, records the open orders as seen without updates. Since
     the Sleeve's view holds only its own orders, an open order the section does not track
     later (its tombstone expired or was evicted) is adopted the same way, reported as

@@ -435,8 +435,10 @@ edges, and the kernel's `OracleScore` / `OracleModelScoreSnapshot` as
   percentiles.
 
 Validation (`OracleErrorDistributionV6::validate`, `supplied_v6::validate_error_distribution`)
-requires the known version, strictly increasing edges (canonical `DecimalV6` edges when
-supplied), both counter arrays summing to `sample_count` ≥ 1 without overflow, and
+requires the known version, exactly its edges −10.5, −9.5, …, +10.5 (−10 500 000 + i ×
+1 000 000 millionths; the canonical `DecimalV6` `{ −105 + 10i, 1 }` when supplied), both
+counter arrays summing to `sample_count` without overflow, `1 ≤ sample_count ≤ i64::MAX`
+(MinuteTemp's int64 range, which bounds every counter), and
 `1 ≤ day_count ≤` the row's `day_count` when the row has one. A context holding a
 distribution that fails is `InvalidContract`, so the host drops a malformed provider
 distribution to `None` (keeping the row's scores) before it builds the context. Supplied

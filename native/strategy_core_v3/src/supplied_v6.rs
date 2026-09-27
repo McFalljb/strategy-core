@@ -420,19 +420,21 @@ pub(crate) fn validate_oracle_table(table: &SuppliedOracleTableV6) -> Result<(),
 }
 
 /// Checks a supplied error distribution against its row's `day_count` by the rules of
-/// [`crate::decision_v6::OracleErrorDistributionV6::validate`], with canonical edges. A context
+/// [`crate::decision_v6::OracleErrorDistributionV6::validate`], its edges exactly the canonical
+/// decimals −10.5, −9.5, …, +10.5. A context
 /// holding one that fails is invalid, so the host drops a malformed provider distribution to
 /// `None` first.
 pub fn validate_error_distribution(
     distribution: &SuppliedOracleErrorDistributionV6,
     row_day_count: Option<i64>,
 ) -> Result<(), DecisionV6Error> {
-    for edge in distribution.bin_edges_f {
-        optional_decimal(Some(edge))?;
-    }
     if crate::decision_v6::valid_error_distribution(
         &distribution.version,
-        &distribution.bin_edges_f.map(DecimalV6::to_f64),
+        distribution.bin_edges_f
+            == std::array::from_fn(|index| DecimalV6 {
+                coefficient: index as i64 * 10 - 105,
+                scale: 1,
+            }),
         [&distribution.high_counts, &distribution.low_counts],
         distribution.sample_count,
         distribution.day_count,

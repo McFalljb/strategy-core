@@ -1011,7 +1011,8 @@ impl OracleErrorDistributionV6 {
     pub fn validate(&self, row_day_count: Option<u16>) -> Result<(), DecisionV6Error> {
         if valid_error_distribution(
             &self.version,
-            &self.bin_edges_millionths,
+            self.bin_edges_millionths
+                == std::array::from_fn(|index| index as i64 * 1_000_000 - 10_500_000),
             [&self.high_counts, &self.low_counts],
             self.sample_count,
             i64::from(self.day_count),
@@ -1024,20 +1025,22 @@ impl OracleErrorDistributionV6 {
     }
 }
 
-/// The rules of an oracle error distribution at either precision: the known version, strictly
-/// increasing edges, each counter array summing to `sample_count` ≥ 1 without overflow, and
-/// `1 ≤ day_count ≤` the row's `day_count` when the row has one.
-pub(crate) fn valid_error_distribution<E: PartialOrd>(
+/// The rules of an oracle error distribution at either precision: the known version, the
+/// version's edges (−10.5, −9.5, …, +10.5 °F; `edges_exact`, checked by the caller at its
+/// precision), each counter array summing to `sample_count` without overflow, `1 ≤
+/// sample_count ≤ i64::MAX` (MinuteTemp's int64 range, which bounds every counter), and `1 ≤
+/// day_count ≤` the row's `day_count` when the row has one.
+pub(crate) fn valid_error_distribution(
     version: &str,
-    edges: &[E],
+    edges_exact: bool,
     counts: [&[u64; ORACLE_ERROR_BINS]; 2],
     sample_count: u64,
     day_count: i64,
     row_day_count: Option<i64>,
 ) -> bool {
     version == ORACLE_ERROR_DISTRIBUTION_VERSION
-        && edges.windows(2).all(|pair| pair[0] < pair[1])
-        && sample_count >= 1
+        && edges_exact
+        && (1..=i64::MAX as u64).contains(&sample_count)
         && counts.iter().all(|counts| {
             counts
                 .iter()

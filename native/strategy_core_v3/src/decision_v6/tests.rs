@@ -1279,14 +1279,28 @@ fn an_oracle_error_distribution_is_checked_against_its_row() {
         Ok(()),
         "a row without days bounds none"
     );
+    let mut largest = valid.clone();
+    largest.high_counts = [0; ORACLE_ERROR_BINS];
+    largest.high_counts[11] = i64::MAX as u64;
+    largest.low_counts = largest.high_counts;
+    largest.sample_count = i64::MAX as u64;
+    assert_eq!(
+        largest.validate(Some(7)),
+        Ok(()),
+        "int64's maximum is in range"
+    );
     type Mutation = fn(&mut OracleErrorDistributionV6);
-    let cases: [(&str, Mutation); 8] = [
+    let cases: [(&str, Mutation); 11] = [
         ("unknown version", |d| {
             d.version = "signed-error-f-v2".to_owned()
         }),
         ("edges not increasing", |d| {
             d.bin_edges_millionths[5] = d.bin_edges_millionths[4];
         }),
+        ("edges shifted", |d| {
+            d.bin_edges_millionths = std::array::from_fn(|index| index as i64 * 1_000_000);
+        }),
+        ("edges uneven", |d| d.bin_edges_millionths[5] += 250_000),
         ("high counts miss the sample count", |d| {
             d.high_counts[0] += 1
         }),
@@ -1301,6 +1315,13 @@ fn an_oracle_error_distribution_is_checked_against_its_row() {
         ("counters overflow to the sample count", |d| {
             d.high_counts[0] = u64::MAX;
             d.high_counts[1] = 1;
+        }),
+        ("samples beyond int64", |d| {
+            d.high_counts = [0; ORACLE_ERROR_BINS];
+            d.low_counts = [0; ORACLE_ERROR_BINS];
+            d.high_counts[11] = 1 << 63;
+            d.low_counts[11] = 1 << 63;
+            d.sample_count = 1 << 63;
         }),
         ("no covered day", |d| d.day_count = 0),
         ("more days than the row", |d| d.day_count = 8),
