@@ -2,7 +2,6 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
   pull_request:
   workflow_dispatch:
 
@@ -19,6 +18,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+
+      - name: Legacy-free gate
+        run: scripts/legacy-free-check.sh
 
       - name: Install rustfmt and clippy
         run: rustup component add rustfmt clippy
