@@ -120,11 +120,16 @@ the context. `Cancelled`, `Expired` and `Rejected` orders may report no remainin
 with less than their whole quantity filled.
 
 Contributor stations are the owner projection's `opportunity.contributor_stations`; V6
-requires them to be exactly the owner projection's stations (at most `MAX_STATIONS = 5`). The
-multi-station owner projection is unchanged. `BrokerOrderV6` adds `fees_micros`, the
-execution fees charged for the order's fills so far, and `rejection_reason`, the provider's
-rejection text of a `Rejected` order when it gave one (at most 4 KiB; empty is the same as
-none; ignored on other statuses). The host writes the reason with the status, atomically.
+requires them to be exactly the owner projection's stations. No count bounds them; the
+context's encoded size does (`MAX_DECISION_CONTEXT_V6_BYTES`, checked on encode and decode;
+`examples/decision_v4_schema_max.rs` shows how many schema-maximum stations fit the V4
+bound). A contributor may have no data: no observation, report, forecast or oracle table
+(its `oracle` is the empty default and it has no current oracle input), only its identity,
+timezone and climate day. The multi-station owner projection is unchanged.
+`BrokerOrderV6` adds `fees_micros`, the execution fees charged for the order's fills so
+far, and `rejection_reason`, the provider's rejection text of a `Rejected` order when it
+gave one (at most 4 KiB; empty is the same as none; ignored on other statuses). The host
+writes the reason with the status, atomically.
 
 `TriggerV6` is `Owner(OwnerTriggerV6)`, `BrokerState { broker_revision }`, valid on its own
 (not only under Recovery), or `ExternalResponse { request_id, outcome }` (see "External

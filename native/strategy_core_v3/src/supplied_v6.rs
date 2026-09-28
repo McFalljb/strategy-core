@@ -48,9 +48,6 @@ pub fn validate_supplied_inputs(inputs: &SuppliedInputsV6) -> Result<(), Decisio
     if inputs.contract_version != SUPPLIED_INPUTS_CONTRACT_VERSION {
         return Err(DecisionV6Error::InvalidContract);
     }
-    if inputs.stations.len() > crate::decision_v4::MAX_STATIONS {
-        return Err(DecisionV6Error::BoundExceeded);
-    }
     strictly_sorted(
         inputs
             .stations

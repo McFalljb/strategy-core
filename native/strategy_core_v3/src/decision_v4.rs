@@ -14,7 +14,6 @@ pub use observation_codec::{RetainedObservationEncodingV4, RetainedWeatherEncodi
 
 pub const DECISION_CONTEXT_V4_MAGIC: &[u8; 8] = b"SDCTXV4\0";
 pub const MAX_DECISION_CONTEXT_V4_BYTES: usize = 16 * 1024 * 1024;
-pub const MAX_STATIONS: usize = 5;
 pub const MAX_MARKETS: usize = 128;
 pub const MAX_MODELS_PER_STATION: usize = 32;
 pub const MAX_POINTS_PER_MODEL: usize = 100;
@@ -588,7 +587,6 @@ impl DecisionContextV4 {
     ) -> Result<(), DecisionV4Error> {
         if self.delivery_id.is_empty()
             || self.stations.is_empty()
-            || self.stations.len() > MAX_STATIONS
             || self.markets.is_empty()
             || self.markets.len() > MAX_MARKETS
             || self.fence.route_plan_sha256 == [0; 32]

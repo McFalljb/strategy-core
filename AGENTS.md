@@ -28,8 +28,8 @@ cargo test --manifest-path native/Cargo.toml --workspace --all-features
 # Regenerate the Decision V6 corpus after an intended wire change
 cargo test --manifest-path native/Cargo.toml -p strategy-core-v3 -- --ignored write_v6_corpus
 
-# Digests consumers pin for a revision
-scripts/pin-digests.sh <commit>
+# Digests consumers pin for a release tag (or any revision)
+scripts/pin-digests.sh <tag>
 
 # Legacy-free gate (CI): no legacy crates, imports, features or deleted V4/V5 symbols
 scripts/legacy-free-check.sh
@@ -39,9 +39,13 @@ scripts/legacy-free-check.sh
 
 - Keep dependencies minimal; this repo is a shared library, not an engine.
   `strategy-core-v3`'s dependency allowlist is enforced by its conformance test.
-- Consumers pin a git revision plus the `native/strategy_core_v3` archive digest and the
+- Consumers pin a GitHub release tag (`strategy-core-v3-v<version>`, both crates at that
+  version) plus the tag's `native/strategy_core_v3` archive digest and
   `conformance/v6/decision-transactions.json` digest. A change to either is a contract
-  change: say so in the commit and update the docs.
+  change: say so in the commit and the release notes, and update the docs.
+- A release bumps both crate versions together and adds `docs/releases/<version>.md` on a
+  branch. After it merges, tag the merge commit and publish the release from those notes
+  (see the notes for the exact commands). Never move or reuse a tag; fix forward.
 
 ## Docs
 

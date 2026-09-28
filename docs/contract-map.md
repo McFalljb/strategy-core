@@ -36,21 +36,21 @@ Detailed contracts:
 
 ## Depend on the crates
 
-Consumers pin both crates to one git revision:
+Consumers pin both crates to one GitHub release tag (`strategy-core-v3-v<version>`):
 
 ```toml
 [dependencies]
-strategy-core-kernel = { git = "https://github.com/McFalljb/strategy-core.git", rev = "<commit>", version = "=0.1.0" }
-strategy-core-v3 = { git = "https://github.com/McFalljb/strategy-core.git", rev = "<commit>", version = "=0.1.0", features = ["kernel"] }
+strategy-core-kernel = { git = "https://github.com/McFalljb/strategy-core.git", tag = "strategy-core-v3-v0.2.0", version = "=0.2.0" }
+strategy-core-v3 = { git = "https://github.com/McFalljb/strategy-core.git", tag = "strategy-core-v3-v0.2.0", version = "=0.2.0", features = ["kernel"] }
 ```
 
 Kernels need only `strategy-core-kernel`. A Strategy executable or host that runs Decision V6
-also needs `strategy-core-v3` with the `kernel` feature. Use one revision for both crates
+also needs `strategy-core-v3` with the `kernel` feature. Use one tag for both crates
 everywhere in a build: the V3 crate depends on the kernel crate by path, so two revisions
 put two incompatible kernel crates in the graph.
 
-A consumer records two digests next to the revision. `scripts/pin-digests.sh <commit>`
-prints both:
+A consumer records the tag's commit and two digests next to the tag.
+`scripts/pin-digests.sh <tag>` prints all three:
 
 - the `strategy-core-v3` source tree: sha256 of
   `git archive --format=tar <commit> native/strategy_core_v3` (git's pax header embeds the
