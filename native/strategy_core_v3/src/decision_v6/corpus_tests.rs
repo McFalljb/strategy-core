@@ -14,7 +14,10 @@ use strategy_core_kernel::{BrokerFinancialState, ContractQuantity, fees};
 
 use super::tests::*;
 use super::*;
-use crate::decision_v4::{OracleQueryV4, OracleRowV4, StationV4, TriggerV4};
+use crate::current_v6::{OracleInputV6, StationInputsV6};
+use crate::decision_v4::{
+    AuthorityV4, ComponentMetaV4, OracleQueryV4, OracleRowV4, ProvenanceV4, StationV4, TriggerV4,
+};
 use crate::supplied_v6::{
     DecimalV6, SUPPLIED_INPUTS_CONTRACT_VERSION, SuppliedOracleErrorDistributionV6,
     SuppliedOracleScoreV6, SuppliedOracleTableV6, SuppliedStationV6,
@@ -217,6 +220,66 @@ fn oracle_without_distribution_context() -> DecisionContextV6 {
     context
 }
 
+/// An eight-station event (the size of the NYC hourly index), delivered with current inputs as
+/// a host does. The primary KSEA carries its day-of oracle table as a current input; the seven
+/// other contributors have no data: no observation, report, forecast or oracle table, and an
+/// empty supplied station. Each still has its timezone and climate day.
+fn stations_without_data_context() -> DecisionContextV6 {
+    let mut context = oracle_distribution_context();
+    let ids = [
+        "KAWO", "KBFI", "KOLM", "KPAE", "KPWT", "KRNT", "KSEA", "KTIW",
+    ];
+    let mut primary = context.owner_state.stations.remove(0);
+    primary.revision = 1;
+    primary.oracle_meta = ComponentMetaV4 {
+        authority: AuthorityV4::Current,
+        revision: 1,
+        generation: 1,
+        ..Default::default()
+    };
+    primary.oracle.provenance = ProvenanceV4 {
+        provider: "minutetemp".to_owned(),
+        source: "rest.oracle".to_owned(),
+        ..Default::default()
+    };
+    let primary_supplied = context.supplied.stations.remove(0);
+    context.owner_state.stations = ids
+        .iter()
+        .map(|id| match *id {
+            "KSEA" => primary.clone(),
+            id => station(id),
+        })
+        .collect();
+    context.owner_state.opportunity.contributor_stations =
+        ids.iter().map(|id| (*id).to_owned()).collect();
+    context.supplied.stations = ids
+        .iter()
+        .map(|id| SuppliedStationV6 {
+            station_id: (*id).to_owned(),
+            ..Default::default()
+        })
+        .collect();
+    context.current_inputs = Some(CurrentInputsV6 {
+        stations: ids
+            .iter()
+            .map(|id| StationInputsV6 {
+                station_id: (*id).to_owned(),
+                oracles: if *id == "KSEA" {
+                    vec![OracleInputV6 {
+                        meta: primary.oracle_meta.clone(),
+                        table: primary.oracle.clone(),
+                        supplied: primary_supplied.oracle_tables.first().cloned(),
+                    }]
+                } else {
+                    Vec::new()
+                },
+            })
+            .collect(),
+        originating: None,
+    });
+    context
+}
+
 fn live_context() -> DecisionContextV6 {
     let mut context = context();
     context.deployment_mode = DeploymentModeV6::Live;
@@ -326,6 +389,10 @@ fn valid_contexts() -> Vec<(&'static str, DecisionContextV6)> {
         (
             "oracle-without-error-distribution",
             oracle_without_distribution_context(),
+        ),
+        (
+            "scope-stations-without-data",
+            stations_without_data_context(),
         ),
     ]
 }
@@ -656,6 +723,15 @@ fn invalid_contexts() -> Vec<(&'static str, DecisionV6Error, ContextMutation)> {
                 *context = oracle_distribution_context();
                 let score = &mut context.supplied.stations[0].oracle_tables[0].scores[0];
                 score.error_distribution.as_mut().unwrap().low_counts[11] += 1;
+            },
+        ),
+        (
+            "station-oracle-missing-from-current-inputs",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = stations_without_data_context();
+                let current = context.current_inputs.as_mut().unwrap();
+                current.stations[6].oracles.clear();
             },
         ),
     ]
@@ -1256,7 +1332,7 @@ fn v6_corpus_is_current_and_every_vector_decodes_to_its_verdict() {
         }
     }
     let invalid = recorded["invalid"].as_array().unwrap();
-    assert_eq!(invalid.len(), 45);
+    assert_eq!(invalid.len(), 46);
     for entry in invalid {
         let id = entry["id"].as_str().unwrap();
         let bytes = bytes(entry);
@@ -1327,4 +1403,14 @@ fn corpus_builders_are_what_the_ids_say() {
         "the trigger is not the primary station"
     );
     let _: StationV4 = station("KSEA");
+
+    let scope = stations_without_data_context();
+    assert_eq!(scope.contributor_stations().len(), 8);
+    let current = &scope.current_inputs.as_ref().unwrap().stations;
+    for (station, inputs) in scope.owner_state.stations.iter().zip(current) {
+        let primary = station.identity.station_id == scope.strategy.station_id;
+        assert_eq!(!inputs.oracles.is_empty(), primary);
+        assert_eq!(!station.oracle.rows.is_empty(), primary);
+        assert!(station.forecast.models.is_empty() && station.reports.is_empty());
+    }
 }

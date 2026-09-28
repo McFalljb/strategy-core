@@ -236,10 +236,12 @@ fn market(index: usize) -> MarketV4 {
         ..Default::default()
     }
 }
-fn main() {
-    let stations = (0..MAX_STATIONS).map(station).collect::<Vec<_>>();
+/// A context of `station_count` schema-maximum stations beside `MAX_MARKETS` schema-maximum
+/// markets.
+fn context(station_count: usize) -> DecisionContextV4 {
+    let stations = (0..station_count).map(station).collect::<Vec<_>>();
     let markets = (0..MAX_MARKETS).map(market).collect::<Vec<_>>();
-    let context = DecisionContextV4 {
+    DecisionContextV4 {
         delivery_id: "schema-max".into(),
         sleeve: SupervisorV4 {
             sleeve_id: "schema-max".into(),
@@ -260,7 +262,7 @@ fn main() {
             market_authority_generation: 1,
             price_revision: 1,
             broker_revision: 1,
-            station_resources: (0..45)
+            station_resources: (0..9 * station_count)
                 .map(|i| ResourceRevisionV4 {
                     identity: format!("s{i}"),
                     revision: 1,
@@ -307,8 +309,38 @@ fn main() {
         delivered_at_monotonic_ns: 1,
         hard_expires_at_monotonic_ns: 2,
         ..Default::default()
+    }
+}
+
+/// No count bounds a context's stations: its encoded size does. This proves how many
+/// schema-maximum stations fit `MAX_DECISION_CONTEXT_V4_BYTES` beside the maximum markets,
+/// and that one more is refused by that byte bound. With a station count argument it checks
+/// that count instead, failing when it does not fit.
+fn main() {
+    let encode = |station_count: usize| {
+        let context = context(station_count);
+        encode_decision_context_v4(&context).inspect(|encoded| {
+            assert_eq!(decode_decision_context_v4(encoded).unwrap(), context);
+        })
     };
-    let encoded = encode_decision_context_v4(&context).expect("schema maximum fits V4 bound");
-    assert_eq!(decode_decision_context_v4(&encoded).unwrap(), context);
-    println!("{} {:x}", encoded.len(), Sha256::digest(&encoded));
+    if let Some(count) = std::env::args().nth(1) {
+        let count = count.parse().expect("a station count");
+        let encoded = encode(count).expect("the stations fit the V4 byte bound");
+        println!("{count} {} {:x}", encoded.len(), Sha256::digest(&encoded));
+        return;
+    }
+    let mut largest = None;
+    for count in 1.. {
+        match encode(count) {
+            Ok(encoded) => largest = Some((count, encoded)),
+            Err(error) => {
+                assert_eq!(error, DecisionV4Error::BoundExceeded);
+                break;
+            }
+        }
+    }
+    let (count, encoded) = largest.expect("one schema-maximum station fits");
+    // The NYC hourly index has eight stations.
+    assert!(count >= 8, "{count} schema-maximum stations fit");
+    println!("{count} {} {:x}", encoded.len(), Sha256::digest(&encoded));
 }

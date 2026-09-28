@@ -12,8 +12,9 @@ traderv3 and strategies must build to these choices or change them here first.
    addition. The V4 owner projection already carries it
    (`owner_state.opportunity.contributor_stations`), so V6 adds no second copy: the context
    exposes it (`DecisionContextV6::contributor_stations`) and validation requires it to be
-   exactly the owner projection's stations, unique, at most `MAX_STATIONS = 5`, including
-   the primary station. traderv3 must deliver a station for every contributor.
+   exactly the owner projection's stations, unique, including the primary station. No
+   count limits them (0.2.0 removed `MAX_STATIONS = 5`); the context's byte bound does.
+   traderv3 must deliver a station for every contributor.
 2. **Order fees and rejection text.** `OrderUpdate.fee_cost` needs the fees charged on
    each order, which V5's Broker order did not carry: `BrokerOrderV6` adds `fees_micros`.
    Kernels (V10, V12) classify transient rejections by the provider's text, so

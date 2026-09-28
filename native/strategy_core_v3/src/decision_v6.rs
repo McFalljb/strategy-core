@@ -17,9 +17,7 @@ use bincode::{Decode, Encode};
 use sha2::{Digest, Sha256};
 
 use crate::current_v6::CurrentInputsV6;
-use crate::decision_v4::{
-    DecisionContextV4, DecisionV4Error, MAX_STATIONS, TriggerV4, decision_fence_v4_sha256,
-};
+use crate::decision_v4::{DecisionContextV4, DecisionV4Error, TriggerV4, decision_fence_v4_sha256};
 use crate::supplied_v6::{
     ExtremeKindV6, ORACLE_ERROR_BIN_EDGES, ORACLE_ERROR_BINS, ORACLE_ERROR_DISTRIBUTION_VERSION,
     SuppliedEventV6, SuppliedInputsV6,
@@ -1340,9 +1338,6 @@ fn validate_scope(context: &DecisionContextV6) -> Result<(), DecisionV6Error> {
 /// The event's contributor stations are exactly the owner projection's stations.
 fn validate_contributor_stations(context: &DecisionContextV6) -> Result<(), DecisionV6Error> {
     let contributors = context.contributor_stations();
-    if contributors.len() > MAX_STATIONS {
-        return Err(DecisionV6Error::BoundExceeded);
-    }
     unique(contributors.iter().map(String::as_str))?;
     let owner = context
         .owner_state

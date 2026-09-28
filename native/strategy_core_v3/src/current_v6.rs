@@ -115,10 +115,14 @@ pub(crate) fn validate(context: &DecisionContextV6) -> Result<(), DecisionV6Erro
                 return Err(DecisionV6Error::InvalidContract);
             }
         }
-        if !inputs
-            .oracles
-            .iter()
-            .any(|input| input.table.query == station.oracle.query)
+        // A station without an oracle table (the empty default, as for a station with no
+        // data) has no current oracle inputs; any other station's table is among them.
+        let no_oracle = inputs.oracles.is_empty() && station.oracle == OracleTableV4::default();
+        if !no_oracle
+            && !inputs
+                .oracles
+                .iter()
+                .any(|input| input.table.query == station.oracle.query)
         {
             return Err(DecisionV6Error::InvalidContract);
         }
