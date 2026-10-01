@@ -1084,7 +1084,7 @@ impl DecisionContextV6 {
         validate_forecast_issuance(self)?;
         validate_market_strikes(self)?;
         if let Some(index) = &self.hourly_index {
-            index.validate()?;
+            index.validate(self.decision_time_unix_ms)?;
         }
         Ok(())
     }

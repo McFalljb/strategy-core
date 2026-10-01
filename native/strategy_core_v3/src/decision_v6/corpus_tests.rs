@@ -824,6 +824,73 @@ fn invalid_contexts() -> Vec<(&'static str, DecisionV6Error, ContextMutation)> {
             },
         ),
         (
+            "hourly-index-latest-not-newest-retained-minute",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = hourly_index_context();
+                let index = context.hourly_index.as_mut().unwrap();
+                index.supplied.latest.as_mut().unwrap().revision += 1;
+            },
+        ),
+        (
+            "hourly-index-latest-valued-disagrees-with-retained-minute",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = hourly_index_context();
+                let index = context.hourly_index.as_mut().unwrap();
+                index.supplied.latest_valued.as_mut().unwrap().value_f = Some(DecimalV6 {
+                    coefficient: 8_431,
+                    scale: 2,
+                });
+            },
+        ),
+        (
+            "hourly-index-latest-valued-not-newest-valued",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = hourly_index_context();
+                let index = &mut context.hourly_index.as_mut().unwrap().supplied;
+                index.latest_valued = Some(index.recent_minutes[1].clone());
+            },
+        ),
+        (
+            "hourly-index-hour-end-not-top-of-hour",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = hourly_index_context();
+                let index = context.hourly_index.as_mut().unwrap();
+                index
+                    .supplied
+                    .current_hour
+                    .as_mut()
+                    .unwrap()
+                    .hour_end_unix_ns += 60_000_000_000;
+            },
+        ),
+        (
+            "hourly-index-minute-far-future",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = hourly_index_context();
+                let index = &mut context.hourly_index.as_mut().unwrap().supplied;
+                // A day past the decision time, consistent as the newest minute.
+                index.recent_minutes[0].minute_unix_ns =
+                    (context.decision_time_unix_ms + 86_400_000) * 1_000_000;
+                index.latest = Some(index.recent_minutes[0].clone());
+                index.latest_valued = Some(index.recent_minutes[0].clone());
+            },
+        ),
+        (
+            "hourly-index-minute-before-2020",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = hourly_index_context();
+                let index = &mut context.hourly_index.as_mut().unwrap().supplied;
+                // 2019-12-31T23:59Z, the oldest retained minute.
+                index.recent_minutes[74].minute_unix_ns = 1_577_836_740_000_000_000;
+            },
+        ),
+        (
             "station-oracle-missing-from-current-inputs",
             DecisionV6Error::InvalidContract,
             |context| {
@@ -1430,7 +1497,7 @@ fn v6_corpus_is_current_and_every_vector_decodes_to_its_verdict() {
         }
     }
     let invalid = recorded["invalid"].as_array().unwrap();
-    assert_eq!(invalid.len(), 53);
+    assert_eq!(invalid.len(), 59);
     for entry in invalid {
         let id = entry["id"].as_str().unwrap();
         let bytes = bytes(entry);

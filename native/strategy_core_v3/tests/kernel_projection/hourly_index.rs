@@ -152,7 +152,7 @@ fn a_snapshot_projects_every_stream_from_its_supplied_original() {
             (IndexSettlementStatus::NoValue, None),
         ]
     );
-    let settled = index.settlement(ns(1_788_062_400_000_000_000)).unwrap();
+    let settled = index.settlement(ns(1_788_058_800_000_000_000)).unwrap();
     assert_eq!(settled.winning_floor_strike, Some(83.99));
 
     let calibration = index.calibration.as_ref().unwrap();

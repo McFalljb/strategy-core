@@ -69,10 +69,23 @@ pub struct HourlyIndexInputV6 {
     pub components: HourlyIndexComponentsV6,
 }
 
+/// No hourly-index time is earlier than 2020-01-01T00:00Z.
+pub const MIN_INDEX_TIME_UNIX_NS: i64 = 1_577_836_800_000_000_000;
+/// How far past the decision time an observed time (a minute, a receipt, a settlement) may be.
+pub const MAX_INDEX_OBSERVED_LEAD_NS: i64 = 10 * MINUTE_NS;
+/// How far past the decision time a forecast step or settle may be.
+pub const MAX_INDEX_FORECAST_LEAD_NS: i64 = 24 * HOUR_NS;
+/// How far past the decision time the current hour may end (and be determined).
+pub const MAX_INDEX_HOUR_LEAD_NS: i64 = 2 * HOUR_NS;
+
+const MINUTE_NS: i64 = 60_000_000_000;
+const HOUR_NS: i64 = 3_600_000_000_000;
+
 impl HourlyIndexInputV6 {
-    /// Bounds, canonical order and structure. Unsorted lists are `NonCanonicalOrder`, lists
-    /// over their bound `BoundExceeded`, anything else malformed `InvalidContract`.
-    pub fn validate(&self) -> Result<(), DecisionV6Error> {
+    /// Bounds, canonical order and structure at the context's decision time. Unsorted lists
+    /// are `NonCanonicalOrder`, lists over their bound `BoundExceeded`, anything else
+    /// malformed `InvalidContract`.
+    pub fn validate(&self, decision_time_unix_ms: i64) -> Result<(), DecisionV6Error> {
         let components = &self.components;
         for meta in [
             &components.minutes,
@@ -84,11 +97,51 @@ impl HourlyIndexInputV6 {
         ] {
             validate_meta(meta)?;
         }
-        validate_supplied(&self.supplied)
+        validate_supplied(&self.supplied, &Clock::at(decision_time_unix_ms))
     }
 }
 
-fn validate_supplied(index: &SuppliedHourlyIndexV6) -> Result<(), DecisionV6Error> {
+/// The latest time each kind of supplied time may have.
+struct Clock {
+    observed: i64,
+    forecast: i64,
+    hour: i64,
+}
+
+impl Clock {
+    fn at(decision_time_unix_ms: i64) -> Self {
+        let now = decision_time_unix_ms.saturating_mul(1_000_000);
+        Self {
+            observed: now.saturating_add(MAX_INDEX_OBSERVED_LEAD_NS),
+            forecast: now.saturating_add(MAX_INDEX_FORECAST_LEAD_NS),
+            hour: now.saturating_add(MAX_INDEX_HOUR_LEAD_NS),
+        }
+    }
+}
+
+/// `MIN_INDEX_TIME_UNIX_NS ≤ at ≤ latest`.
+fn time(at: i64, latest: i64) -> Result<(), DecisionV6Error> {
+    if (MIN_INDEX_TIME_UNIX_NS..=latest).contains(&at) {
+        Ok(())
+    } else {
+        Err(DecisionV6Error::InvalidContract)
+    }
+}
+
+fn optional_time(at: Option<i64>, latest: i64) -> Result<(), DecisionV6Error> {
+    at.map_or(Ok(()), |at| time(at, latest))
+}
+
+/// An hour end is a top of hour, UTC.
+fn top_of_hour(at: i64) -> Result<(), DecisionV6Error> {
+    if at.rem_euclid(HOUR_NS) == 0 {
+        Ok(())
+    } else {
+        Err(DecisionV6Error::InvalidContract)
+    }
+}
+
+fn validate_supplied(index: &SuppliedHourlyIndexV6, clock: &Clock) -> Result<(), DecisionV6Error> {
     identifier(&index.city)?;
     bounded(&index.timezone)?;
     bounded(&index.config_version)?;
@@ -105,7 +158,7 @@ fn validate_supplied(index: &SuppliedHourlyIndexV6) -> Result<(), DecisionV6Erro
         .chain(&index.latest_valued)
         .chain(&index.recent_minutes)
     {
-        validate_minute(minute)?;
+        validate_minute(minute, clock)?;
     }
     // Newest first.
     strictly_sorted(
@@ -115,26 +168,18 @@ fn validate_supplied(index: &SuppliedHourlyIndexV6) -> Result<(), DecisionV6Erro
             .rev()
             .map(|minute| minute.minute_unix_ns),
     )?;
-    if let Some(valued) = &index.latest_valued {
-        if valued.value_f.is_none()
-            || index
-                .latest
-                .as_ref()
-                .is_none_or(|latest| latest.minute_unix_ns < valued.minute_unix_ns)
-        {
-            return Err(DecisionV6Error::InvalidContract);
-        }
-    }
+    validate_summaries(index)?;
 
     if let Some(hour) = &index.current_hour {
-        validate_hour(hour)?;
+        validate_hour(hour, clock)?;
     }
     if let Some(forecast) = &index.forecast {
-        validate_forecast(forecast)?;
+        validate_forecast(forecast, clock)?;
     }
     for settlement in &index.recent_settlements {
-        validate_settlement(settlement)?;
+        validate_settlement(settlement, clock)?;
     }
+    // Newest first.
     strictly_sorted(
         index
             .recent_settlements
@@ -148,10 +193,63 @@ fn validate_supplied(index: &SuppliedHourlyIndexV6) -> Result<(), DecisionV6Erro
     Ok(())
 }
 
-fn validate_minute(minute: &SuppliedIndexMinuteV6) -> Result<(), DecisionV6Error> {
+/// `latest` and `latest_valued` summarize the retained minutes; they may omit readings and
+/// envelope, so only identity and values are compared.
+fn validate_summaries(index: &SuppliedHourlyIndexV6) -> Result<(), DecisionV6Error> {
+    let same = |summary: &SuppliedIndexMinuteV6, minute: &SuppliedIndexMinuteV6| {
+        summary.minute_unix_ns == minute.minute_unix_ns
+            && summary.revision == minute.revision
+            && summary.phase == minute.phase
+            && summary.value_f == minute.value_f
+            && summary.official_f == minute.official_f
+            && summary.provisional_f == minute.provisional_f
+    };
+    // `latest` is the newest retained minute at its retained revision.
+    if let Some(newest) = index.recent_minutes.first() {
+        if index.latest.as_ref().is_none_or(|latest| {
+            latest.minute_unix_ns != newest.minute_unix_ns || latest.revision != newest.revision
+        }) {
+            return Err(DecisionV6Error::InvalidContract);
+        }
+    }
+    // `latest_valued` has a value, is not newer than `latest`, agrees with its retained
+    // minute, and no newer retained minute has a value.
+    let newest_valued = index
+        .recent_minutes
+        .iter()
+        .find(|minute| minute.value_f.is_some());
+    match &index.latest_valued {
+        Some(valued) => {
+            let retained = index
+                .recent_minutes
+                .iter()
+                .find(|minute| minute.minute_unix_ns == valued.minute_unix_ns);
+            if valued.value_f.is_none()
+                || index
+                    .latest
+                    .as_ref()
+                    .is_none_or(|latest| latest.minute_unix_ns < valued.minute_unix_ns)
+                || retained.is_some_and(|minute| !same(valued, minute))
+                || newest_valued.is_some_and(|minute| minute.minute_unix_ns > valued.minute_unix_ns)
+            {
+                return Err(DecisionV6Error::InvalidContract);
+            }
+        }
+        None if newest_valued.is_some() => return Err(DecisionV6Error::InvalidContract),
+        None => {}
+    }
+    Ok(())
+}
+
+fn validate_minute(minute: &SuppliedIndexMinuteV6, clock: &Clock) -> Result<(), DecisionV6Error> {
     if let Some(envelope) = &minute.envelope {
         optional_text(&envelope.event_id)?;
+        optional_time(envelope.emitted_at_unix_ns, clock.observed)?;
+        time(envelope.received_at_unix_ns, clock.observed)?;
     }
+    time(minute.minute_unix_ns, clock.observed)?;
+    optional_time(minute.provisional_at_unix_ns, clock.observed)?;
+    optional_time(minute.official_at_unix_ns, clock.observed)?;
     text(&minute.source)?;
     optional_text(&minute.kalshi_status)?;
     bounded(&minute.config_version)?;
@@ -166,6 +264,7 @@ fn validate_minute(minute: &SuppliedIndexMinuteV6) -> Result<(), DecisionV6Error
         identifier(&reading.station_id)?;
         text(&reading.code)?;
         optional_text(&reading.source)?;
+        optional_time(reading.received_at_unix_ns, clock.observed)?;
         for value in [
             reading.temp_f,
             Some(reading.weight),
@@ -186,9 +285,16 @@ fn validate_minute(minute: &SuppliedIndexMinuteV6) -> Result<(), DecisionV6Error
     )
 }
 
-fn validate_hour(hour: &SuppliedIndexHourV6) -> Result<(), DecisionV6Error> {
+fn validate_hour(hour: &SuppliedIndexHourV6, clock: &Clock) -> Result<(), DecisionV6Error> {
+    top_of_hour(hour.hour_end_unix_ns)?;
+    time(hour.hour_end_unix_ns, clock.hour)?;
+    time(hour.final_at_unix_ns, clock.hour)?;
+    time(hour.determine_by_unix_ns, clock.hour)?;
     optional_text(&hour.event_ticker)?;
-    optional_decimal(hour.settles_now_as.map(|value| value.value_f))?;
+    if let Some(value) = hour.settles_now_as {
+        time(value.minute_unix_ns, clock.observed)?;
+        decimal(value.value_f)?;
+    }
     for value in [
         hour.high_f,
         hour.low_f,
@@ -215,16 +321,20 @@ fn validate_hour(hour: &SuppliedIndexHourV6) -> Result<(), DecisionV6Error> {
         if let Some(station_id) = &condition.station_id {
             identifier(station_id)?;
         }
-        if condition.since_unix_ns > condition.last_seen_unix_ns {
-            return Err(DecisionV6Error::InvalidContract);
-        }
+        time(condition.since_unix_ns, condition.last_seen_unix_ns)?;
+        time(condition.last_seen_unix_ns, clock.observed)?;
     }
     Ok(())
 }
 
-fn validate_forecast(forecast: &SuppliedIndexForecastV6) -> Result<(), DecisionV6Error> {
+fn validate_forecast(
+    forecast: &SuppliedIndexForecastV6,
+    clock: &Clock,
+) -> Result<(), DecisionV6Error> {
     text(&forecast.model_id)?;
     bounded(&forecast.config_version)?;
+    time(forecast.run_time_unix_ns, clock.observed)?;
+    time(forecast.fetched_at_unix_ns, clock.observed)?;
     let steps = forecast.steps_unix_ns.len();
     if steps > MAX_INDEX_FORECAST_STEPS
         || forecast.settles.len() > MAX_INDEX_FORECAST_SETTLES
@@ -250,7 +360,12 @@ fn validate_forecast(forecast: &SuppliedIndexForecastV6) -> Result<(), DecisionV
     }
     strictly_sorted(forecast.missing_members.iter())?;
     strictly_sorted(forecast.steps_unix_ns.iter())?;
+    for step in &forecast.steps_unix_ns {
+        time(*step, clock.forecast)?;
+    }
     for settle in &forecast.settles {
+        top_of_hour(settle.hour_end_unix_ns)?;
+        time(settle.hour_end_unix_ns, clock.forecast)?;
         optional_decimal(settle.value_f)?;
     }
     strictly_sorted(
@@ -261,6 +376,7 @@ fn validate_forecast(forecast: &SuppliedIndexForecastV6) -> Result<(), DecisionV
     )?;
     if let Some(bias) = &forecast.bias {
         decimal(bias.bias_f)?;
+        time(bias.as_of_minute_unix_ns, clock.observed)?;
         for member in &bias.member_bias {
             identifier(&member.station_id)?;
             optional_decimal(member.bias_f)?;
@@ -274,7 +390,15 @@ fn validate_forecast(forecast: &SuppliedIndexForecastV6) -> Result<(), DecisionV
     Ok(())
 }
 
-fn validate_settlement(settlement: &SuppliedIndexSettlementV6) -> Result<(), DecisionV6Error> {
+fn validate_settlement(
+    settlement: &SuppliedIndexSettlementV6,
+    clock: &Clock,
+) -> Result<(), DecisionV6Error> {
+    top_of_hour(settlement.hour_end_unix_ns)?;
+    time(settlement.hour_end_unix_ns, clock.observed)?;
+    optional_time(settlement.settle_minute_unix_ns, clock.observed)?;
+    time(settlement.determined_at_unix_ns, clock.observed)?;
+    optional_time(settlement.kalshi_finalized_at_unix_ns, clock.observed)?;
     optional_text(&settlement.event_ticker)?;
     for value in [
         settlement.settle_value_f,
@@ -288,6 +412,8 @@ fn validate_settlement(settlement: &SuppliedIndexSettlementV6) -> Result<(), Dec
 
 fn validate_calibration(calibration: &SuppliedIndexCalibrationV6) -> Result<(), DecisionV6Error> {
     text(&calibration.config_version)?;
+    // Unbounded above: a calibration may be published ahead of its effective time.
+    optional_time(calibration.effective_at_unix_ns, i64::MAX)?;
     if calibration.members.len() > MAX_INDEX_STATIONS {
         return Err(DecisionV6Error::BoundExceeded);
     }
@@ -327,6 +453,8 @@ pub(crate) mod fixtures {
     pub(crate) const T0_S: i64 = 1_788_062_400;
     pub(crate) const MEMBERS: [&str; 5] = ["KFLL", "KFXE", "KMIA", "KOPF", "KPMP"];
     pub(crate) const SEQ: u64 = 48_213;
+    /// The base context's `decision_time_unix_ms`.
+    pub(crate) const DECISION_MS: i64 = T0_S * 1_000;
 
     pub(crate) fn ns(seconds: i64) -> i64 {
         seconds * 1_000_000_000
@@ -512,38 +640,38 @@ pub(crate) mod fixtures {
                 }),
                 recent_settlements: vec![
                     SuppliedIndexSettlementV6 {
-                        hour_end_unix_ns: ns(T0_S),
+                        hour_end_unix_ns: ns(T0_S - 3_600),
                         status: IndexSettlementStatusV6::Determined,
-                        event_ticker: Some("KXTEMPMIAH-26AUG3000".to_owned()),
-                        settle_minute_unix_ns: Some(ns(T0_S)),
+                        event_ticker: Some("KXTEMPMIAH-26AUG2923".to_owned()),
+                        settle_minute_unix_ns: Some(ns(T0_S - 3_600)),
                         settle_value_f: Some(d("84.31")),
                         winning_floor_strike: Some(d("83.99")),
                         informational: false,
-                        determined_at_unix_ns: ns(T0_S + 330),
+                        determined_at_unix_ns: ns(T0_S - 3_270),
                         kalshi_expiration_value: None,
                         kalshi_finalized_at_unix_ns: None,
                         matched: None,
                         revision: 1,
                     },
                     SuppliedIndexSettlementV6 {
-                        hour_end_unix_ns: ns(T0_S - 3_600),
+                        hour_end_unix_ns: ns(T0_S - 7_200),
                         status: IndexSettlementStatusV6::Determined,
-                        event_ticker: Some("KXTEMPMIAH-26AUG2923".to_owned()),
-                        settle_minute_unix_ns: Some(ns(T0_S - 3_600)),
+                        event_ticker: Some("KXTEMPMIAH-26AUG2922".to_owned()),
+                        settle_minute_unix_ns: Some(ns(T0_S - 7_200)),
                         settle_value_f: Some(d("84.89")),
                         winning_floor_strike: Some(d("84.99")),
                         informational: false,
-                        determined_at_unix_ns: ns(T0_S - 3_270),
+                        determined_at_unix_ns: ns(T0_S - 6_870),
                         kalshi_expiration_value: Some(d("84.89")),
                         kalshi_finalized_at_unix_ns: Some(ns(T0_S - 900)),
                         matched: Some(true),
                         revision: 2,
                     },
                     SuppliedIndexSettlementV6 {
-                        hour_end_unix_ns: ns(T0_S - 7_200),
+                        hour_end_unix_ns: ns(T0_S - 10_800),
                         status: IndexSettlementStatusV6::NoValue,
-                        event_ticker: Some("KXTEMPMIAH-26AUG2922".to_owned()),
-                        determined_at_unix_ns: ns(T0_S - 6_720),
+                        event_ticker: Some("KXTEMPMIAH-26AUG2921".to_owned()),
+                        determined_at_unix_ns: ns(T0_S - 10_320),
                         revision: 1,
                         ..Default::default()
                     },
@@ -605,13 +733,13 @@ mod tests {
     fn rejects(mutate: impl FnOnce(&mut HourlyIndexInputV6), error: DecisionV6Error) {
         let mut input = snapshot();
         mutate(&mut input);
-        assert_eq!(input.validate(), Err(error));
+        assert_eq!(input.validate(DECISION_MS), Err(error));
     }
 
     #[test]
     fn the_fixtures_are_valid_and_the_snapshot_is_at_its_bounds() {
-        snapshot().validate().unwrap();
-        warming().validate().unwrap();
+        snapshot().validate(DECISION_MS).unwrap();
+        warming().validate(DECISION_MS).unwrap();
         let snapshot = snapshot().supplied;
         assert_eq!(snapshot.recent_minutes.len(), MAX_INDEX_MINUTES);
         assert_eq!(snapshot.recent_settlements.len(), MAX_INDEX_SETTLEMENTS);
@@ -642,7 +770,7 @@ mod tests {
         let mut input = snapshot();
         input.supplied.timezone.clear();
         input.supplied.config_version.clear();
-        input.validate().unwrap();
+        input.validate(DECISION_MS).unwrap();
     }
 
     #[test]
@@ -708,19 +836,230 @@ mod tests {
     }
 
     #[test]
-    fn latest_valued_has_a_value_and_is_not_newer_than_latest() {
+    fn latest_and_latest_valued_summarize_the_retained_minutes() {
         use DecisionV6Error::*;
         rejects(
             |input| input.supplied.latest_valued.as_mut().unwrap().value_f = None,
             InvalidContract,
         );
         rejects(|input| input.supplied.latest = None, InvalidContract);
-        // A newest minute below quorum: latest has no value, latest_valued is older.
+        rejects(|input| input.supplied.latest_valued = None, InvalidContract);
+        // `latest` is the newest retained minute at its revision.
+        rejects(
+            |input| input.supplied.latest.as_mut().unwrap().revision += 1,
+            InvalidContract,
+        );
+        rejects(
+            |input| input.supplied.latest = Some(input.supplied.recent_minutes[1].clone()),
+            InvalidContract,
+        );
+        // `latest_valued` agrees with its retained minute.
+        for field in 0..5 {
+            rejects(
+                |input| {
+                    let valued = input.supplied.latest_valued.as_mut().unwrap();
+                    match field {
+                        0 => valued.revision += 1,
+                        1 => valued.value_f = Some(d("84.31")),
+                        2 => valued.official_f = Some(d("84.3")),
+                        3 => valued.provisional_f = None,
+                        _ => valued.phase = IndexPhaseV6::Official,
+                    }
+                },
+                InvalidContract,
+            );
+        }
+        // `latest_valued` is the newest valued retained minute.
+        rejects(
+            |input| {
+                input.supplied.latest_valued = Some(input.supplied.recent_minutes[1].clone());
+            },
+            InvalidContract,
+        );
+
+        // Summaries may omit readings and envelope.
         let mut input = snapshot();
-        let latest = input.supplied.latest.as_mut().unwrap();
-        latest.minute_unix_ns += ns(60);
-        latest.value_f = None;
-        input.validate().unwrap();
+        for summary in [
+            &mut input.supplied.latest,
+            &mut input.supplied.latest_valued,
+        ] {
+            let summary = summary.as_mut().unwrap();
+            summary.stations.clear();
+            summary.envelope = None;
+        }
+        input.validate(DECISION_MS).unwrap();
+
+        // A newest minute below quorum: `latest` has no value, `latest_valued` is older.
+        let mut input = snapshot();
+        let mut unvalued = input.supplied.recent_minutes[0].clone();
+        unvalued.minute_unix_ns += ns(60);
+        unvalued.value_f = None;
+        unvalued.provisional_f = None;
+        input.supplied.recent_minutes.pop();
+        input.supplied.recent_minutes.insert(0, unvalued.clone());
+        input.supplied.latest = Some(unvalued);
+        input.validate(DECISION_MS).unwrap();
+
+        // Without retained minutes the summaries stand alone.
+        let mut input = snapshot();
+        input.supplied.recent_minutes.clear();
+        input.validate(DECISION_MS).unwrap();
+    }
+
+    #[test]
+    fn hour_ends_are_tops_of_hours() {
+        use DecisionV6Error::*;
+        rejects(
+            |input| {
+                input
+                    .supplied
+                    .current_hour
+                    .as_mut()
+                    .unwrap()
+                    .hour_end_unix_ns += ns(60)
+            },
+            InvalidContract,
+        );
+        rejects(
+            |input| {
+                let settles = &mut input.supplied.forecast.as_mut().unwrap().settles;
+                settles[2].hour_end_unix_ns -= 1;
+            },
+            InvalidContract,
+        );
+        rejects(
+            |input| input.supplied.recent_settlements[1].hour_end_unix_ns += ns(900),
+            InvalidContract,
+        );
+    }
+
+    #[test]
+    fn times_are_after_2020_and_not_beyond_their_lead() {
+        use DecisionV6Error::*;
+        let before_2020 = MIN_INDEX_TIME_UNIX_NS - 1;
+        let now = ns(T0_S);
+        rejects(
+            |input| input.supplied.recent_minutes[74].minute_unix_ns = before_2020,
+            InvalidContract,
+        );
+        rejects(
+            |input| {
+                let minutes = &mut input.supplied.recent_minutes;
+                minutes[0].minute_unix_ns = now + MAX_INDEX_OBSERVED_LEAD_NS + ns(60);
+                input.supplied.latest = Some(minutes[0].clone());
+                input.supplied.latest_valued = Some(minutes[0].clone());
+            },
+            InvalidContract,
+        );
+        // Observed times: up to ten minutes past the decision time.
+        let mut input = snapshot();
+        let reading = &mut input.supplied.recent_minutes[0].stations[0];
+        reading.received_at_unix_ns = Some(now + MAX_INDEX_OBSERVED_LEAD_NS);
+        input.validate(DECISION_MS).unwrap();
+        rejects(
+            |input| {
+                input.supplied.recent_minutes[0].stations[0].received_at_unix_ns =
+                    Some(now + MAX_INDEX_OBSERVED_LEAD_NS + 1);
+            },
+            InvalidContract,
+        );
+        rejects(
+            |input| {
+                let envelope = input.supplied.recent_minutes[4].envelope.as_mut().unwrap();
+                envelope.emitted_at_unix_ns = Some(before_2020);
+            },
+            InvalidContract,
+        );
+        rejects(
+            |input| input.supplied.recent_minutes[4].official_at_unix_ns = Some(0),
+            InvalidContract,
+        );
+        rejects(
+            |input| {
+                let bias = input
+                    .supplied
+                    .forecast
+                    .as_mut()
+                    .unwrap()
+                    .bias
+                    .as_mut()
+                    .unwrap();
+                bias.as_of_minute_unix_ns = now + HOUR_NS;
+            },
+            InvalidContract,
+        );
+        rejects(
+            |input| input.supplied.recent_settlements[0].determined_at_unix_ns = now + HOUR_NS,
+            InvalidContract,
+        );
+        rejects(
+            |input| {
+                input.supplied.recent_settlements[1].kalshi_finalized_at_unix_ns = Some(before_2020)
+            },
+            InvalidContract,
+        );
+        rejects(
+            |input| {
+                let condition = &mut input
+                    .supplied
+                    .current_hour
+                    .as_mut()
+                    .unwrap()
+                    .feed_conditions[0];
+                condition.since_unix_ns = before_2020;
+            },
+            InvalidContract,
+        );
+        // Forecast steps and settles: up to a day ahead.
+        rejects(
+            |input| {
+                let forecast = input.supplied.forecast.as_mut().unwrap();
+                *forecast.steps_unix_ns.last_mut().unwrap() = now + MAX_INDEX_FORECAST_LEAD_NS + 1;
+            },
+            InvalidContract,
+        );
+        rejects(
+            |input| {
+                let settles = &mut input.supplied.forecast.as_mut().unwrap().settles;
+                settles[5].hour_end_unix_ns = now + MAX_INDEX_FORECAST_LEAD_NS + HOUR_NS;
+            },
+            InvalidContract,
+        );
+        // The current hour: ends and is determined within two hours.
+        rejects(
+            |input| {
+                let hour = input.supplied.current_hour.as_mut().unwrap();
+                hour.hour_end_unix_ns += 2 * HOUR_NS;
+            },
+            InvalidContract,
+        );
+        rejects(
+            |input| {
+                let hour = input.supplied.current_hour.as_mut().unwrap();
+                hour.determine_by_unix_ns = now + MAX_INDEX_HOUR_LEAD_NS + 1;
+            },
+            InvalidContract,
+        );
+        // A calibration may take effect any time after 2020.
+        let mut input = snapshot();
+        input
+            .supplied
+            .calibration
+            .as_mut()
+            .unwrap()
+            .effective_at_unix_ns = Some(i64::MAX);
+        input.validate(DECISION_MS).unwrap();
+        rejects(
+            |input| {
+                input
+                    .supplied
+                    .calibration
+                    .as_mut()
+                    .unwrap()
+                    .effective_at_unix_ns = Some(before_2020);
+            },
+            InvalidContract,
+        );
     }
 
     #[test]

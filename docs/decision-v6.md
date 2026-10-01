@@ -509,13 +509,32 @@ The kernel projection (`KernelSnapshot::from_context`) builds `HourlyIndexState`
 supplied originals with `f64` conveniences and `ValueOrigin::Supplied`; the forecast's
 aligned arrays become `steps`.
 
-`HourlyIndexInputV6::validate` (called by `DecisionContextV6::validate`) checks the city
-id, each meta, the bounds above (`BoundExceeded`), the orderings (`NonCanonicalOrder`),
-aligned forecast arrays, canonical decimals, bounded text, `since ≤ last_seen` on a feed
-condition, and a valued `latest_valued` no newer than `latest` (`InvalidContract`). It does
-not check provider arithmetic (`value_f` against `official_f`/`provisional_f`, shares, the
-adjusted settle). A host runs it on its input before building the context and repairs or
-drops what fails.
+`HourlyIndexInputV6::validate(decision_time_unix_ms)` (called by
+`DecisionContextV6::validate` with the context's `decision_time_unix_ms`) checks:
+
+- the city id, each meta, the bounds above (`BoundExceeded`) and the orderings
+  (`NonCanonicalOrder`: minutes and settlements newest first, forecast steps and settles
+  oldest first, members by station id);
+- aligned forecast arrays, canonical decimals, bounded text, and a feed condition's
+  `since ≤ last_seen` (`InvalidContract`, as are the rules below);
+- the summaries: when minutes are retained, `latest` has the newest retained minute's
+  `minute` and `revision`; `latest_valued` has a value, is not newer than `latest`, matches
+  its retained minute (if retained) in `revision`, `phase`, `value_f`, `official_f` and
+  `provisional_f`, and no newer retained minute has a value (so it is absent only when no
+  retained minute has one). Readings and envelope may differ: the provider's summaries omit
+  them;
+- every hour end (`current_hour`, forecast `settles`, settlements) is a top of hour UTC;
+- times: none before 2020-01-01T00:00Z (`MIN_INDEX_TIME_UNIX_NS`). Observed times (minutes,
+  `provisional_at`, `official_at`, envelope and reading receipt times, `settles_now_as`,
+  the bias minute, the forecast's run and fetch times, feed conditions, settlement hour
+  end, settle minute, `determined_at`, `kalshi_finalized_at`) are at most 10 minutes past
+  the decision time; forecast steps and settles at most 24 hours; the current hour's
+  `hour_end`, `final_at` and `determine_by` at most 2 hours. A calibration's `effective_at`
+  has no upper bound.
+
+It does not check provider arithmetic (`value_f` against `official_f`/`provisional_f`,
+shares, the adjusted settle). A host runs it on its input before building the context and
+repairs or drops what fails.
 
 ## Conformance
 
