@@ -40,8 +40,8 @@ Consumers pin both crates to one GitHub release tag (`strategy-core-v3-v<version
 
 ```toml
 [dependencies]
-strategy-core-kernel = { git = "https://github.com/McFalljb/strategy-core.git", tag = "strategy-core-v3-v0.2.0", version = "=0.2.0" }
-strategy-core-v3 = { git = "https://github.com/McFalljb/strategy-core.git", tag = "strategy-core-v3-v0.2.0", version = "=0.2.0", features = ["kernel"] }
+strategy-core-kernel = { git = "https://github.com/McFalljb/strategy-core.git", tag = "strategy-core-v3-v0.3.0", version = "=0.3.0" }
+strategy-core-v3 = { git = "https://github.com/McFalljb/strategy-core.git", tag = "strategy-core-v3-v0.3.0", version = "=0.3.0", features = ["kernel"] }
 ```
 
 Kernels need only `strategy-core-kernel`. A Strategy executable or host that runs Decision V6
