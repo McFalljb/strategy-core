@@ -9,9 +9,10 @@ use chrono::{DateTime, TimeZone, Utc};
 use strategy_core_kernel::{
     Book, BookLevel, ClimateDay, ComponentAuthority, ComponentMeta, ContractQuantity,
     DailyExtremes, EventProvenance, Extreme, FinalFact, Forecast, ForecastModel, ForecastPoint,
-    LastTrade, MarketComponents, MarketLifecycle, MarketState, Observation,
-    OracleErrorDistribution, OracleScore, OracleTable, Report, StationComponents, StationIdentity,
-    StationState, StationWeatherView, TickerQuote, ValueOrigin, WeatherEvent, WeatherEventSource,
+    HourlyIndexComponents, HourlyIndexState, LastTrade, MarketComponents, MarketLifecycle,
+    MarketState, Observation, OracleErrorDistribution, OracleScore, OracleTable, Report,
+    StationComponents, StationIdentity, StationState, StationWeatherView, TickerQuote, ValueOrigin,
+    WeatherEvent, WeatherEventSource,
 };
 
 use super::KernelTransactionError;
@@ -20,6 +21,7 @@ use crate::decision_v4::{
     ObservationV4, ProvenanceV4, RankByV4, ReportV4, StationV4, WeatherEventV4,
 };
 use crate::decision_v6::{DecisionContextV6, DecisionV6Error};
+use crate::hourly_index_v6::HourlyIndexInputV6;
 use crate::supplied_v6::{ExtremeKindV6, SuppliedStationV6};
 
 pub(super) fn station_state(
@@ -441,6 +443,24 @@ pub(super) fn component_meta(
         refresh_error: meta.refresh_error.clone(),
         provenance: meta.provenance.iter().map(component_provenance).collect(),
     })
+}
+
+/// The hourly index of the scope's index city, every value from its supplied original.
+pub(super) fn hourly_index_state(
+    input: &HourlyIndexInputV6,
+) -> Result<HourlyIndexState, KernelTransactionError> {
+    let components = &input.components;
+    Ok(HourlyIndexState::from_supplied(
+        &input.supplied,
+        HourlyIndexComponents {
+            minutes: component_meta(&components.minutes)?,
+            hour: component_meta(&components.hour)?,
+            forecast: component_meta(&components.forecast)?,
+            bias: component_meta(&components.bias)?,
+            settlements: component_meta(&components.settlements)?,
+            calibration: component_meta(&components.calibration)?,
+        },
+    ))
 }
 
 pub(super) fn market_meta(meta: &MarketMetaV4) -> Result<ComponentMeta, KernelTransactionError> {

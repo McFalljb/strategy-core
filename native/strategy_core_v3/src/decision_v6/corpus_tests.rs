@@ -18,6 +18,7 @@ use crate::current_v6::{OracleInputV6, StationInputsV6};
 use crate::decision_v4::{
     AuthorityV4, ComponentMetaV4, OracleQueryV4, OracleRowV4, ProvenanceV4, StationV4, TriggerV4,
 };
+use crate::hourly_index_v6::{FeedConditionKindV6, IndexPhaseV6, fixtures as hourly};
 use crate::supplied_v6::{
     DecimalV6, SUPPLIED_INPUTS_CONTRACT_VERSION, SuppliedOracleErrorDistributionV6,
     SuppliedOracleScoreV6, SuppliedOracleTableV6, SuppliedStationV6,
@@ -280,6 +281,23 @@ fn stations_without_data_context() -> DecisionContextV6 {
     context
 }
 
+/// Miami's hourly index at its bounds, as a host folds it from a snapshot and its events: 75
+/// minutes with five members each, the open hour with two feed conditions (one of a kind this
+/// contract does not know), a 73-step forecast with its bias, three settlements and the
+/// calibration.
+fn hourly_index_context() -> DecisionContextV6 {
+    let mut context = context();
+    context.hourly_index = Some(hourly::snapshot());
+    context
+}
+
+/// Miami subscribed, before its first snapshot: every stream `Warming`, no data.
+fn hourly_index_warming_context() -> DecisionContextV6 {
+    let mut context = context();
+    context.hourly_index = Some(hourly::warming());
+    context
+}
+
 fn live_context() -> DecisionContextV6 {
     let mut context = context();
     context.deployment_mode = DeploymentModeV6::Live;
@@ -394,6 +412,8 @@ fn valid_contexts() -> Vec<(&'static str, DecisionContextV6)> {
             "scope-stations-without-data",
             stations_without_data_context(),
         ),
+        ("hourly-index-snapshot", hourly_index_context()),
+        ("hourly-index-warming", hourly_index_warming_context()),
     ]
 }
 
@@ -723,6 +743,169 @@ fn invalid_contexts() -> Vec<(&'static str, DecisionV6Error, ContextMutation)> {
                 *context = oracle_distribution_context();
                 let score = &mut context.supplied.stations[0].oracle_tables[0].scores[0];
                 score.error_distribution.as_mut().unwrap().low_counts[11] += 1;
+            },
+        ),
+        (
+            "hourly-index-minutes-not-newest-first",
+            DecisionV6Error::NonCanonicalOrder,
+            |context| {
+                *context = hourly_index_context();
+                let index = context.hourly_index.as_mut().unwrap();
+                index.supplied.recent_minutes.swap(0, 1);
+            },
+        ),
+        (
+            "hourly-index-over-75-minutes",
+            DecisionV6Error::BoundExceeded,
+            |context| {
+                *context = hourly_index_context();
+                let minutes = &mut context
+                    .hourly_index
+                    .as_mut()
+                    .unwrap()
+                    .supplied
+                    .recent_minutes;
+                let mut older = minutes.last().unwrap().clone();
+                older.minute_unix_ns -= 60_000_000_000;
+                minutes.push(older);
+            },
+        ),
+        (
+            "hourly-index-forecast-arrays-misaligned",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = hourly_index_context();
+                let index = context.hourly_index.as_mut().unwrap();
+                index.supplied.forecast.as_mut().unwrap().value_f.pop();
+            },
+        ),
+        (
+            "hourly-index-decimal-over-max-scale",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = hourly_index_context();
+                let index = context.hourly_index.as_mut().unwrap();
+                index.supplied.recent_minutes[0].value_f = Some(DecimalV6 {
+                    coefficient: 8_431,
+                    scale: 19,
+                });
+            },
+        ),
+        (
+            "hourly-index-without-city",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = hourly_index_warming_context();
+                context.hourly_index.as_mut().unwrap().supplied.city.clear();
+            },
+        ),
+        (
+            "hourly-index-known-feed-condition-as-other",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = hourly_index_context();
+                let index = context.hourly_index.as_mut().unwrap();
+                let hour = index.supplied.current_hour.as_mut().unwrap();
+                hour.feed_conditions[1].kind = FeedConditionKindV6::Other("quorum_risk".to_owned());
+            },
+        ),
+        (
+            "hourly-index-component-revision-zero",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = hourly_index_warming_context();
+                context
+                    .hourly_index
+                    .as_mut()
+                    .unwrap()
+                    .components
+                    .forecast
+                    .revision = 0;
+            },
+        ),
+        (
+            "hourly-index-latest-not-newest-retained-minute",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = hourly_index_context();
+                let index = context.hourly_index.as_mut().unwrap();
+                index.supplied.latest.as_mut().unwrap().revision += 1;
+            },
+        ),
+        (
+            "hourly-index-latest-disagrees-with-retained-minute",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = hourly_index_context();
+                let index = context.hourly_index.as_mut().unwrap();
+                index.supplied.latest.as_mut().unwrap().phase = IndexPhaseV6::Official;
+            },
+        ),
+        (
+            "hourly-index-component-updated-at-out-of-range",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = hourly_index_context();
+                let index = context.hourly_index.as_mut().unwrap();
+                index.components.minutes.updated_at_unix_ms = Some(i64::MAX);
+            },
+        ),
+        (
+            "hourly-index-latest-valued-disagrees-with-retained-minute",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = hourly_index_context();
+                let index = context.hourly_index.as_mut().unwrap();
+                index.supplied.latest_valued.as_mut().unwrap().value_f = Some(DecimalV6 {
+                    coefficient: 8_431,
+                    scale: 2,
+                });
+            },
+        ),
+        (
+            "hourly-index-latest-valued-not-newest-valued",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = hourly_index_context();
+                let index = &mut context.hourly_index.as_mut().unwrap().supplied;
+                index.latest_valued = Some(index.recent_minutes[1].clone());
+            },
+        ),
+        (
+            "hourly-index-hour-end-not-top-of-hour",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = hourly_index_context();
+                let index = context.hourly_index.as_mut().unwrap();
+                index
+                    .supplied
+                    .current_hour
+                    .as_mut()
+                    .unwrap()
+                    .hour_end_unix_ns += 60_000_000_000;
+            },
+        ),
+        (
+            "hourly-index-minute-far-future",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = hourly_index_context();
+                let index = &mut context.hourly_index.as_mut().unwrap().supplied;
+                // A day past the decision time, consistent as the newest minute.
+                index.recent_minutes[0].minute_unix_ns =
+                    (context.decision_time_unix_ms + 86_400_000) * 1_000_000;
+                index.latest = Some(index.recent_minutes[0].clone());
+                index.latest_valued = Some(index.recent_minutes[0].clone());
+            },
+        ),
+        (
+            "hourly-index-minute-before-2020",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = hourly_index_context();
+                let index = &mut context.hourly_index.as_mut().unwrap().supplied;
+                // 2019-12-31T23:59Z, the oldest retained minute.
+                index.recent_minutes[74].minute_unix_ns = 1_577_836_740_000_000_000;
             },
         ),
         (
@@ -1332,7 +1515,7 @@ fn v6_corpus_is_current_and_every_vector_decodes_to_its_verdict() {
         }
     }
     let invalid = recorded["invalid"].as_array().unwrap();
-    assert_eq!(invalid.len(), 46);
+    assert_eq!(invalid.len(), 61);
     for entry in invalid {
         let id = entry["id"].as_str().unwrap();
         let bytes = bytes(entry);
@@ -1403,6 +1586,23 @@ fn corpus_builders_are_what_the_ids_say() {
         "the trigger is not the primary station"
     );
     let _: StationV4 = station("KSEA");
+
+    let index = hourly_index_context().hourly_index.unwrap().supplied;
+    assert_eq!(index.recent_minutes.len(), 75);
+    assert!(
+        index
+            .recent_minutes
+            .iter()
+            .all(|minute| minute.stations.len() == 5)
+    );
+    assert_eq!(index.forecast.unwrap().steps_unix_ns.len(), 73);
+    assert!(matches!(
+        index.current_hour.unwrap().feed_conditions[1].kind,
+        FeedConditionKindV6::Other(_)
+    ));
+    let warming = hourly_index_warming_context().hourly_index.unwrap();
+    assert_eq!(warming.supplied.seq, 0);
+    assert!(warming.supplied.latest.is_none() && warming.supplied.forecast.is_none());
 
     let scope = stations_without_data_context();
     assert_eq!(scope.contributor_stations().len(), 8);

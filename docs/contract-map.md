@@ -40,8 +40,8 @@ Consumers pin both crates to one GitHub release tag (`strategy-core-v3-v<version
 
 ```toml
 [dependencies]
-strategy-core-kernel = { git = "https://github.com/McFalljb/strategy-core.git", tag = "strategy-core-v3-v0.2.0", version = "=0.2.0" }
-strategy-core-v3 = { git = "https://github.com/McFalljb/strategy-core.git", tag = "strategy-core-v3-v0.2.0", version = "=0.2.0", features = ["kernel"] }
+strategy-core-kernel = { git = "https://github.com/McFalljb/strategy-core.git", tag = "strategy-core-v3-v0.3.0", version = "=0.3.0" }
+strategy-core-v3 = { git = "https://github.com/McFalljb/strategy-core.git", tag = "strategy-core-v3-v0.3.0", version = "=0.3.0", features = ["kernel"] }
 ```
 
 Kernels need only `strategy-core-kernel`. A Strategy executable or host that runs Decision V6
@@ -123,7 +123,9 @@ is the full export list.
 
 - `StrategyKernelContext::state() -> &dyn StrategyKernelState`:
   hosts must implement `station(station_id) -> Option<&StationState>` and
-  `market(ticker) -> Option<&MarketState>`. Models remain valid for the invocation;
+  `market(ticker) -> Option<&MarketState>`, and may implement
+  `hourly_index(city) -> Option<&HourlyIndexState>` (default `None`; see
+  [Events and state](#events-and-state)). Models remain valid for the invocation;
   absent or out-of-scope state returns `None`. Core's non-overridable trait-object
   conveniences `get_price(ticker)`, `get_weather(station_id)`,
   `latest_forecast(station_id)` and
@@ -253,6 +255,24 @@ a run-weighted histogram of the model's signed errors (forecast − observed, °
 one-degree bands that include their lower edge, overflow), each summing to `sample_count`,
 over `day_count` covered days. `None` means unavailable, never zero error. Merge histograms by
 summing their counters. See [Decision V6](decision-v6.md#oracle-error-distributions).
+
+`StrategyKernelState::hourly_index(city)` returns MinuteTemp's hourly Kalshi Weather Index of
+an index city (`miami`, `nyc`, `chicago`, `la-coastal`) as `HourlyIndexState`, when the host
+delivers one (a Decision V6 context carries at most one, its scope's index city). It is state
+only: no event announces a change, so a kernel reads it when it wakes, typically on its own
+timer. The default method returns `None`, so hosts without hourly indexes compile unchanged.
+`HourlyIndexState` (`native/strategy_core_kernel/src/hourly_index.rs`) holds the city's
+identity and last folded provider `seq`; `latest`, `latest_valued` and `recent_minutes`
+(newest first, at most 75, each `IndexMinute` with its phase, `is_final`, revision, values,
+quorum and up to 16 `IndexStationReading`s with `pull_f`, `change_5m_f` and the hour's
+member high/low); `current_hour` (`IndexHour`: settle-now value, forecast settle, bias and
+adjusted settle, `feed_conditions`); `forecast` (`IndexForecast`: 15-minute `steps`, upcoming
+`settles` and `bias`); `recent_settlements` (at most 3) and `calibration`. Each value has its
+`f64` convenience, the supplied original (`Supplied*`, `Decimal`) and `ValueOrigin::Supplied`.
+`components` holds one `ComponentMeta` per stream (`minutes`, `hour`, `forecast`, `bias`,
+`settlements`, `calibration`); check its authority before trusting a stream. The adjusted
+forecast is `value_f + bias.bias_f`; it is not stored. See
+[Decision V6](decision-v6.md#hourly-index).
 
 Kernel views borrow strings and slices where possible. They are valid only for the event or
 state borrow that produced them; copy owned data before retaining it beyond that call.
@@ -387,6 +407,17 @@ Verified hourly profiles are:
 | `KMDW` | `weather_company` | `KXTEMPCHIH` |
 | `KLAX` | `weather_company` | `KXTEMPLAXH` |
 | `KMIA` | `synoptic` | `KXTEMPMIAH` |
+| `KLGA` | `synoptic` | `KXTEMPNYCHS` |
+| `KMDW` | `synoptic` | `KXTEMPCHIHS` |
+| `KLAX` | `synoptic` | `KXTEMPLAXHS` |
+
+The `*HS` rows are the live Kalshi Weather Index series (checked 2026-09-28 against the
+series catalog: open events, settled on the index via Synoptic). Their index has several
+member stations; the row's station is the index city's forecast station in MinuteTemp
+(`nyc` → KLGA, `chicago` → KMDW, `la-coastal` → KLAX), so `station_from_event_ticker`
+returns it. The older `weather_company` rows are kept; Kalshi lists them without open events.
+The index itself reaches a kernel as `StrategyKernelState::hourly_index` (see
+[Events and state](#events-and-state)), never through these lookups.
 
 The exact identities and source families were verified on 2026-08-15 against
 Kalshi's [hourly temperature series catalog](https://external-api.kalshi.com/trade-api/v2/series?category=Climate%20and%20Weather&tags=Hourly%20temperature).
@@ -409,6 +440,7 @@ Exported mapping constants are `ICAO_TO_CITY_CODES`, `CITY_TO_ICAO`,
 | `KHOU` | `THOU`, `HOU` | `America/Chicago` |
 | `KLAS` | `TLV`, `LV`, `LAS` | `America/Los_Angeles` |
 | `KLAX` | `LAX`, `LA` | `America/Los_Angeles` |
+| `KLGA` | (none) | `America/New_York` |
 | `KMDW` | `CHI`, `MDW`, `MW` | `America/Chicago` |
 | `KMIA` | `MIA`, `MI` | `America/New_York` |
 | `KMSP` | `TMIN`, `MIN`, `MSP` | `America/Chicago` |

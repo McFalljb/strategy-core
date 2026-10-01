@@ -207,6 +207,7 @@ pub(super) fn context() -> DecisionContextV6 {
         forecast_issuance: None,
         current_inputs: None,
         market_strikes: None,
+        hourly_index: None,
     }
 }
 

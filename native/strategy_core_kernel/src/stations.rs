@@ -45,6 +45,7 @@ pub static STATION_TIMEZONES: LazyLock<HashMap<&'static str, &'static str>> = La
         ("KHOU", "America/Chicago"),
         ("KLAS", "America/Los_Angeles"),
         ("KLAX", "America/Los_Angeles"),
+        ("KLGA", "America/New_York"),
         ("KMDW", "America/Chicago"),
         ("KMIA", "America/New_York"),
         ("KMSP", "America/Chicago"),
@@ -84,6 +85,11 @@ pub static HOURLY_SERIES_BY_PROFILE: LazyLock<
         (("KMDW", "weather_company"), &["KXTEMPCHIH"][..]),
         (("KLAX", "weather_company"), &["KXTEMPLAXH"][..]),
         (("KMIA", "synoptic"), &["KXTEMPMIAH"][..]),
+        // The live Kalshi Weather Index series (settled via Synoptic), keyed by the index
+        // city's forecast station: nyc (KLGA), chicago (KMDW), la-coastal (KLAX).
+        (("KLGA", "synoptic"), &["KXTEMPNYCHS"][..]),
+        (("KMDW", "synoptic"), &["KXTEMPCHIHS"][..]),
+        (("KLAX", "synoptic"), &["KXTEMPLAXHS"][..]),
     ])
 });
 

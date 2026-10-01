@@ -443,7 +443,7 @@ pub fn validate_error_distribution(
     }
 }
 
-fn identifier(value: &str) -> Result<(), DecisionV6Error> {
+pub(crate) fn identifier(value: &str) -> Result<(), DecisionV6Error> {
     if value.is_empty()
         || value.len() > crate::decision_v6::MAX_IDENTIFIER_BYTES
         || !value
@@ -455,7 +455,7 @@ fn identifier(value: &str) -> Result<(), DecisionV6Error> {
     Ok(())
 }
 
-fn text(value: &str) -> Result<(), DecisionV6Error> {
+pub(crate) fn text(value: &str) -> Result<(), DecisionV6Error> {
     if value.is_empty() || value.len() > MAX_SUPPLIED_TEXT_BYTES {
         return Err(DecisionV6Error::BoundExceeded);
     }
@@ -464,7 +464,7 @@ fn text(value: &str) -> Result<(), DecisionV6Error> {
 
 /// Supplied optional strings may be present and empty (providers emit some fields without
 /// `omitempty`); only the byte bound applies.
-fn optional_text(value: &Option<String>) -> Result<(), DecisionV6Error> {
+pub(crate) fn optional_text(value: &Option<String>) -> Result<(), DecisionV6Error> {
     if value
         .as_ref()
         .is_some_and(|value| value.len() > MAX_SUPPLIED_TEXT_BYTES)
@@ -474,14 +474,16 @@ fn optional_text(value: &Option<String>) -> Result<(), DecisionV6Error> {
     Ok(())
 }
 
-fn optional_decimal(value: Option<DecimalV6>) -> Result<(), DecisionV6Error> {
+pub(crate) fn optional_decimal(value: Option<DecimalV6>) -> Result<(), DecisionV6Error> {
     if value.is_some_and(|value| !value.is_canonical()) {
         return Err(DecisionV6Error::InvalidContract);
     }
     Ok(())
 }
 
-fn strictly_sorted<T: Ord>(values: impl IntoIterator<Item = T>) -> Result<(), DecisionV6Error> {
+pub(crate) fn strictly_sorted<T: Ord>(
+    values: impl IntoIterator<Item = T>,
+) -> Result<(), DecisionV6Error> {
     let mut previous = None;
     for value in values {
         if previous.as_ref().is_some_and(|previous| previous >= &value) {

@@ -14,7 +14,7 @@ deliver events, and own the Broker, providers, persistence and timers.
 | `strategy-core-kernel` | `native/strategy_core_kernel` | The kernel contract: `NativeKernel` and `StrategyKernelContext`, the canonical state and event model, order and request values, and pure helpers (exact fees, stations and series tickers, climate days, freshness). |
 | `strategy-core-v3` | `native/strategy_core_v3` | The canonical profile, the Decision V6 wire, and (feature `kernel`) the runner that presents a V6 context to a kernel and assembles its result. |
 
-Both crates are version `0.2.x`; the API may change before `1.0.0`.
+Both crates are version `0.3.x`; the API may change before `1.0.0`.
 
 ## Use
 
@@ -22,8 +22,8 @@ Pin both crates to one GitHub release tag (`strategy-core-v3-v<version>`):
 
 ```toml
 [dependencies]
-strategy-core-kernel = { git = "https://github.com/McFalljb/strategy-core.git", tag = "strategy-core-v3-v0.2.0", version = "=0.2.0" }
-strategy-core-v3 = { git = "https://github.com/McFalljb/strategy-core.git", tag = "strategy-core-v3-v0.2.0", version = "=0.2.0", features = ["kernel"] }
+strategy-core-kernel = { git = "https://github.com/McFalljb/strategy-core.git", tag = "strategy-core-v3-v0.3.0", version = "=0.3.0" }
+strategy-core-v3 = { git = "https://github.com/McFalljb/strategy-core.git", tag = "strategy-core-v3-v0.3.0", version = "=0.3.0", features = ["kernel"] }
 ```
 
 `scripts/pin-digests.sh <tag>` prints the tag's commit and the two digests consumers record
