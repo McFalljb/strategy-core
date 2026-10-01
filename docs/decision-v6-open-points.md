@@ -403,7 +403,9 @@ From step 2 of `traderv3/docs/plans/2026-09-30-hourly-index-feed-plan.md`, the s
     practice), 6 forecast settles, 3 settlements, 64 feed conditions. Validation is
     structural; provider arithmetic is not re-checked. Structural includes: `latest` and
     `latest_valued` agree with the retained minutes (minute, revision, phase and values,
-    not readings or envelope); hour ends are tops of hours; times are after 2020 and at
+    not readings or envelope); hour ends are tops of hours; times (including each component
+    meta's update and provenance times, so the projection never fails on them) are after
+    2020 and at
     most 10 minutes (observed), 24 hours (forecast) or 2 hours (current hour) past the
     context's `decision_time_unix_ms`, which `validate` takes as its argument.
 57. **Not fenced.** Like `supplied`, the hourly index is provider state and is not part of

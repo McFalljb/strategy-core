@@ -517,12 +517,15 @@ aligned arrays become `steps`.
   oldest first, members by station id);
 - aligned forecast arrays, canonical decimals, bounded text, and a feed condition's
   `since ≤ last_seen` (`InvalidContract`, as are the rules below);
-- the summaries: when minutes are retained, `latest` has the newest retained minute's
-  `minute` and `revision`; `latest_valued` has a value, is not newer than `latest`, matches
-  its retained minute (if retained) in `revision`, `phase`, `value_f`, `official_f` and
-  `provisional_f`, and no newer retained minute has a value (so it is absent only when no
-  retained minute has one). Readings and envelope may differ: the provider's summaries omit
-  them;
+- the summaries: a summary matches a retained minute when its `minute`, `revision`,
+  `phase`, `value_f`, `official_f` and `provisional_f` agree (readings and envelope may
+  differ: the provider's summaries omit them). When minutes are retained, `latest` matches
+  the newest one; `latest_valued` has a value, is not newer than `latest`, matches its
+  retained minute if retained, and no newer retained minute has a value (so it is absent
+  only when no retained minute has one);
+- each component meta's `updated_at_unix_ms` and its provenance's `provider_at_unix_ms`
+  and `received_at_unix_ms`, as observed times in milliseconds (absent times, as while
+  warming, pass);
 - every hour end (`current_hour`, forecast `settles`, settlements) is a top of hour UTC;
 - times: none before 2020-01-01T00:00Z (`MIN_INDEX_TIME_UNIX_NS`). Observed times (minutes,
   `provisional_at`, `official_at`, envelope and reading receipt times, `settles_now_as`,

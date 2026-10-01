@@ -96,9 +96,36 @@ impl HourlyIndexInputV6 {
             &components.calibration,
         ] {
             validate_meta(meta)?;
+            validate_meta_times(meta, decision_time_unix_ms)?;
         }
         validate_supplied(&self.supplied, &Clock::at(decision_time_unix_ms))
     }
+}
+
+/// A component's update and provenance times are observed times, in milliseconds: none before
+/// 2020, none more than 10 minutes past the decision time. Absent times (a warming stream)
+/// pass.
+fn validate_meta_times(
+    meta: &ComponentMetaV4,
+    decision_time_unix_ms: i64,
+) -> Result<(), DecisionV6Error> {
+    let earliest = MIN_INDEX_TIME_UNIX_NS / 1_000_000;
+    let latest = decision_time_unix_ms.saturating_add(MAX_INDEX_OBSERVED_LEAD_NS / 1_000_000);
+    let times = meta
+        .updated_at_unix_ms
+        .into_iter()
+        .chain(meta.provenance.iter().flat_map(|provenance| {
+            provenance
+                .provider_at_unix_ms
+                .into_iter()
+                .chain([provenance.received_at_unix_ms])
+        }));
+    for at in times {
+        if !(earliest..=latest).contains(&at) {
+            return Err(DecisionV6Error::InvalidContract);
+        }
+    }
+    Ok(())
 }
 
 /// The latest time each kind of supplied time may have.
@@ -196,6 +223,7 @@ fn validate_supplied(index: &SuppliedHourlyIndexV6, clock: &Clock) -> Result<(),
 /// `latest` and `latest_valued` summarize the retained minutes; they may omit readings and
 /// envelope, so only identity and values are compared.
 fn validate_summaries(index: &SuppliedHourlyIndexV6) -> Result<(), DecisionV6Error> {
+    // Identity and values; readings and envelope may differ.
     let same = |summary: &SuppliedIndexMinuteV6, minute: &SuppliedIndexMinuteV6| {
         summary.minute_unix_ns == minute.minute_unix_ns
             && summary.revision == minute.revision
@@ -204,11 +232,13 @@ fn validate_summaries(index: &SuppliedHourlyIndexV6) -> Result<(), DecisionV6Err
             && summary.official_f == minute.official_f
             && summary.provisional_f == minute.provisional_f
     };
-    // `latest` is the newest retained minute at its retained revision.
+    // `latest` is the newest retained minute, at its retained revision and values.
     if let Some(newest) = index.recent_minutes.first() {
-        if index.latest.as_ref().is_none_or(|latest| {
-            latest.minute_unix_ns != newest.minute_unix_ns || latest.revision != newest.revision
-        }) {
+        if index
+            .latest
+            .as_ref()
+            .is_none_or(|latest| !same(latest, newest))
+        {
             return Err(DecisionV6Error::InvalidContract);
         }
     }
@@ -853,6 +883,20 @@ mod tests {
             |input| input.supplied.latest = Some(input.supplied.recent_minutes[1].clone()),
             InvalidContract,
         );
+        for field in 0..4 {
+            rejects(
+                |input| {
+                    let latest = input.supplied.latest.as_mut().unwrap();
+                    match field {
+                        0 => latest.value_f = Some(d("84.31")),
+                        1 => latest.official_f = Some(d("84.3")),
+                        2 => latest.provisional_f = None,
+                        _ => latest.phase = IndexPhaseV6::Official,
+                    }
+                },
+                InvalidContract,
+            );
+        }
         // `latest_valued` agrees with its retained minute.
         for field in 0..5 {
             rejects(
@@ -903,6 +947,49 @@ mod tests {
         // Without retained minutes the summaries stand alone.
         let mut input = snapshot();
         input.supplied.recent_minutes.clear();
+        input.validate(DECISION_MS).unwrap();
+    }
+
+    #[test]
+    fn component_times_are_observed_times() {
+        use DecisionV6Error::*;
+        let after = DECISION_MS + MAX_INDEX_OBSERVED_LEAD_NS / 1_000_000;
+        let before_2020 = MIN_INDEX_TIME_UNIX_NS / 1_000_000 - 1;
+        for at in [i64::MAX, i64::MIN, after + 1, before_2020] {
+            rejects(
+                |input| input.components.minutes.updated_at_unix_ms = Some(at),
+                InvalidContract,
+            );
+            rejects(
+                |input| input.components.hour.provenance[0].provider_at_unix_ms = Some(at),
+                InvalidContract,
+            );
+            rejects(
+                |input| input.components.settlements.provenance[0].received_at_unix_ms = at,
+                InvalidContract,
+            );
+        }
+        let mut input = snapshot();
+        input.components.forecast.updated_at_unix_ms = Some(after);
+        input.validate(DECISION_MS).unwrap();
+        // The decision time saturates instead of overflowing.
+        snapshot().validate(i64::MAX).unwrap();
+    }
+
+    #[test]
+    fn a_warming_city_without_times_validates() {
+        let input = warming();
+        for meta in [
+            &input.components.minutes,
+            &input.components.hour,
+            &input.components.forecast,
+            &input.components.bias,
+            &input.components.settlements,
+            &input.components.calibration,
+        ] {
+            assert_eq!(meta.updated_at_unix_ms, None);
+            assert!(meta.provenance.is_empty());
+        }
         input.validate(DECISION_MS).unwrap();
     }
 

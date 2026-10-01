@@ -18,7 +18,7 @@ use crate::current_v6::{OracleInputV6, StationInputsV6};
 use crate::decision_v4::{
     AuthorityV4, ComponentMetaV4, OracleQueryV4, OracleRowV4, ProvenanceV4, StationV4, TriggerV4,
 };
-use crate::hourly_index_v6::{FeedConditionKindV6, fixtures as hourly};
+use crate::hourly_index_v6::{FeedConditionKindV6, IndexPhaseV6, fixtures as hourly};
 use crate::supplied_v6::{
     DecimalV6, SUPPLIED_INPUTS_CONTRACT_VERSION, SuppliedOracleErrorDistributionV6,
     SuppliedOracleScoreV6, SuppliedOracleTableV6, SuppliedStationV6,
@@ -833,6 +833,24 @@ fn invalid_contexts() -> Vec<(&'static str, DecisionV6Error, ContextMutation)> {
             },
         ),
         (
+            "hourly-index-latest-disagrees-with-retained-minute",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = hourly_index_context();
+                let index = context.hourly_index.as_mut().unwrap();
+                index.supplied.latest.as_mut().unwrap().phase = IndexPhaseV6::Official;
+            },
+        ),
+        (
+            "hourly-index-component-updated-at-out-of-range",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = hourly_index_context();
+                let index = context.hourly_index.as_mut().unwrap();
+                index.components.minutes.updated_at_unix_ms = Some(i64::MAX);
+            },
+        ),
+        (
             "hourly-index-latest-valued-disagrees-with-retained-minute",
             DecisionV6Error::InvalidContract,
             |context| {
@@ -1497,7 +1515,7 @@ fn v6_corpus_is_current_and_every_vector_decodes_to_its_verdict() {
         }
     }
     let invalid = recorded["invalid"].as_array().unwrap();
-    assert_eq!(invalid.len(), 59);
+    assert_eq!(invalid.len(), 61);
     for entry in invalid {
         let id = entry["id"].as_str().unwrap();
         let bytes = bytes(entry);
