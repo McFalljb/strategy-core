@@ -96,6 +96,8 @@ frozen-encoding evidence, plus:
 - `orders_complete`: true when `broker.orders` holds every order of the Sleeve the host
   keeps. The host sets it false when it had to truncate the view; a truncated view never
   reports an order as vanished and allows no cancel-all.
+- `hourly_index` (last field): the hourly Kalshi Weather Index of the scope's index city,
+  or `None` (see "Hourly index").
 
 Host invariants on the order view:
 - A truncated view drops terminal orders only, never an open one: the runner seeds over any
@@ -448,6 +450,72 @@ counter arrays summing to `sample_count` without overflow, `1 ≤ sample_count �
 distribution that fails is `InvalidContract`, so the host drops a malformed provider
 distribution to `None` (keeping the row's scores) before it builds the context. Supplied
 scores and canonical rows are not compared value by value, as for the other oracle fields.
+
+## Hourly index
+
+`hourly_index: Option<HourlyIndexInputV6>` (`strategy_core_v3::hourly_index_v6`) carries
+MinuteTemp's hourly index of one index city (`miami`, `nyc`, `chicago`, `la-coastal`): the
+host fills it from the scope's `index_city` and leaves it `None` otherwise. MinuteTemp
+computes the index with Kalshi's calibration and quorum; the context carries it as a Strategy
+input and a kernel never rebuilds it from member observations. Contract source: MinuteTemp
+PR #173 (OpenAPI 1.9.0, AsyncAPI 1.19.0), `HourlyIndexCity` and the `hourly_indexes`
+WebSocket events.
+
+It is state only. No trigger or `StrategyEventView` variant announces a change: the kernel
+reads `StrategyKernelState::hourly_index(city)` whenever it runs, normally on its own timer,
+together with the books. The index is not part of the state fence (like the supplied inputs).
+
+`HourlyIndexInputV6` is `{ supplied: SuppliedHourlyIndexV6, components:
+HourlyIndexComponentsV6 }`. The supplied types are owned by
+`strategy_core_kernel::hourly_index` (`Supplied*`); numbers are `DecimalV6`, times
+`*_unix_ns`, `Option` absent-or-null.
+
+| Field | From | Notes |
+|---|---|---|
+| `city`, `timezone`, `hourly_series_ticker`, `config_version`, `calibration_pending` | snapshot | `timezone` and `config_version` are empty before the first snapshot. |
+| `seq` | every event | The last per-city `seq` folded in; 0 before the first snapshot. |
+| `latest`, `latest_valued` | snapshot, `index_minute` | `latest_valued` has a value and is not newer than `latest`. |
+| `recent_minutes` | snapshot `minutes`, `index_minute` | Newest first, strictly by minute, at most 75. Highest `revision` per minute; `final` never reverts. |
+| `current_hour` | snapshot, `hour_update` | `settles_now_as` (minute, value), high/low, `forecast_settle_f`, `forecast_bias_f`, `forecast_adjusted_settle_f`, `final_at`, `determine_by`, `feed_conditions` (at most 64). |
+| `forecast` | snapshot, `forecast_index`; bias from `forecast_bias` | Per-step arrays `steps_unix_ns`, `value_f`, `quorum_met`, `partial` as the provider aligns them (at most 96 steps), `settles` (at most 6), `missing_members`, `bias` (`None` when the provider's `bias_f` is null). |
+| `recent_settlements` | snapshot, `hour_settled`, `hour_reconciled` | Newest first, strictly by `hour_end`, at most 3. `matched` is the provider's `match`. |
+| `calibration` | snapshot `members`/`quorum`, `calibration` | `effective_at` is absent when only the snapshot supplied it. |
+
+A minute's readings (`stations`) are strictly sorted by station id, at most 16; so are the
+calibration members, `member_bias` and `missing_members`. A minute's `envelope` (`event_id`,
+`seq`, `emitted_at`, host `received_at`) is that of the event or snapshot that last set it,
+and absent for a REST baseline. Phases, hour and settlement statuses and feed-condition
+severities are enums; a feed-condition kind outside the six known ones is
+`FeedConditionKind::Other(name)` and never a known name. Left out on purpose: the ladder and
+`market_update` (prices come from the Kalshi feed), `open_event`/`next_event`, the strike
+placements (`implied_floor_strike`, `nearest_strike_f`, …), per-member forecast series, the
+derivable `adjusted_f`/`adjusted_value_f`, `recomputed_f`, `restated`, `receipt_basis`,
+`temp_c`, `obs_time`, `primary_code`, the feed conditions' `share`/`codes`, and match rates.
+
+`components` has one `ComponentMetaV4` per stream: `minutes`, `hour`, `forecast`, `bias`,
+`settlements`, `calibration`, each with `revision ≥ 1`, `generation ≥ 1` and at most 4
+provenance entries (the host starts a stream at revision 1 even while it is warming). Map the
+city's feed to each stream's authority:
+
+| Feed state | Authority |
+|---|---|
+| Subscribed, no snapshot yet | `Warming` |
+| Snapshot applied, events applied in `seq` order | `Current` |
+| A `resume` in flight (until `resume_complete`) | `RefreshPending` |
+| A `seq` gap not yet resumed, or `resume_failed` until the new snapshot | `Uncertain` |
+| Unsubscribed, the city rejected, or `subscription_revoked` | `Unavailable` |
+
+The kernel projection (`KernelSnapshot::from_context`) builds `HourlyIndexState` from the
+supplied originals with `f64` conveniences and `ValueOrigin::Supplied`; the forecast's
+aligned arrays become `steps`.
+
+`HourlyIndexInputV6::validate` (called by `DecisionContextV6::validate`) checks the city
+id, each meta, the bounds above (`BoundExceeded`), the orderings (`NonCanonicalOrder`),
+aligned forecast arrays, canonical decimals, bounded text, `since ≤ last_seen` on a feed
+condition, and a valued `latest_valued` no newer than `latest` (`InvalidContract`). It does
+not check provider arithmetic (`value_f` against `official_f`/`provisional_f`, shares, the
+adjusted settle). A host runs it on its input before building the context and repairs or
+drops what fails.
 
 ## Conformance
 

@@ -4,6 +4,8 @@
 
 #[path = "kernel_projection/decisions.rs"]
 mod decisions;
+#[path = "kernel_projection/hourly_index.rs"]
+mod hourly_index;
 #[path = "kernel_projection/market_strikes.rs"]
 mod market_strikes;
 #[path = "kernel_projection/simulation.rs"]
@@ -182,6 +184,7 @@ fn base_context() -> DecisionContextV6 {
     };
     DecisionContextV6 {
         market_strikes: None,
+        hourly_index: None,
         current_weather: None,
         forecast_issuance: None,
         current_inputs: None,

@@ -96,6 +96,9 @@ fn hourly_profiles_are_source_specific_and_reverse_exactly() {
         ("KMDW", "weather_company", &["KXTEMPCHIH"][..]),
         ("KLAX", "weather_company", &["KXTEMPLAXH"][..]),
         ("KMIA", "synoptic", &["KXTEMPMIAH"][..]),
+        ("KLGA", "synoptic", &["KXTEMPNYCHS"][..]),
+        ("KMDW", "synoptic", &["KXTEMPCHIHS"][..]),
+        ("KLAX", "synoptic", &["KXTEMPLAXHS"][..]),
     ];
     for (station, source, expected) in cases {
         assert_eq!(
@@ -107,6 +110,23 @@ fn hourly_profiles_are_source_specific_and_reverse_exactly() {
     assert!(hourly_series_for_station("KMIA", "weather_company").is_err());
     assert!(hourly_series_for_station("KNYC", "synoptic").is_err());
     assert!(hourly_series_for_station("KATL", "weather_company").is_err());
+    assert!(hourly_series_for_station("KLGA", "weather_company").is_err());
+    // The live index series and the listed-but-closed ones resolve by exact ticker only.
+    for (event, station) in [
+        ("KXTEMPNYCHS-26SEP2800", "KLGA"),
+        ("KXTEMPCHIHS-26SEP2800", "KMDW"),
+        ("KXTEMPLAXHS-26SEP2800", "KLAX"),
+        ("KXTEMPMIAH-26SEP2800", "KMIA"),
+        ("KXTEMPNYCH-26SEP2800", "KNYC"),
+    ] {
+        assert_eq!(station_from_event_ticker(event), Some(station), "{event}");
+        assert!(STATION_TIMEZONES.contains_key(station));
+    }
+    assert_eq!(station_from_event_ticker("KXTEMPLAHS-26SEP2800"), None);
+    assert_eq!(
+        station_from_event_ticker("KXTEMPCHIMETROHS-26SEP2800"),
+        None
+    );
     assert_eq!(
         hourly_series_for_station("KNYC", "weather.com"),
         Err(StationError::UnknownSettlementSource(

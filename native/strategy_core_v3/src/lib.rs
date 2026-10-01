@@ -3,6 +3,7 @@
 pub mod current_v6;
 pub mod decision_v4;
 pub mod decision_v6;
+pub mod hourly_index_v6;
 #[cfg(feature = "kernel")]
 pub mod kernel_v6;
 pub mod supplied_v6;

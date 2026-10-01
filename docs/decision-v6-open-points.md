@@ -368,3 +368,47 @@ From the Phase 10a section of
     `supplied_v6::validate_error_distribution` and drops one that fails to `None` with a
     recorded reason, keeping the row's scores. Supplied and canonical rows are not compared
     value by value, as for the other oracle fields.
+
+## Hourly index (0.3.0)
+
+From step 2 of `traderv3/docs/plans/2026-09-30-hourly-index-feed-plan.md`, the strategy spec
+`traderv3/docs/plans/2026-09-30-hourly-ladder-trader-spec.md` (§2–§3) and MinuteTemp PR #173
+(`go/api/docs/specs/{openapi,asyncapi}.yaml`, OpenAPI 1.9.0, AsyncAPI 1.19.0).
+
+51. **A trailing field, a new release.** `DecisionContextV6` gains `hourly_index:
+    Option<HourlyIndexInputV6>` as its last field. As in point 48 the magics stay
+    `SDCTXV6A`/`SDRESV6A`: contexts encoded before 0.3.0 do not decode (bincode has no
+    optional trailing fields), and both digests change. Results are unchanged.
+52. **State only.** No `StrategyEventView` variant or trigger kind: the kernel reads
+    `StrategyKernelState::hourly_index(city)` when it wakes (decision 2 of the plan). The
+    trait method has a default body returning `None`, so existing hosts and test doubles
+    compile. One city per context, keyed by MinuteTemp's index city id, matched exactly.
+53. **Supplied originals in the kernel crate.** The `Supplied*` hourly types live in
+    `strategy_core_kernel::hourly_index` beside the kernel types, because each kernel type
+    keeps its original (`supplied: Option<…>`) as the station components do;
+    `hourly_index_v6` re-exports them with the V6 suffix and owns bounds and validation.
+    `ValueOrigin` is always `Supplied`: there is no derived representation.
+54. **Enums, not strings,** for phase, hour status, settlement status and feed-condition
+    severity: the provider's sets are closed. Feed-condition kind is open
+    (`Other(name)`, never a known name) because the list is new (AsyncAPI 1.19) and likely
+    to grow. `kalshi_status`, a reading's `code` and `source` stay strings. A host that
+    meets an unknown phase, status or severity cannot represent it; it should treat the
+    event as a contract break and mark the stream `Uncertain` rather than guess.
+55. **The forecast stays in the provider's shape** on the wire (aligned per-step arrays,
+    checked for equal length) and becomes `steps` in the kernel view. Per-member series and
+    `adjusted_f` are left out; the adjusted value is `value_f + bias_f`. A null `bias_f`
+    is `bias: None`. The bias has its own component (`forecast_bias` arrives without a new
+    curve).
+56. **Bounds:** 75 minutes (the snapshot's), 16 member readings, 96 forecast steps (73 in
+    practice), 6 forecast settles, 3 settlements, 64 feed conditions. Validation is
+    structural; provider arithmetic is not re-checked.
+57. **Not fenced.** Like `supplied`, the hourly index is provider state and is not part of
+    `decision_fence_v6_sha256`.
+58. **Authority mapping** (hosts): `Warming` before the first snapshot; `Current` while
+    events apply in `seq` order; `RefreshPending` during `resume`; `Uncertain` after a
+    `seq` gap or `resume_failed` until the replacement snapshot; `Unavailable` when
+    unsubscribed, rejected or revoked. Metas keep `revision ≥ 1` throughout.
+59. **Live hourly series.** `HOURLY_SERIES_BY_PROFILE` adds the live Weather Index series
+    `KXTEMPNYCHS` (KLGA), `KXTEMPCHIHS` (KMDW) and `KXTEMPLAXHS` (KLAX) under `synoptic`,
+    keyed by each index city's MinuteTemp forecast station; KLGA gains a timezone entry.
+    The `weather_company` entries stay.

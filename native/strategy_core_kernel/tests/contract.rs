@@ -437,6 +437,10 @@ fn hosts_without_parameters_or_capabilities_supply_none_by_default() {
     assert!(!ctx.capabilities().timers);
     assert!(!ctx.capabilities().gauges);
     assert!(!ctx.capabilities().annotations);
+    assert!(
+        ctx.state().hourly_index("miami").is_none(),
+        "a host that predates hourly indexes delivers none"
+    );
 
     let mut telemetry = FakeTelemetry::default();
     telemetry.gauge("depth", 1.0, &[]).unwrap();
@@ -590,6 +594,18 @@ fn event_views_preserve_price_update_fields() {
     assert_eq!(market.yes_bid_levels, &[PriceLevelView::whole(0.41, 12)]);
     assert_eq!(market.no_ask_levels, &[PriceLevelView::whole(0.59, 7)]);
     assert_eq!(market.orderbook_depth, Some(2));
+}
+
+#[test]
+fn feed_condition_kinds_round_trip_their_provider_names() {
+    use strategy_core_kernel::FeedConditionKind;
+    for (name, kind) in FeedConditionKind::KNOWN {
+        assert_eq!(FeedConditionKind::from_name(name), kind);
+        assert_eq!(kind.name(), name);
+    }
+    let unknown = FeedConditionKind::from_name("member_drift");
+    assert_eq!(unknown, FeedConditionKind::Other("member_drift".to_owned()));
+    assert_eq!(unknown.name(), "member_drift");
 }
 
 #[test]

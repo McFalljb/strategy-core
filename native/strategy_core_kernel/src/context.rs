@@ -8,6 +8,7 @@ use crate::events::{
     ForecastInputSnapshot, OracleInputSnapshot, StationWeatherView, StrategyEventView,
     TickerPriceView,
 };
+use crate::hourly_index::HourlyIndexState;
 use crate::state::{BrokerFinancialState, MarketState, StationState};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -73,6 +74,14 @@ pub trait StrategyKernelState {
     fn station(&self, station_id: &str) -> Option<&StationState>;
 
     fn market(&self, ticker: &str) -> Option<&MarketState>;
+
+    /// The hourly Kalshi Weather Index of MinuteTemp's index city `city` (`miami`, `nyc`,
+    /// `chicago`, `la-coastal`), when the host delivers it. It is state only: no event announces
+    /// a change, so a kernel reads it when it wakes. Check each stream's authority in
+    /// `components` before trusting it. Hosts without hourly indexes return `None`.
+    fn hourly_index(&self, _city: &str) -> Option<&HourlyIndexState> {
+        None
+    }
 }
 
 impl dyn StrategyKernelState + '_ {

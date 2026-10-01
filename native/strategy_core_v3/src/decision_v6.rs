@@ -962,6 +962,10 @@ pub struct DecisionContextV6 {
     pub current_inputs: Option<CurrentInputsV6>,
     /// Complete scoped Market order when present.
     pub market_strikes: Option<Vec<MarketStrikesV6>>,
+    /// The hourly Kalshi Weather Index of the scope's index city, when the scope has one. State
+    /// only: no trigger announces a change. Not part of the state fence, like the supplied
+    /// inputs.
+    pub hourly_index: Option<crate::hourly_index_v6::HourlyIndexInputV6>,
 }
 
 #[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
@@ -1079,6 +1083,9 @@ impl DecisionContextV6 {
         validate_current_weather(self)?;
         validate_forecast_issuance(self)?;
         validate_market_strikes(self)?;
+        if let Some(index) = &self.hourly_index {
+            index.validate()?;
+        }
         Ok(())
     }
 
