@@ -240,7 +240,7 @@ pub struct SuppliedIndexForecastBias {
     pub member_bias: Vec<SuppliedMemberBias>,
 }
 
-/// The HRRR 15-minute index forecast, as supplied (`forecast_index`, the snapshot's
+/// One model's 15-minute index forecast, as supplied (`forecast_index`, the snapshot's
 /// `forecast`). The per-step arrays are the provider's and are aligned to `steps_unix_ns`.
 #[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct SuppliedIndexForecast {
@@ -327,7 +327,10 @@ pub struct SuppliedHourlyIndex {
     /// Newest first, strictly by minute.
     pub recent_minutes: Vec<SuppliedIndexMinute>,
     pub current_hour: Option<SuppliedIndexHour>,
+    /// The default (HRRR) forecast, matching the provider's top-level fields.
     pub forecast: Option<SuppliedIndexForecast>,
+    /// Other models' active forecasts, strictly sorted by model id. Never contains HRRR.
+    pub forecasts: Vec<SuppliedIndexForecast>,
     /// Newest first, strictly by hour end.
     pub recent_settlements: Vec<SuppliedIndexSettlement>,
     pub calibration: Option<SuppliedIndexCalibration>,
@@ -336,6 +339,17 @@ pub struct SuppliedHourlyIndex {
 // ---------------------------------------------------------------------------------------------
 // Kernel state
 // ---------------------------------------------------------------------------------------------
+
+/// The provider's default model; top-level forecast and bias fields always belong to it.
+pub const DEFAULT_INDEX_FORECAST_MODEL: &str = "ncep_hrrr_conus_15min";
+
+/// Authority and freshness of one non-default model, including a removed forecast.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct IndexModelComponents {
+    pub model_id: String,
+    pub forecast: ComponentMeta,
+    pub bias: ComponentMeta,
+}
 
 /// Authority and freshness of each hourly-index stream.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -353,6 +367,8 @@ pub struct HourlyIndexComponents {
     pub settlements: ComponentMeta,
     /// `calibration` (and the snapshot's members and quorum): `calibration`.
     pub calibration: ComponentMeta,
+    /// Other models' metadata, strictly sorted by model id. Removal keeps its metadata.
+    pub models: Vec<IndexModelComponents>,
 }
 
 /// One member's reading inside a city-minute.
@@ -765,6 +781,8 @@ pub struct HourlyIndexState {
     pub recent_minutes: Vec<IndexMinute>,
     pub current_hour: Option<IndexHour>,
     pub forecast: Option<IndexForecast>,
+    /// Other models' active forecasts, strictly sorted by model id.
+    pub forecasts: Vec<IndexForecast>,
     /// Newest first.
     pub recent_settlements: Vec<IndexSettlement>,
     pub calibration: Option<IndexCalibration>,
@@ -787,6 +805,11 @@ impl HourlyIndexState {
             recent_minutes: index.recent_minutes.iter().map(minute).collect(),
             current_hour: index.current_hour.as_ref().map(IndexHour::from_supplied),
             forecast: index.forecast.as_ref().map(IndexForecast::from_supplied),
+            forecasts: index
+                .forecasts
+                .iter()
+                .map(IndexForecast::from_supplied)
+                .collect(),
             recent_settlements: index
                 .recent_settlements
                 .iter()
@@ -796,6 +819,27 @@ impl HourlyIndexState {
                 .calibration
                 .as_ref()
                 .map(IndexCalibration::from_supplied),
+        }
+    }
+
+    /// An active forecast by exact model id. No fallback to the default model.
+    pub fn forecast_for(&self, model_id: &str) -> Option<&IndexForecast> {
+        self.forecast
+            .iter()
+            .chain(&self.forecasts)
+            .find(|forecast| forecast.model_id == model_id)
+    }
+
+    /// Forecast and bias metadata by exact model id, even after a removal.
+    pub fn forecast_components(&self, model_id: &str) -> Option<(&ComponentMeta, &ComponentMeta)> {
+        if model_id == DEFAULT_INDEX_FORECAST_MODEL {
+            Some((&self.components.forecast, &self.components.bias))
+        } else {
+            self.components
+                .models
+                .iter()
+                .find(|model| model.model_id == model_id)
+                .map(|model| (&model.forecast, &model.bias))
         }
     }
 

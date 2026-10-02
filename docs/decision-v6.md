@@ -478,6 +478,7 @@ HourlyIndexComponentsV6 }`. The supplied types are owned by
 | `recent_minutes` | snapshot `minutes`, `index_minute` | Newest first, strictly by minute, at most 75. Highest `revision` per minute; `final` never reverts. |
 | `current_hour` | snapshot, `hour_update` | `settles_now_as` (minute, value), high/low, `forecast_settle_f`, `forecast_bias_f`, `forecast_adjusted_settle_f`, `final_at`, `determine_by`, `feed_conditions` (at most 64). |
 | `forecast` | snapshot, `forecast_index`; bias from `forecast_bias` | Per-step arrays `steps_unix_ns`, `value_f`, `quorum_met`, `partial` as the provider aligns them (at most 96 steps), `settles` (at most 6), `missing_members`, `bias` (`None` when the provider's `bias_f` is null). |
+| `forecasts` | snapshot/event `forecasts`, event `biases` | Non-default models' active forecasts, strictly sorted by model id, at most 8; the same supplied shape as `forecast`. HRRR appears only in `forecast`. |
 | `recent_settlements` | snapshot, `hour_settled`, `hour_reconciled` | Newest first, strictly by `hour_end`, at most 3. `matched` is the provider's `match`. |
 | `calibration` | snapshot `members`/`quorum`, `calibration` | `effective_at` is absent when only the snapshot supplied it. |
 
@@ -495,7 +496,24 @@ derivable `adjusted_f`/`adjusted_value_f`, `recomputed_f`, `restated`, `receipt_
 `components` has one `ComponentMetaV4` per stream: `minutes`, `hour`, `forecast`, `bias`,
 `settlements`, `calibration`, each with `revision ≥ 1`, `generation ≥ 1` and at most 4
 provenance entries (the host starts a stream at revision 1 even while it is warming). Map the
-city's feed to each stream's authority:
+city's feed to each stream's authority. `components.models` is a strictly model-id-sorted
+list (at most 8) of `{ model_id, forecast, bias }` metadata for non-default models. Every
+active `forecasts` entry has matching metadata. A removal drops its active forecast and
+bias but retains metadata and sequence fences until a snapshot replaces the model set.
+Top-level `forecast` and component `forecast`/`bias` remain exclusively HRRR.
+
+Hosts apply only models present in an event's `forecasts`/`biases` maps; absence from an
+event is not removal. An entry without forecast steps removes that model; zero provider
+times in a removal are not observed times. A snapshot is the full current model set and
+removes models it omits. Replayed older events cannot replace a model's newer forecast or
+bias. A bias never migrates between models.
+
+Bots read `HourlyIndexState::forecast_for(model_id)` and
+`forecast_components(model_id)` by exact id, with no fallback. The host delivers both
+HRRR (`ncep_hrrr_conus_15min`) and RRFS (`ncep_rrfs_conus_15min`); model choice and any
+combination are bot policy, not host policy. Existing singular fields retain HRRR behavior.
+
+Map the city's feed to each stream's authority:
 
 | Feed state | Authority |
 |---|---|

@@ -292,6 +292,24 @@ fn hourly_index_context() -> DecisionContextV6 {
 }
 
 /// Miami subscribed, before its first snapshot: every stream `Warming`, no data.
+fn hourly_index_models_context() -> DecisionContextV6 {
+    let mut context = hourly_index_context();
+    context.hourly_index = Some(crate::hourly_index_v6::fixtures::models());
+    context
+}
+
+fn hourly_index_removed_model_context() -> DecisionContextV6 {
+    let mut context = hourly_index_models_context();
+    context
+        .hourly_index
+        .as_mut()
+        .unwrap()
+        .supplied
+        .forecasts
+        .clear();
+    context
+}
+
 fn hourly_index_warming_context() -> DecisionContextV6 {
     let mut context = context();
     context.hourly_index = Some(hourly::warming());
@@ -413,6 +431,11 @@ fn valid_contexts() -> Vec<(&'static str, DecisionContextV6)> {
             stations_without_data_context(),
         ),
         ("hourly-index-snapshot", hourly_index_context()),
+        ("hourly-index-models", hourly_index_models_context()),
+        (
+            "hourly-index-removed-model",
+            hourly_index_removed_model_context(),
+        ),
         ("hourly-index-warming", hourly_index_warming_context()),
     ]
 }
@@ -777,6 +800,73 @@ fn invalid_contexts() -> Vec<(&'static str, DecisionV6Error, ContextMutation)> {
                 *context = hourly_index_context();
                 let index = context.hourly_index.as_mut().unwrap();
                 index.supplied.forecast.as_mut().unwrap().value_f.pop();
+            },
+        ),
+        (
+            "hourly-index-model-duplicate",
+            DecisionV6Error::NonCanonicalOrder,
+            |context| {
+                *context = hourly_index_models_context();
+                let models = &mut context.hourly_index.as_mut().unwrap().supplied.forecasts;
+                models.push(models[0].clone());
+            },
+        ),
+        (
+            "hourly-index-model-without-metadata",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = hourly_index_models_context();
+                context
+                    .hourly_index
+                    .as_mut()
+                    .unwrap()
+                    .components
+                    .models
+                    .clear();
+            },
+        ),
+        (
+            "hourly-index-model-bias-invalid",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = hourly_index_models_context();
+                let model = &mut context.hourly_index.as_mut().unwrap().supplied.forecasts[0];
+                model.bias.as_mut().unwrap().bias_f = DecimalV6 {
+                    coefficient: 1,
+                    scale: 19,
+                };
+            },
+        ),
+        (
+            "hourly-index-model-metadata-time-invalid",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = hourly_index_models_context();
+                context.hourly_index.as_mut().unwrap().components.models[0]
+                    .bias
+                    .updated_at_unix_ms = Some(i64::MAX);
+            },
+        ),
+        (
+            "hourly-index-model-default-duplicated",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = hourly_index_models_context();
+                let index = context.hourly_index.as_mut().unwrap();
+                index.supplied.forecasts[0].model_id = "ncep_hrrr_conus_15min".to_owned();
+                index.components.models[0].model_id = "ncep_hrrr_conus_15min".to_owned();
+            },
+        ),
+        (
+            "hourly-index-model-over-bound",
+            DecisionV6Error::BoundExceeded,
+            |context| {
+                *context = hourly_index_models_context();
+                let models = &mut context.hourly_index.as_mut().unwrap().components.models;
+                models.resize(
+                    crate::hourly_index_v6::MAX_INDEX_FORECAST_MODELS + 1,
+                    models[0].clone(),
+                );
             },
         ),
         (
@@ -1515,7 +1605,7 @@ fn v6_corpus_is_current_and_every_vector_decodes_to_its_verdict() {
         }
     }
     let invalid = recorded["invalid"].as_array().unwrap();
-    assert_eq!(invalid.len(), 61);
+    assert_eq!(invalid.len(), 67);
     for entry in invalid {
         let id = entry["id"].as_str().unwrap();
         let bytes = bytes(entry);
@@ -1600,6 +1690,32 @@ fn corpus_builders_are_what_the_ids_say() {
         index.current_hour.unwrap().feed_conditions[1].kind,
         FeedConditionKindV6::Other(_)
     ));
+    #[cfg(feature = "kernel")]
+    {
+        use crate::kernel_v6::KernelSnapshot;
+        use strategy_core_kernel::StrategyKernelState;
+        let context = hourly_index_models_context();
+        let encoded = encode_decision_context_v6(&context).unwrap();
+        let decoded = decode_decision_context_v6(&encoded).unwrap();
+        let snapshot = KernelSnapshot::from_context(&decoded).unwrap();
+        let index = snapshot.hourly_index("miami").unwrap();
+        let hrrr = index.forecast_for("ncep_hrrr_conus_15min").unwrap();
+        let rrfs = index.forecast_for("ncep_rrfs_conus_15min").unwrap();
+        assert_ne!(hrrr.steps[0].value_f, rrfs.steps[0].value_f);
+        assert_ne!(
+            hrrr.bias.as_ref().unwrap().bias_f,
+            rrfs.bias.as_ref().unwrap().bias_f
+        );
+        let (forecast, bias) = index.forecast_components(&rrfs.model_id).unwrap();
+        assert_eq!(forecast.revision, 2);
+        assert_eq!(bias.revision, 7);
+        assert!(index.forecast_for("unknown").is_none());
+        let snapshot = KernelSnapshot::from_context(&hourly_index_removed_model_context()).unwrap();
+        let index = snapshot.hourly_index("miami").unwrap();
+        assert!(index.forecast_for("ncep_rrfs_conus_15min").is_none());
+        assert!(index.forecast_components("ncep_rrfs_conus_15min").is_some());
+        assert!(index.forecast_for("ncep_hrrr_conus_15min").is_some());
+    }
     let warming = hourly_index_warming_context().hourly_index.unwrap();
     assert_eq!(warming.supplied.seq, 0);
     assert!(warming.supplied.latest.is_none() && warming.supplied.forecast.is_none());
