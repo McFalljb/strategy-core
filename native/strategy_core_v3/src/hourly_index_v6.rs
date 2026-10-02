@@ -43,12 +43,22 @@ pub const MAX_INDEX_MINUTES: usize = 75;
 pub const MAX_INDEX_STATIONS: usize = 16;
 /// 15-minute forecast steps (the provider runs to +18 h: 73).
 pub const MAX_INDEX_FORECAST_STEPS: usize = 96;
+/// Non-default forecast models retained alongside HRRR, including removal metadata.
+pub const MAX_INDEX_FORECAST_MODELS: usize = 8;
 /// Upcoming top-of-hour forecast settles.
 pub const MAX_INDEX_FORECAST_SETTLES: usize = 6;
 /// Settlements a city keeps, newest first.
 pub const MAX_INDEX_SETTLEMENTS: usize = 3;
 /// Feed conditions of the current hour (a few kinds per member, plus the city's own).
 pub const MAX_INDEX_FEED_CONDITIONS: usize = 64;
+
+/// Host metadata of one non-default model's forecast and bias streams.
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
+pub struct IndexModelComponentsV6 {
+    pub model_id: String,
+    pub forecast: ComponentMetaV4,
+    pub bias: ComponentMetaV4,
+}
 
 /// Host authority and freshness of each hourly-index stream; see
 /// [`strategy_core_kernel::HourlyIndexComponents`] for which fields each covers.
@@ -60,6 +70,8 @@ pub struct HourlyIndexComponentsV6 {
     pub bias: ComponentMetaV4,
     pub settlements: ComponentMetaV4,
     pub calibration: ComponentMetaV4,
+    /// Non-default models, strictly sorted by model id; removal retains metadata.
+    pub models: Vec<IndexModelComponentsV6>,
 }
 
 /// One city's hourly index and the host's metadata of its streams.
@@ -97,6 +109,34 @@ impl HourlyIndexInputV6 {
         ] {
             validate_meta(meta)?;
             validate_meta_times(meta, decision_time_unix_ms)?;
+        }
+        if components.models.len() > MAX_INDEX_FORECAST_MODELS {
+            return Err(DecisionV6Error::BoundExceeded);
+        }
+        strictly_sorted(
+            components
+                .models
+                .iter()
+                .map(|model| model.model_id.as_str()),
+        )?;
+        for model in &components.models {
+            identifier(&model.model_id)?;
+            if model.model_id == strategy_core_kernel::hourly_index::DEFAULT_INDEX_FORECAST_MODEL {
+                return Err(DecisionV6Error::InvalidContract);
+            }
+            for meta in [&model.forecast, &model.bias] {
+                validate_meta(meta)?;
+                validate_meta_times(meta, decision_time_unix_ms)?;
+            }
+        }
+        for forecast in &self.supplied.forecasts {
+            if !components
+                .models
+                .iter()
+                .any(|model| model.model_id == forecast.model_id)
+            {
+                return Err(DecisionV6Error::InvalidContract);
+            }
         }
         validate_supplied(&self.supplied, &Clock::at(decision_time_unix_ms))
     }
@@ -200,7 +240,26 @@ fn validate_supplied(index: &SuppliedHourlyIndexV6, clock: &Clock) -> Result<(),
     if let Some(hour) = &index.current_hour {
         validate_hour(hour, clock)?;
     }
+    let default_model = strategy_core_kernel::hourly_index::DEFAULT_INDEX_FORECAST_MODEL;
     if let Some(forecast) = &index.forecast {
+        validate_forecast(forecast, clock)?;
+        if forecast.model_id != default_model {
+            return Err(DecisionV6Error::InvalidContract);
+        }
+    }
+    if index.forecasts.len() > MAX_INDEX_FORECAST_MODELS {
+        return Err(DecisionV6Error::BoundExceeded);
+    }
+    strictly_sorted(
+        index
+            .forecasts
+            .iter()
+            .map(|forecast| forecast.model_id.as_str()),
+    )?;
+    for forecast in &index.forecasts {
+        if forecast.model_id == default_model {
+            return Err(DecisionV6Error::InvalidContract);
+        }
         validate_forecast(forecast, clock)?;
     }
     for settlement in &index.recent_settlements {
@@ -668,6 +727,7 @@ pub(crate) mod fixtures {
                             .collect(),
                     }),
                 }),
+                forecasts: Vec::new(),
                 recent_settlements: vec![
                     SuppliedIndexSettlementV6 {
                         hour_end_unix_ns: ns(T0_S - 3_600),
@@ -731,8 +791,24 @@ pub(crate) mod fixtures {
                 bias: meta(AuthorityV4::Current, 18, Some(SEQ - 2)),
                 settlements: meta(AuthorityV4::Current, 4, Some(SEQ - 5)),
                 calibration: meta(AuthorityV4::Current, 1, None),
+                models: Vec::new(),
             },
         }
+    }
+
+    pub(crate) fn models() -> HourlyIndexInputV6 {
+        let mut input = snapshot();
+        let mut rrfs = input.supplied.forecast.clone().unwrap();
+        rrfs.model_id = "ncep_rrfs_conus_15min".to_owned();
+        rrfs.value_f[0] = Some(d("83.1"));
+        rrfs.bias.as_mut().unwrap().bias_f = d("1.2");
+        input.supplied.forecasts.push(rrfs);
+        input.components.models.push(IndexModelComponentsV6 {
+            model_id: "ncep_rrfs_conus_15min".to_owned(),
+            forecast: meta(AuthorityV4::Current, 2, Some(SEQ - 20)),
+            bias: meta(AuthorityV4::Current, 7, Some(SEQ - 3)),
+        });
+        input
     }
 
     /// A subscribed city before its first snapshot: only its id, every stream warming.
@@ -750,6 +826,7 @@ pub(crate) mod fixtures {
                 bias: warming.clone(),
                 settlements: warming.clone(),
                 calibration: warming,
+                models: Vec::new(),
             },
         }
     }

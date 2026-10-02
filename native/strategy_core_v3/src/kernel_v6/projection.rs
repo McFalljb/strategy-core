@@ -459,6 +459,17 @@ pub(super) fn hourly_index_state(
             bias: component_meta(&components.bias)?,
             settlements: component_meta(&components.settlements)?,
             calibration: component_meta(&components.calibration)?,
+            models: components
+                .models
+                .iter()
+                .map(|model| {
+                    Ok(strategy_core_kernel::hourly_index::IndexModelComponents {
+                        model_id: model.model_id.clone(),
+                        forecast: component_meta(&model.forecast)?,
+                        bias: component_meta(&model.bias)?,
+                    })
+                })
+                .collect::<Result<_, KernelTransactionError>>()?,
         },
     ))
 }
