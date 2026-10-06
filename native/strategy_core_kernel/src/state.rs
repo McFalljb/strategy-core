@@ -1092,6 +1092,15 @@ pub struct BookLevel {
     pub quantity: ContractQuantity,
 }
 
+/// Research (PI-01): one side's external best bid as the host knows it (own quantity already
+/// removed): its price (`None`: the side has none) and the receipt time since which it has been
+/// continuously known and unchanged.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ExternalBestBid {
+    pub price: Option<f64>,
+    pub stable_since: DateTime<Utc>,
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Book {
     pub connection_epoch: Option<u64>,
@@ -1101,6 +1110,9 @@ pub struct Book {
     pub resync_required: bool,
     pub yes_bids: Vec<BookLevel>,
     pub no_bids: Vec<BookLevel>,
+    /// Research (PI-01): `None` when the host does not know it continuously.
+    pub yes_external_best_bid: Option<ExternalBestBid>,
+    pub no_external_best_bid: Option<ExternalBestBid>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]

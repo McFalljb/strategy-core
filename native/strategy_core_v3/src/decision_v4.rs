@@ -429,6 +429,19 @@ pub struct BookLevelV4 {
     pub price_micros: u64,
     pub quantity_hundredths: u64,
 }
+/// Research (PI-01): one side's external best bid, as the host knows it from the full stream
+/// of book updates it received. External: the Sleeve's own working quantity (cancel in flight
+/// included) is already removed, and a Strategy never subtracts its own again.
+#[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
+pub struct ExternalBestBidV4 {
+    /// The best bid of others; `None` when the side has none.
+    pub price_micros: Option<u64>,
+    /// Receipt time (host clock, the decision clock) since which this price (or emptiness) has
+    /// been continuously known and unchanged. The host restarts it on any price change, on the
+    /// side becoming empty or nonempty, and on any resync, gap, reconnect, new epoch or host
+    /// restart; a change of size at the same price, or of own orders only, does not.
+    pub stable_since_receipt_unix_ms: i64,
+}
 #[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct BookV4 {
     pub connection_epoch: Option<u64>,
@@ -438,6 +451,9 @@ pub struct BookV4 {
     pub resync_required: bool,
     pub yes_bids: Vec<BookLevelV4>,
     pub no_bids: Vec<BookLevelV4>,
+    /// Research (PI-01): `None` when the host does not know it continuously.
+    pub yes_external_best_bid: Option<ExternalBestBidV4>,
+    pub no_external_best_bid: Option<ExternalBestBidV4>,
 }
 #[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct LastTradeV4 {
@@ -623,6 +639,11 @@ impl DecisionContextV4 {
                 || market.book.as_ref().is_some_and(|book| {
                     book.yes_bids.len() > MAX_BOOK_LEVELS_PER_SIDE
                         || book.no_bids.len() > MAX_BOOK_LEVELS_PER_SIDE
+                        || [&book.yes_external_best_bid, &book.no_external_best_bid]
+                            .into_iter()
+                            .flatten()
+                            .filter_map(|best| best.price_micros)
+                            .any(|price| price == 0 || price >= 1_000_000)
                 })
                 || market.evidence.len() > MAX_EVIDENCE_REFERENCES
         }) {

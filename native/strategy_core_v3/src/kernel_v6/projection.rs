@@ -8,17 +8,18 @@
 use chrono::{DateTime, TimeZone, Utc};
 use strategy_core_kernel::{
     Book, BookLevel, ClimateDay, ComponentAuthority, ComponentMeta, ContractQuantity,
-    DailyExtremes, EventProvenance, Extreme, FinalFact, Forecast, ForecastModel, ForecastPoint,
-    HourlyIndexComponents, HourlyIndexState, LastTrade, MarketComponents, MarketLifecycle,
-    MarketState, Observation, OracleErrorDistribution, OracleScore, OracleTable, Report,
-    StationComponents, StationIdentity, StationState, StationWeatherView, TickerQuote, ValueOrigin,
-    WeatherEvent, WeatherEventSource,
+    DailyExtremes, EventProvenance, ExternalBestBid, Extreme, FinalFact, Forecast, ForecastModel,
+    ForecastPoint, HourlyIndexComponents, HourlyIndexState, LastTrade, MarketComponents,
+    MarketLifecycle, MarketState, Observation, OracleErrorDistribution, OracleScore, OracleTable,
+    Report, StationComponents, StationIdentity, StationState, StationWeatherView, TickerQuote,
+    ValueOrigin, WeatherEvent, WeatherEventSource,
 };
 
 use super::KernelTransactionError;
 use crate::decision_v4::{
-    AuthorityV4, BookLevelV4, ComponentMetaV4, ExtremeV4, ForecastModelV4, MarketMetaV4, MarketV4,
-    ObservationV4, ProvenanceV4, RankByV4, ReportV4, StationV4, WeatherEventV4,
+    AuthorityV4, BookLevelV4, ComponentMetaV4, ExternalBestBidV4, ExtremeV4, ForecastModelV4,
+    MarketMetaV4, MarketV4, ObservationV4, ProvenanceV4, RankByV4, ReportV4, StationV4,
+    WeatherEventV4,
 };
 use crate::decision_v6::{DecisionContextV6, DecisionV6Error};
 use crate::hourly_index_v6::HourlyIndexInputV6;
@@ -896,6 +897,17 @@ pub(super) fn market_state(
                         })
                         .collect::<Vec<_>>()
                 };
+                let external = |best: &Option<ExternalBestBidV4>| {
+                    best.as_ref()
+                        .map(|best| {
+                            Ok::<_, KernelTransactionError>(ExternalBestBid {
+                                price: best.price_micros.map(price),
+                                stable_since: millis(Some(best.stable_since_receipt_unix_ms))?
+                                    .ok_or(KernelTransactionError::InvalidTime)?,
+                            })
+                        })
+                        .transpose()
+                };
                 Ok::<_, KernelTransactionError>(Book {
                     connection_epoch: book.connection_epoch,
                     sid: book.sid,
@@ -904,6 +916,8 @@ pub(super) fn market_state(
                     resync_required: book.resync_required,
                     yes_bids: levels(&book.yes_bids),
                     no_bids: levels(&book.no_bids),
+                    yes_external_best_bid: external(&book.yes_external_best_bid)?,
+                    no_external_best_bid: external(&book.no_external_best_bid)?,
                 })
             })
             .transpose()?,
