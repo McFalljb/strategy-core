@@ -208,6 +208,7 @@ pub(super) fn context() -> DecisionContextV6 {
         current_inputs: None,
         market_strikes: None,
         hourly_index: None,
+        book_window_min: None,
     }
 }
 

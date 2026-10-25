@@ -61,9 +61,9 @@ pub use hourly_index::{
     SuppliedIndexStationReading, SuppliedMemberBias,
 };
 pub use state::{
-    Book, BookLevel, BrokerFinancialState, ClimateDay, ComponentAuthority, ComponentMeta,
-    DailyExtremes, EventProvenance, Extreme, FinalFact, Forecast, ForecastModel, ForecastPoint,
-    LastTrade, MarketComponents, MarketLifecycle, MarketState, Observation,
+    Book, BookLevel, BookWindowMin, BrokerFinancialState, ClimateDay, ComponentAuthority,
+    ComponentMeta, DailyExtremes, EventProvenance, Extreme, FinalFact, Forecast, ForecastModel,
+    ForecastPoint, LastTrade, MarketComponents, MarketLifecycle, MarketState, Observation,
     OracleErrorDistribution, OracleScore, OracleTable, Report, StationComponents, StationIdentity,
     StationState, TickerQuote, WeatherEvent, WeatherEventSource,
 };

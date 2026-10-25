@@ -310,6 +310,43 @@ fn hourly_index_removed_model_context() -> DecisionContextV6 {
     context
 }
 
+/// A wall-layer Sleeve's context: its Market's book and the book's 2 s window minimum, one
+/// level still warming (0) and one capped below its displayed quantity.
+fn book_window_min_context() -> DecisionContextV6 {
+    let level = |price_micros, quantity_hundredths| crate::decision_v4::BookLevelV4 {
+        price_micros,
+        quantity_hundredths,
+    };
+    let mut context = context();
+    let market = &mut context.owner_state.markets[0];
+    market.book = Some(crate::decision_v4::BookV4 {
+        connection_epoch: Some(3),
+        sid: Some(7),
+        sequence: Some(42),
+        snapshot_at_unix_ms: Some(context.decision_time_unix_ms - 10_000),
+        resync_required: false,
+        yes_bids: vec![level(300_000, 1_500)],
+        no_bids: vec![
+            level(620_000, 900),
+            level(580_000, 4_000),
+            level(570_000, 2_500),
+        ],
+    });
+    context.book_window_min = Some(BookWindowMinV6 {
+        window_ms: 2_000,
+        markets: vec![MarketBookWindowMinV6 {
+            market_id: market.identity.market_id.clone(),
+            yes_bids: vec![level(300_000, 1_500)],
+            no_bids: vec![
+                level(620_000, 0),
+                level(580_000, 2_100),
+                level(570_000, 2_500),
+            ],
+        }],
+    });
+    context
+}
+
 fn hourly_index_warming_context() -> DecisionContextV6 {
     let mut context = context();
     context.hourly_index = Some(hourly::warming());
@@ -437,6 +474,7 @@ fn valid_contexts() -> Vec<(&'static str, DecisionContextV6)> {
             hourly_index_removed_model_context(),
         ),
         ("hourly-index-warming", hourly_index_warming_context()),
+        ("book-window-min", book_window_min_context()),
     ]
 }
 
@@ -800,6 +838,23 @@ fn invalid_contexts() -> Vec<(&'static str, DecisionV6Error, ContextMutation)> {
                 *context = hourly_index_context();
                 let index = context.hourly_index.as_mut().unwrap();
                 index.supplied.forecast.as_mut().unwrap().value_f.pop();
+            },
+        ),
+        (
+            "book-window-min-above-displayed",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = book_window_min_context();
+                let window = context.book_window_min.as_mut().unwrap();
+                window.markets[0].no_bids[1].quantity_hundredths = 4_001;
+            },
+        ),
+        (
+            "book-window-min-window-unbounded",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = book_window_min_context();
+                context.book_window_min.as_mut().unwrap().window_ms = MAX_BOOK_WINDOW_MS + 1;
             },
         ),
         (
@@ -1605,7 +1660,7 @@ fn v6_corpus_is_current_and_every_vector_decodes_to_its_verdict() {
         }
     }
     let invalid = recorded["invalid"].as_array().unwrap();
-    assert_eq!(invalid.len(), 67);
+    assert_eq!(invalid.len(), 69);
     for entry in invalid {
         let id = entry["id"].as_str().unwrap();
         let bytes = bytes(entry);
