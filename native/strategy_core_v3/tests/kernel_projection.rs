@@ -2,6 +2,8 @@
 //! the supplied original-precision state reach a real `NativeKernel` through Core-owned views.
 #![cfg(feature = "kernel")]
 
+#[path = "kernel_projection/book_window_min.rs"]
+mod book_window_min;
 #[path = "kernel_projection/decisions.rs"]
 mod decisions;
 #[path = "kernel_projection/hourly_index.rs"]
@@ -185,6 +187,7 @@ fn base_context() -> DecisionContextV6 {
     DecisionContextV6 {
         market_strikes: None,
         hourly_index: None,
+        book_window_min: None,
         current_weather: None,
         forecast_issuance: None,
         current_inputs: None,

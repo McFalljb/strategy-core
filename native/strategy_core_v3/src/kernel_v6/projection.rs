@@ -7,12 +7,12 @@
 
 use chrono::{DateTime, TimeZone, Utc};
 use strategy_core_kernel::{
-    Book, BookLevel, ClimateDay, ComponentAuthority, ComponentMeta, ContractQuantity,
-    DailyExtremes, EventProvenance, Extreme, FinalFact, Forecast, ForecastModel, ForecastPoint,
-    HourlyIndexComponents, HourlyIndexState, LastTrade, MarketComponents, MarketLifecycle,
-    MarketState, Observation, OracleErrorDistribution, OracleScore, OracleTable, Report,
-    StationComponents, StationIdentity, StationState, StationWeatherView, TickerQuote, ValueOrigin,
-    WeatherEvent, WeatherEventSource,
+    Book, BookLevel, BookWindowMin, ClimateDay, ComponentAuthority, ComponentMeta,
+    ContractQuantity, DailyExtremes, EventProvenance, Extreme, FinalFact, Forecast, ForecastModel,
+    ForecastPoint, HourlyIndexComponents, HourlyIndexState, LastTrade, MarketComponents,
+    MarketLifecycle, MarketState, Observation, OracleErrorDistribution, OracleScore, OracleTable,
+    Report, StationComponents, StationIdentity, StationState, StationWeatherView, TickerQuote,
+    ValueOrigin, WeatherEvent, WeatherEventSource,
 };
 
 use super::KernelTransactionError;
@@ -904,6 +904,17 @@ pub(super) fn market_state(
                     resync_required: book.resync_required,
                     yes_bids: levels(&book.yes_bids),
                     no_bids: levels(&book.no_bids),
+                    window_min: context.book_window_min.as_ref().and_then(|window| {
+                        window
+                            .markets
+                            .iter()
+                            .find(|minimum| minimum.market_id == market.identity.market_id)
+                            .map(|minimum| BookWindowMin {
+                                window_ms: window.window_ms,
+                                yes_bids: levels(&minimum.yes_bids),
+                                no_bids: levels(&minimum.no_bids),
+                            })
+                    }),
                 })
             })
             .transpose()?,

@@ -966,6 +966,33 @@ pub struct DecisionContextV6 {
     /// only: no trigger announces a change. Not part of the state fence, like the supplied
     /// inputs.
     pub hourly_index: Option<crate::hourly_index_v6::HourlyIndexInputV6>,
+    /// The trailing-window minimum of every scoped Market's bid levels, when the Sleeve's
+    /// Strategy asks the host for it. State only, and not part of the state fence, like the
+    /// books it qualifies.
+    pub book_window_min: Option<BookWindowMinV6>,
+}
+
+/// The longest trailing window a host keeps a book's history for.
+pub const MAX_BOOK_WINDOW_MS: u32 = 60_000;
+
+/// Per scoped Market, in the order of `owner_state.markets`: for each bid level of its
+/// decision book, at the same index and price, the least quantity others displayed there at
+/// any time in the last `window_ms` (the quantity in force at the window's start included),
+/// capped at the level's quantity now. "Others" is the decision book's own definition: every
+/// account but the Sleeve's (live), every order but the account's external ones (paper). Zero
+/// until the host's history covers the whole window since the book's last snapshot,
+/// connection change or resync. A Market without a book has no levels.
+#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+pub struct BookWindowMinV6 {
+    pub window_ms: u32,
+    pub markets: Vec<MarketBookWindowMinV6>,
+}
+
+#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
+pub struct MarketBookWindowMinV6 {
+    pub market_id: String,
+    pub yes_bids: Vec<crate::decision_v4::BookLevelV4>,
+    pub no_bids: Vec<crate::decision_v4::BookLevelV4>,
 }
 
 #[derive(Clone, Debug, Encode, Decode, Eq, PartialEq)]
@@ -1083,6 +1110,7 @@ impl DecisionContextV6 {
         validate_current_weather(self)?;
         validate_forecast_issuance(self)?;
         validate_market_strikes(self)?;
+        validate_book_window_min(self)?;
         if let Some(index) = &self.hourly_index {
             index.validate(self.decision_time_unix_ms)?;
         }
@@ -1186,6 +1214,39 @@ fn validate_market_strikes(context: &DecisionContextV6) -> Result<(), DecisionV6
                 .floor_strike_milli_f
                 .zip(strike.cap_strike_milli_f)
                 .is_some_and(|(floor, cap)| floor > cap)
+        {
+            return Err(DecisionV6Error::InvalidContract);
+        }
+    }
+    Ok(())
+}
+
+fn validate_book_window_min(context: &DecisionContextV6) -> Result<(), DecisionV6Error> {
+    let Some(window) = &context.book_window_min else {
+        return Ok(());
+    };
+    if window.window_ms == 0 || window.window_ms > MAX_BOOK_WINDOW_MS {
+        return Err(DecisionV6Error::InvalidContract);
+    }
+    if window.markets.len() != context.owner_state.markets.len() {
+        return Err(DecisionV6Error::InvalidContract);
+    }
+    // Level for level the decision book's: same prices, never more than displayed now.
+    let matches = |minimum: &[crate::decision_v4::BookLevelV4],
+                   book: &[crate::decision_v4::BookLevelV4]| {
+        minimum.len() == book.len()
+            && minimum.iter().zip(book).all(|(minimum, level)| {
+                minimum.price_micros == level.price_micros
+                    && minimum.quantity_hundredths <= level.quantity_hundredths
+            })
+    };
+    for (minimum, market) in window.markets.iter().zip(&context.owner_state.markets) {
+        let (yes, no) = market.book.as_ref().map_or((&[][..], &[][..]), |book| {
+            (&book.yes_bids[..], &book.no_bids[..])
+        });
+        if minimum.market_id != market.identity.market_id
+            || !matches(&minimum.yes_bids, yes)
+            || !matches(&minimum.no_bids, no)
         {
             return Err(DecisionV6Error::InvalidContract);
         }

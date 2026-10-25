@@ -1101,6 +1101,21 @@ pub struct Book {
     pub resync_required: bool,
     pub yes_bids: Vec<BookLevel>,
     pub no_bids: Vec<BookLevel>,
+    /// The host's trailing-window minimum of each bid level, when the Sleeve's Strategy asks
+    /// for it ([`BookWindowMin`]); `None` otherwise.
+    pub window_min: Option<BookWindowMin>,
+}
+
+/// For each level of [`Book::yes_bids`] and [`Book::no_bids`], at the same index and price:
+/// the least quantity others (every account but the Sleeve's own) displayed there at any time
+/// in the last `window_ms`, the quantity in force at the window's start included, and never
+/// more than the level's quantity now. Zero until the host's history of the book covers the
+/// whole window since its last snapshot, connection change or resync.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct BookWindowMin {
+    pub window_ms: u32,
+    pub yes_bids: Vec<BookLevel>,
+    pub no_bids: Vec<BookLevel>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]

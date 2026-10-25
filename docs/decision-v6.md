@@ -96,8 +96,10 @@ frozen-encoding evidence, plus:
 - `orders_complete`: true when `broker.orders` holds every order of the Sleeve the host
   keeps. The host sets it false when it had to truncate the view; a truncated view never
   reports an order as vanished and allows no cancel-all.
-- `hourly_index` (last field): the hourly Kalshi Weather Index of the scope's index city,
-  or `None` (see "Hourly index").
+- `hourly_index`: the hourly Kalshi Weather Index of the scope's index city, or `None`
+  (see "Hourly index").
+- `book_window_min` (last field, 0.5.0): the trailing-window minimum of every scoped
+  Market's bid levels, or `None` (see "Book window minimum").
 
 Host invariants on the order view:
 - A truncated view drops terminal orders only, never an open one: the runner seeds over any
@@ -556,6 +558,29 @@ aligned arrays become `steps`.
 It does not check provider arithmetic (`value_f` against `official_f`/`provisional_f`,
 shares, the adjusted settle). A host runs it on its input before building the context and
 repairs or drops what fails.
+
+## Book window minimum
+
+`book_window_min` is `None` unless the Sleeve's Strategy asks its host for it (traderv3:
+`book_window_min_ms` on the strategy entry). It is state only: it is not in the state fence,
+and no trigger announces a change.
+
+`BookWindowMinV6 { window_ms, markets }` carries one `MarketBookWindowMinV6 { market_id,
+yes_bids, no_bids }` per scoped Market, in the order of `owner_state.markets`. Each level
+sits at the same index and price as the decision book's level. Its quantity `S_p(t)` is the
+least others-only quantity displayed at that price at any time in `[t - window_ms, t]`. The
+quantity in force at `t - window_ms` counts. "Others-only" is the decision book's own
+definition: the displayed quantity less the account's resting orders at the price, read when
+the book changed (live: every Sleeve's orders on the account; paper: the account's external
+orders). `S_p(t)` is capped at the level's quantity now. The host computes it from every book
+snapshot and delta, not from decision-time samples. It is 0 until the host's history covers
+`t - window_ms` since the book's last snapshot, connection change or resync. A Market without
+a book has no levels.
+
+Validation: `0 < window_ms <= MAX_BOOK_WINDOW_MS` (60 000); one entry per scoped Market in
+order; level for level the decision book's prices; each quantity at most the book level's.
+The kernel projection puts it on `Book::window_min`, so `BookWindowMin` has the same levels
+as `Book::yes_bids` and `Book::no_bids`.
 
 ## Conformance
 
