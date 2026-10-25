@@ -1228,7 +1228,15 @@ fn validate_book_window_min(context: &DecisionContextV6) -> Result<(), DecisionV
     if window.window_ms == 0 || window.window_ms > MAX_BOOK_WINDOW_MS {
         return Err(DecisionV6Error::InvalidContract);
     }
-    if window.markets.len() != context.owner_state.markets.len() {
+    // One entry per scoped Market, each Market once: the projection finds an entry by id.
+    let distinct = window
+        .markets
+        .iter()
+        .map(|market| market.market_id.as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+    if window.markets.len() != context.owner_state.markets.len()
+        || distinct.len() != window.markets.len()
+    {
         return Err(DecisionV6Error::InvalidContract);
     }
     // Level for level the decision book's: same prices, never more than displayed now.

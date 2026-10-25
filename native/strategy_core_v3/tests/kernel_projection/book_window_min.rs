@@ -137,3 +137,28 @@ fn window_minimums_are_scoped_level_for_level_and_bounded() {
         assert_eq!(invalid.validate(), Err(DecisionV6Error::InvalidContract));
     }
 }
+
+#[test]
+fn a_market_twice_in_the_window_is_refused() {
+    // The window pairs entries with the scoped Markets by position; the projection finds a
+    // Market's entry by id. One id twice would give the kernel another entry's minimum.
+    let mut context = with_book();
+    let mut thin = context.owner_state.markets[0].clone();
+    thin.book.as_mut().unwrap().no_bids = vec![level(600_000, 1), level(550_000, 1)];
+    context.owner_state.markets.push(thin);
+    context.book_window_min = Some(BookWindowMinV6 {
+        window_ms: 2_000,
+        markets: [
+            [level(600_000, 2_500), level(550_000, 4_000)],
+            [level(600_000, 1), level(550_000, 1)],
+        ]
+        .into_iter()
+        .map(|no_bids| MarketBookWindowMinV6 {
+            market_id: MARKET.to_owned(),
+            yes_bids: vec![level(300_000, 500)],
+            no_bids: no_bids.to_vec(),
+        })
+        .collect(),
+    });
+    assert_eq!(context.validate(), Err(DecisionV6Error::InvalidContract));
+}

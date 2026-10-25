@@ -570,15 +570,15 @@ yes_bids, no_bids }` per scoped Market, in the order of `owner_state.markets`. E
 sits at the same index and price as the decision book's level. Its quantity `S_p(t)` is the
 least others-only quantity displayed at that price at any time in `[t - window_ms, t]`. The
 quantity in force at `t - window_ms` counts. "Others-only" is the decision book's own
-definition: the displayed quantity less the account's resting orders at the price, read when
-the book changed (live: every Sleeve's orders on the account; paper: the account's external
+definition: the displayed quantity less the account's resting orders at the price, read whenever
+the book or those orders changed (live: every Sleeve's orders on the account; paper: the account's external
 orders). `S_p(t)` is capped at the level's quantity now. The host computes it from every book
 snapshot and delta, not from decision-time samples. It is 0 until the host's history covers
 `t - window_ms` since the book's last snapshot, connection change or resync. A Market without
 a book has no levels.
 
 Validation: `0 < window_ms <= MAX_BOOK_WINDOW_MS` (60 000); one entry per scoped Market in
-order; level for level the decision book's prices; each quantity at most the book level's.
+order, each Market once; level for level the decision book's prices; each quantity at most the book level's.
 The kernel projection puts it on `Book::window_min`, so `BookWindowMin` has the same levels
 as `Book::yes_bids` and `Book::no_bids`.
 

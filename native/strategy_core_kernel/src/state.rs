@@ -1107,9 +1107,11 @@ pub struct Book {
 }
 
 /// For each level of [`Book::yes_bids`] and [`Book::no_bids`], at the same index and price:
-/// the least quantity others (every account but the Sleeve's own) displayed there at any time
-/// in the last `window_ms`, the quantity in force at the window's start included, and never
-/// more than the level's quantity now. Zero until the host's history of the book covers the
+/// the least quantity others displayed there at any time in the last `window_ms`, the
+/// quantity in force at the window's start included, and never more than the level's quantity
+/// now. "Others" is the decision book's own definition: the displayed quantity less the
+/// account's resting orders (live: every Sleeve's orders on the account; paper: only the
+/// account's external orders, since paper orders never reach the venue's book). Zero until the host's history of the book covers the
 /// whole window since its last snapshot, connection change or resync.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct BookWindowMin {
