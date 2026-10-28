@@ -60,19 +60,19 @@ use strategy_core_kernel::{
     AnnotationValue, BrokerCommandKind, BrokerFinancialState, BrokerOrderStatus,
     CancelOrderRequest, CancelTarget, CommandRequest, CommandTicket, ContractQuantity,
     ContractSide, HourlyIndexState, HttpMethod, HttpRequest, KernelAction, KernelCapabilities,
-    KernelError, KernelResult, LogAction, MarketState, NativeKernel, OrderAction, OrderStatusView,
-    OrderTicket, OrderType, OrderUpdate, OrderUpdateStatus, ParameterValue, PendingOrderView,
-    PendingTimer, PlaceOrderRequest, RequestTicket, RuntimeMode, StationState, StrategyEvent,
-    StrategyKernelBroker, StrategyKernelContext, StrategyKernelData, StrategyKernelRuntime,
-    StrategyKernelState, StrategyKernelTelemetry, StrategyParameters, TimePolicy, TimerHandle,
-    WakeAtRequest, fees,
+    KernelError, KernelResult, LogAction, MarketState, NativeKernel, NowcastState, OrderAction,
+    OrderStatusView, OrderTicket, OrderType, OrderUpdate, OrderUpdateStatus, ParameterValue,
+    PendingOrderView, PendingTimer, PlaceOrderRequest, RequestTicket, RuntimeMode, StationState,
+    StrategyEvent, StrategyKernelBroker, StrategyKernelContext, StrategyKernelData,
+    StrategyKernelRuntime, StrategyKernelState, StrategyKernelTelemetry, StrategyParameters,
+    TimePolicy, TimerHandle, WakeAtRequest, fees,
 };
 
 pub use self::events::{KernelEvent, external_response};
 pub use self::native::{NativeDecision, NativeIdentity, NativeInvocation, run_native_decision};
 use self::projection::{
-    hourly_index_state, hundredths_quantity, market_state, millis, price, price_micros,
-    station_state,
+    hourly_index_state, hundredths_quantity, market_state, millis, nowcast_state, price,
+    price_micros, station_state,
 };
 use self::updates::Failure;
 pub use self::updates::{PROVIDER_REJECTED_CODE, PROVIDER_REJECTED_REASON};
@@ -531,6 +531,7 @@ pub struct KernelSnapshot {
     stations: Vec<StationState>,
     markets: Vec<MarketState>,
     hourly_index: Option<HourlyIndexState>,
+    nowcast: Option<NowcastState>,
     parameters: StrategyParameters,
     contributor_stations: Vec<String>,
     capabilities: KernelCapabilities,
@@ -560,6 +561,7 @@ impl KernelSnapshot {
             .as_ref()
             .map(hourly_index_state)
             .transpose()?;
+        snapshot.nowcast = context.nowcast.as_ref().map(nowcast_state).transpose()?;
         Ok(snapshot)
     }
 
@@ -611,6 +613,7 @@ impl KernelSnapshot {
             stations: Vec::new(),
             markets: Vec::new(),
             hourly_index: None,
+            nowcast: None,
             parameters: context
                 .strategy
                 .parameters
@@ -649,6 +652,10 @@ impl KernelSnapshot {
     pub fn hourly_index_state(&self) -> Option<&HourlyIndexState> {
         self.hourly_index.as_ref()
     }
+
+    pub fn nowcast_state(&self) -> Option<&NowcastState> {
+        self.nowcast.as_ref()
+    }
 }
 
 impl StrategyKernelState for KernelSnapshot {
@@ -668,6 +675,10 @@ impl StrategyKernelState for KernelSnapshot {
         self.hourly_index
             .as_ref()
             .filter(|index| index.city == city)
+    }
+
+    fn nowcast(&self, city: &str) -> Option<&NowcastState> {
+        self.nowcast.as_ref().filter(|nowcast| nowcast.city == city)
     }
 }
 impl StrategyKernelData for KernelSnapshot {}
@@ -824,6 +835,7 @@ impl<'a> KernelHost<'a> {
                 stations: Vec::new(),
                 markets: Vec::new(),
                 hourly_index: None,
+                nowcast: None,
                 parameters: Default::default(),
                 contributor_stations: Vec::new(),
                 capabilities: Default::default(),

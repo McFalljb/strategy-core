@@ -305,6 +305,14 @@ pub struct SuppliedIndexCalibration {
     /// Strictly sorted by station id.
     pub members: Vec<SuppliedIndexMember>,
     pub quorum: SuppliedIndexQuorum,
+    /// The city's reference temperature in °C that the index adds back to the members'
+    /// weighted mean (`index_f = (Σ w·(C − offset_c)) / Σ w + city_reference_c`, in °F after
+    /// conversion). Absent when the provider did not send one (the snapshot, before 0.6.0
+    /// hosts). Since 0.6.0.
+    pub city_reference_c: Option<Decimal>,
+    /// When the provider published this calibration, so a kernel can tell which one was
+    /// known at a past time. Absent when the provider did not send it. Since 0.6.0.
+    pub published_at_unix_ns: Option<i64>,
 }
 
 /// One city's hourly index as the host folded it from the snapshot and the `seq` events.
@@ -735,6 +743,10 @@ pub struct IndexCalibration {
     /// Sorted by station id.
     pub members: Vec<IndexMember>,
     pub quorum: IndexQuorum,
+    /// [`SuppliedIndexCalibration::city_reference_c`].
+    pub city_reference_c: Option<f64>,
+    /// [`SuppliedIndexCalibration::published_at_unix_ns`].
+    pub published_at: Option<DateTime<Utc>>,
     pub origin: ValueOrigin,
     pub supplied: Option<SuppliedIndexCalibration>,
 }
@@ -758,6 +770,8 @@ impl IndexCalibration {
                 min_weight: calibration.quorum.min_weight.to_f64(),
                 published: calibration.quorum.published,
             },
+            city_reference_c: f64_of(calibration.city_reference_c),
+            published_at: calibration.published_at_unix_ns.map(nanos),
             origin: ValueOrigin::Supplied,
             supplied: Some(calibration.clone()),
         }

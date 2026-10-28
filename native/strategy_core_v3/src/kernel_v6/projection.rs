@@ -22,6 +22,7 @@ use crate::decision_v4::{
 };
 use crate::decision_v6::{DecisionContextV6, DecisionV6Error};
 use crate::hourly_index_v6::HourlyIndexInputV6;
+use crate::nowcast_v6::NowcastInputV6;
 use crate::supplied_v6::{ExtremeKindV6, SuppliedStationV6};
 
 pub(super) fn station_state(
@@ -471,6 +472,17 @@ pub(super) fn hourly_index_state(
                 })
                 .collect::<Result<_, KernelTransactionError>>()?,
         },
+    ))
+}
+
+/// The runner nowcast of the scope's index city: its supplied original and the feed's
+/// metadata.
+pub(super) fn nowcast_state(
+    input: &NowcastInputV6,
+) -> Result<strategy_core_kernel::NowcastState, KernelTransactionError> {
+    Ok(strategy_core_kernel::NowcastState::from_supplied(
+        &input.supplied,
+        component_meta(&input.components.feed)?,
     ))
 }
 

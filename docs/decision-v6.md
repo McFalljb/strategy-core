@@ -98,8 +98,10 @@ frozen-encoding evidence, plus:
   reports an order as vanished and allows no cancel-all.
 - `hourly_index`: the hourly Kalshi Weather Index of the scope's index city, or `None`
   (see "Hourly index").
-- `book_window_min` (last field, 0.5.0): the trailing-window minimum of every scoped
-  Market's bid levels, or `None` (see "Book window minimum").
+- `book_window_min` (0.5.0): the trailing-window minimum of every scoped Market's bid
+  levels, or `None` (see "Book window minimum").
+- `nowcast` (last field, 0.6.0): the forecast runner's nowcast of the scope's index city, or
+  `None` (see "Nowcast").
 
 Host invariants on the order view:
 - A truncated view drops terminal orders only, never an open one: the runner seeds over any
@@ -482,7 +484,7 @@ HourlyIndexComponentsV6 }`. The supplied types are owned by
 | `forecast` | snapshot, `forecast_index`; bias from `forecast_bias` | Per-step arrays `steps_unix_ns`, `value_f`, `quorum_met`, `partial` as the provider aligns them (at most 96 steps), `settles` (at most 6), `missing_members`, `bias` (`None` when the provider's `bias_f` is null). |
 | `forecasts` | snapshot/event `forecasts`, event `biases` | Non-default models' active forecasts, strictly sorted by model id, at most 8; the same supplied shape as `forecast`. HRRR appears only in `forecast`. |
 | `recent_settlements` | snapshot, `hour_settled`, `hour_reconciled` | Newest first, strictly by `hour_end`, at most 3. `matched` is the provider's `match`. |
-| `calibration` | snapshot `members`/`quorum`, `calibration` | `effective_at` is absent when only the snapshot supplied it. |
+| `calibration` | snapshot `members`/`quorum`, `calibration` | `effective_at` is absent when only the snapshot supplied it. `city_reference_c` and `published_at` (0.6.0) are the `calibration` event's; absent when the provider sent none. |
 
 A minute's readings (`stations`) are strictly sorted by station id, at most 16; so are the
 calibration members, `member_bias` and `missing_members`. A minute's `envelope` (`event_id`,
@@ -581,6 +583,49 @@ Validation: `0 < window_ms <= MAX_BOOK_WINDOW_MS` (60 000); one entry per scoped
 order, each Market once; level for level the decision book's prices; each quantity at most the book level's.
 The kernel projection puts it on `Book::window_min`, so `BookWindowMin` has the same levels
 as `Book::yes_bids` and `Book::no_bids`.
+
+## Nowcast
+
+`nowcast` (0.6.0) is `None` unless the Sleeve's Strategy asks its host for it (traderv3:
+`nowcast = true` on the strategy entry, with a `nowcast_runner.v1` source configured) and the
+host holds a nowcast of the scope's index city. It is state only: it is not in the state
+fence, and no trigger announces a change. `None` means "no nowcast": a kernel that gates on it
+treats that as missing.
+
+`NowcastInputV6 { supplied: SuppliedNowcastV6, components: NowcastComponentsV6 { feed } }`.
+The supplied types are owned by `strategy_core_kernel::nowcast`; numbers are `DecimalV6`
+exactly as the runner sent them, times `*_unix_ns`. The host folds the runner's
+`nowcast-ws/1` feed (one per-city `seq`, a snapshot, `resume`):
+
+| Field | From | Notes |
+|---|---|---|
+| `city`, `seq` | snapshot, every event | `seq` is the last folded; 0 before the first snapshot. |
+| `stations` | snapshot | The city's members as the runner lists them, sorted. |
+| `forecasts` | snapshot `issues`, `station_forecast` + `issue_complete` | Per station (sorted, only stations with an issue), its newest `MAX_NOWCAST_ISSUES` (3) complete issues, oldest first, strictly by `issue_time`. An issue counts once its `issue_complete` arrived. Each keeps its envelope (`event_id`, `seq`, `emitted_at`, host `received_at`), `issued_at`, bundle, `code_commit`, `degraded` and reasons, `stale_sources`, `fallback`, `own_age_min` (`input_ages.own`), `ref_f`, `levels` and `leads` (`lead_min`, `target_time`, `median`, `q` aligned with `levels`, `median_model`, `rc_shift`, `rc_scale`). Quantiles are as issued: after the runner's rolling layer, before any bias correction. |
+| `artifacts` | snapshot, `model_artifact` | Strictly by (`kind`, `model_id`, `valid_from`): the version in force of each kind and model and any next one not yet valid, at most 8. `body_json` is the body serialized canonically (keys sorted, no whitespace); `sha256` is its lowercase hex SHA-256. |
+| `member_metars` | `member_metar` | Strictly by (`station_id`, `valid_time`), at most 64. |
+| `last_issue` | snapshot `last_issue`, `issue_complete` | The newest whole issue: stations issued and failed (sorted), seconds. |
+| `heartbeat` | `heartbeat` (unsequenced) | The runner's latest: says the connection is alive even when it is not issuing. |
+
+`components.feed` is one `ComponentMetaV4` for the whole feed, with the hourly index's
+authority mapping, plus: `Unavailable` after `resume_failed` until the next snapshot, and after
+an artefact whose body did not hash to its `sha256`. Prior state stays resident whatever the
+authority. Whether an issue is usable at the decision time (its `issue_time`, the runner's
+cadence, the feed's authority) is the kernel's rule, not the host's.
+
+`NowcastInputV6::validate(decision_time_unix_ms)` checks the city and station ids, the bounds
+(`MAX_NOWCAST_STATIONS` 16, 3 issues, `MAX_NOWCAST_LEADS` 32, `MAX_NOWCAST_LEVELS` 32,
+32 reasons, 8 artefacts of at most `MAX_NOWCAST_ARTIFACT_BYTES` 64 KiB, 64 METARs;
+`BoundExceeded`), the orders above (`NonCanonicalOrder`), and (`InvalidContract`): a station
+listed with no issue or an issue of another station, `q` not aligned with `levels`, a level
+outside (0, 1) (levels strictly increase by value), a zero lead, canonical decimals, every
+artefact's `sha256`, the feed meta, and times. Observed times (issue, `issued_at`, envelopes,
+METARs, the last issue, the heartbeat, `published_at`) are at most 10 minutes past the
+decision time; `target_time` at most 24 hours; `valid_from` has no upper bound. It does not
+check forecast arithmetic (quantiles non-decreasing, `target_time = issue_time + lead`).
+
+The kernel projection puts it on `StrategyKernelState::nowcast(city)` as
+`strategy_core_kernel::NowcastState { city, feed, supplied }`, `None` for any other city.
 
 ## Conformance
 

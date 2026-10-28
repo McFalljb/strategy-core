@@ -9,6 +9,7 @@ use crate::events::{
     TickerPriceView,
 };
 use crate::hourly_index::HourlyIndexState;
+use crate::nowcast::NowcastState;
 use crate::state::{BrokerFinancialState, MarketState, StationState};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -80,6 +81,15 @@ pub trait StrategyKernelState {
     /// a change, so a kernel reads it when it wakes. Check each stream's authority in
     /// `components` before trusting it. Hosts without hourly indexes return `None`.
     fn hourly_index(&self, _city: &str) -> Option<&HourlyIndexState> {
+        None
+    }
+
+    /// The forecast runner's nowcast of MinuteTemp's index city `city`, when the host delivers
+    /// it (traderv3: a Strategy that sets `nowcast = true`, with the runner source
+    /// configured). State only, like the hourly index. `None` means no nowcast: a kernel that
+    /// gates on it treats that as missing. Check `feed` and each issue's time before trusting
+    /// it. Hosts without a nowcast return `None`.
+    fn nowcast(&self, _city: &str) -> Option<&NowcastState> {
         None
     }
 }

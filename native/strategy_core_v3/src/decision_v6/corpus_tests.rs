@@ -347,6 +347,22 @@ fn book_window_min_context() -> DecisionContextV6 {
     context
 }
 
+/// A FLIP2X Sleeve's context with Miami's runner nowcast beside its hourly index: three
+/// issues of two members, a blend in force and its next version, a copula, a bias table,
+/// member METARs, the last whole issue and a heartbeat.
+fn nowcast_context() -> DecisionContextV6 {
+    let mut context = hourly_index_context();
+    context.nowcast = Some(crate::nowcast_v6::fixtures::snapshot());
+    context
+}
+
+/// The runner is down: the connection was lost and the city's state is held over, uncertain.
+fn nowcast_uncertain_context() -> DecisionContextV6 {
+    let mut context = hourly_index_context();
+    context.nowcast = Some(crate::nowcast_v6::fixtures::uncertain());
+    context
+}
+
 fn hourly_index_warming_context() -> DecisionContextV6 {
     let mut context = context();
     context.hourly_index = Some(hourly::warming());
@@ -475,6 +491,13 @@ fn valid_contexts() -> Vec<(&'static str, DecisionContextV6)> {
         ),
         ("hourly-index-warming", hourly_index_warming_context()),
         ("book-window-min", book_window_min_context()),
+        ("nowcast", nowcast_context()),
+        ("nowcast-uncertain", nowcast_uncertain_context()),
+        ("nowcast-warming", {
+            let mut context = context();
+            context.nowcast = Some(crate::nowcast_v6::fixtures::warming());
+            context
+        }),
     ]
 }
 
@@ -847,6 +870,46 @@ fn invalid_contexts() -> Vec<(&'static str, DecisionV6Error, ContextMutation)> {
                 *context = book_window_min_context();
                 let window = context.book_window_min.as_mut().unwrap();
                 window.markets[0].no_bids[1].quantity_hundredths = 4_001;
+            },
+        ),
+        (
+            "nowcast-artifact-sha256-mismatch",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = nowcast_context();
+                let nowcast = context.nowcast.as_mut().unwrap();
+                nowcast.supplied.artifacts[1].body_json.push(' ');
+            },
+        ),
+        (
+            "nowcast-issues-unbounded",
+            DecisionV6Error::BoundExceeded,
+            |context| {
+                *context = nowcast_context();
+                let station = &mut context.nowcast.as_mut().unwrap().supplied.forecasts[0];
+                let mut older = station.issues[0].clone();
+                older.issue_time_unix_ns -= 300_000_000_000;
+                station.issues.insert(0, older);
+            },
+        ),
+        (
+            "nowcast-quantiles-misaligned",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = nowcast_context();
+                let station = &mut context.nowcast.as_mut().unwrap().supplied.forecasts[1];
+                station.issues[2].leads[0].q.pop();
+            },
+        ),
+        (
+            "hourly-index-calibration-published-in-future",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = hourly_index_context();
+                let index = context.hourly_index.as_mut().unwrap();
+                let calibration = index.supplied.calibration.as_mut().unwrap();
+                calibration.published_at_unix_ns =
+                    Some((context.decision_time_unix_ms + 3_600_000) * 1_000_000);
             },
         ),
         (
@@ -1660,7 +1723,7 @@ fn v6_corpus_is_current_and_every_vector_decodes_to_its_verdict() {
         }
     }
     let invalid = recorded["invalid"].as_array().unwrap();
-    assert_eq!(invalid.len(), 69);
+    assert_eq!(invalid.len(), 73);
     for entry in invalid {
         let id = entry["id"].as_str().unwrap();
         let bytes = bytes(entry);

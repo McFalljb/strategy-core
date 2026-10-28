@@ -4,7 +4,7 @@
 //! canonical state and event model (`state`, `event`), the supplied originals those carry
 //! (`supplied`, `decimal`), the borrowed views kernels read (`events`), pure execution fee
 //! calculations (`fees`), a city's hourly Kalshi Weather Index as host state (`hourly_index`),
-//! and pure lookups: stations and series tickers (`stations`), station
+//! a city's runner nowcast as host state (`nowcast`), and pure lookups: stations and series tickers (`stations`), station
 //! time zones and climate days (`climate_day`), and component age (`freshness`). Trader and
 //! Backtester own their runtime adapters, codecs and broker/risk/accounting implementations.
 
@@ -19,6 +19,7 @@ pub mod fees;
 pub mod forecast;
 pub mod freshness;
 pub mod hourly_index;
+pub mod nowcast;
 pub mod state;
 pub mod stations;
 pub mod supplied;
@@ -59,6 +60,11 @@ pub use hourly_index::{
     SuppliedIndexForecastSettle, SuppliedIndexHour, SuppliedIndexMember, SuppliedIndexMinute,
     SuppliedIndexMinuteValue, SuppliedIndexQuorum, SuppliedIndexSettlement,
     SuppliedIndexStationReading, SuppliedMemberBias,
+};
+pub use nowcast::{
+    MAX_NOWCAST_ISSUES, NowcastState, SuppliedMemberMetar, SuppliedNowcast,
+    SuppliedNowcastArtifact, SuppliedNowcastEnvelope, SuppliedNowcastHeartbeat,
+    SuppliedNowcastIssue, SuppliedNowcastLead, SuppliedNowcastStation, SuppliedStationForecast,
 };
 pub use state::{
     Book, BookLevel, BookWindowMin, BrokerFinancialState, ClimateDay, ComponentAuthority,

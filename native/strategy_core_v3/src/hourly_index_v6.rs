@@ -274,7 +274,7 @@ fn validate_supplied(index: &SuppliedHourlyIndexV6, clock: &Clock) -> Result<(),
             .map(|settlement| settlement.hour_end_unix_ns),
     )?;
     if let Some(calibration) = &index.calibration {
-        validate_calibration(calibration)?;
+        validate_calibration(calibration, clock)?;
     }
     Ok(())
 }
@@ -499,10 +499,16 @@ fn validate_settlement(
     Ok(())
 }
 
-fn validate_calibration(calibration: &SuppliedIndexCalibrationV6) -> Result<(), DecisionV6Error> {
+fn validate_calibration(
+    calibration: &SuppliedIndexCalibrationV6,
+    clock: &Clock,
+) -> Result<(), DecisionV6Error> {
     text(&calibration.config_version)?;
     // Unbounded above: a calibration may be published ahead of its effective time.
     optional_time(calibration.effective_at_unix_ns, i64::MAX)?;
+    // Its publication is an observed time.
+    optional_time(calibration.published_at_unix_ns, clock.observed)?;
+    optional_decimal(calibration.city_reference_c)?;
     if calibration.members.len() > MAX_INDEX_STATIONS {
         return Err(DecisionV6Error::BoundExceeded);
     }
@@ -782,6 +788,8 @@ pub(crate) mod fixtures {
                         min_weight: d("0.8"),
                         published: true,
                     },
+                    city_reference_c: Some(d("28.9")),
+                    published_at_unix_ns: Some(ns(T0_S - 86_400)),
                 }),
             },
             components: HourlyIndexComponentsV6 {
