@@ -89,12 +89,15 @@ pub struct SuppliedNowcastStation {
     pub issues: Vec<SuppliedStationForecast>,
 }
 
-/// A versioned model artefact (`model_artifact`): blend coefficients, a copula or a bias
-/// table. `body_json` is the artefact's body serialized canonically (UTF-8 JSON, object keys
-/// sorted, no whitespace), the bytes `sha256` is the hex SHA-256 of.
+/// A versioned model artefact (`model_artifact`): blend coefficients, a copula, a bias table
+/// or a taker's combined coefficient set. `body_json` is the artefact's body serialized
+/// canonically (UTF-8 JSON, object keys sorted, no whitespace), the bytes `sha256` is the hex
+/// SHA-256 of.
 #[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct SuppliedNowcastArtifact {
-    /// `blend`, `copula` or `bias_table`.
+    /// `blend`, `copula`, `bias_table` or `combined` (the open-window taker's coefficient
+    /// sets). Any identifier is carried; a kernel reads the kinds it knows by exact name, so a
+    /// `combined` set never stands in for a `blend`.
     pub kind: String,
     /// E.g. `lr_full`, `lr_open`, `copula_biascorr`, `biascorr_roll7d`.
     pub model_id: String,
