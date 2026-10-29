@@ -110,7 +110,17 @@ impl NowcastInputV6 {
                 .iter()
                 .map(|station| station.station_id.as_str()),
         )?;
+        // Every forecast and METAR is of a member station the runner listed for the city.
+        let member = |station_id: &str| {
+            nowcast
+                .stations
+                .binary_search_by(|member| member.as_str().cmp(station_id))
+                .is_ok()
+        };
         for station in &nowcast.forecasts {
+            if !member(&station.station_id) {
+                return Err(DecisionV6Error::InvalidContract);
+            }
             validate_station(station, &clock)?;
         }
         strictly_sorted(nowcast.artifacts.iter().map(|artifact| {
@@ -131,6 +141,9 @@ impl NowcastInputV6 {
         )?;
         for metar in &nowcast.member_metars {
             identifier(&metar.station_id)?;
+            if !member(&metar.station_id) {
+                return Err(DecisionV6Error::InvalidContract);
+            }
             time(metar.valid_time_unix_ns, clock.observed)?;
             optional_time(metar.first_seen_unix_ns, clock.observed)?;
             optional_decimal(metar.temp_f)?;
@@ -567,6 +580,18 @@ mod tests {
     fn malformed_nowcasts_are_rejected_with_their_category() {
         type Mutation = fn(&mut NowcastInputV6);
         let cases: &[(&str, Mutation, DecisionV6Error)] = &[
+            (
+                "a forecast of a station that is not a member",
+                |input| input.supplied.stations.retain(|station| station != "KMIA"),
+                DecisionV6Error::InvalidContract,
+            ),
+            (
+                "a METAR of a station that is not a member",
+                |input| {
+                    input.supplied.member_metars[1].station_id = "KZZZ".to_owned();
+                },
+                DecisionV6Error::InvalidContract,
+            ),
             (
                 "current with a reason",
                 |input| input.unavailable = Some(NowcastUnavailableReasonV6::Stale),

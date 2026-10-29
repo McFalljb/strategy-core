@@ -897,6 +897,19 @@ fn invalid_contexts() -> Vec<(&'static str, DecisionV6Error, ContextMutation)> {
             },
         ),
         (
+            "nowcast-forecast-station-not-member",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = nowcast_context();
+                let nowcast = context.nowcast.as_mut().unwrap();
+                let foreign = nowcast.supplied.forecasts[0].station_id.clone();
+                nowcast
+                    .supplied
+                    .stations
+                    .retain(|station| *station != foreign);
+            },
+        ),
+        (
             "nowcast-unavailable-without-reason",
             DecisionV6Error::InvalidContract,
             |context| {
@@ -1744,7 +1757,7 @@ fn v6_corpus_is_current_and_every_vector_decodes_to_its_verdict() {
         }
     }
     let invalid = recorded["invalid"].as_array().unwrap();
-    assert_eq!(invalid.len(), 75);
+    assert_eq!(invalid.len(), 76);
     for entry in invalid {
         let id = entry["id"].as_str().unwrap();
         let bytes = bytes(entry);

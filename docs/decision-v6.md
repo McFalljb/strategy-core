@@ -623,7 +623,7 @@ time (its `issue_time`, the runner's cadence) is also the kernel's rule.
 (`MAX_NOWCAST_STATIONS` 16, 3 issues, `MAX_NOWCAST_LEADS` 32, `MAX_NOWCAST_LEVELS` 32,
 32 reasons, 8 artefacts of at most `MAX_NOWCAST_ARTIFACT_BYTES` 64 KiB, 64 METARs;
 `BoundExceeded`), the orders above (`NonCanonicalOrder`), and (`InvalidContract`): a station
-listed with no issue or an issue of another station, `q` not aligned with `levels`, a level
+listed with no issue or an issue of another station, a forecast or METAR of a station not in `stations`, `q` not aligned with `levels`, a level
 outside (0, 1) (levels strictly increase by value), a zero lead, canonical decimals, every
 artefact's `sha256`, the feed meta and its authority/reason pairing, and times. Observed times (issue, `issued_at`, envelopes,
 METARs, the last issue, the heartbeat, `published_at`) are at most 10 minutes past the
