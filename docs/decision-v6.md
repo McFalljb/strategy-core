@@ -100,8 +100,8 @@ frozen-encoding evidence, plus:
   (see "Hourly index").
 - `book_window_min` (0.5.0): the trailing-window minimum of every scoped Market's bid
   levels, or `None` (see "Book window minimum").
-- `nowcast` (last field, 0.6.0): the forecast runner's nowcast of the scope's index city, or
-  `None` (see "Nowcast").
+- `nowcast` (last field, 0.6.0): the forecast runner's nowcast of the scope's index city,
+  available or unavailable with a reason, or `None` when not asked for (see "Nowcast").
 
 Host invariants on the order view:
 - A truncated view drops terminal orders only, never an open one: the runner seeds over any
@@ -587,12 +587,20 @@ as `Book::yes_bids` and `Book::no_bids`.
 ## Nowcast
 
 `nowcast` (0.6.0) is `None` unless the Sleeve's Strategy asks its host for it (traderv3:
-`nowcast = true` on the strategy entry, with a `nowcast_runner.v1` source configured) and the
-host holds a nowcast of the scope's index city. It is state only: it is not in the state
-fence, and no trigger announces a change. `None` means "no nowcast": a kernel that gates on it
-treats that as missing.
+`nowcast = true` on the strategy entry). A host delivers one to **every** Strategy that asks,
+for the scope's index city, available or not, so `None` means "not asked". It is state only:
+it is not in the state fence, and no trigger announces a change.
 
-`NowcastInputV6 { supplied: SuppliedNowcastV6, components: NowcastComponentsV6 { feed } }`.
+**Fail closed.** The feed is either `Current` with `unavailable: None` (the host vouches for it
+at the decision's time) or `Unavailable` with a `NowcastUnavailableReasonV6`; no other pairing
+or authority is valid. A Strategy gated on the nowcast does not trade while it is unavailable,
+and treats a `None` it asked for the same way. The reasons (`as_str()` tokens, appended only):
+`not_configured`, `no_key`, `auth_failed`, `disconnected`, `no_snapshot`, `gap`,
+`resume_failed`, `stale`, `no_artifact`, `hash_mismatch`, `rejected`, `protocol_mismatch`,
+`unreadable`, `invalid`. `NowcastState::available()` returns the supplied nowcast or the
+reason.
+
+`NowcastInputV6 { supplied: SuppliedNowcastV6, components: NowcastComponentsV6 { feed }, unavailable }`.
 The supplied types are owned by `strategy_core_kernel::nowcast`; numbers are `DecimalV6`
 exactly as the runner sent them, times `*_unix_ns`. The host folds the runner's
 `nowcast-ws/1` feed (one per-city `seq`, a snapshot, `resume`):
@@ -607,11 +615,9 @@ exactly as the runner sent them, times `*_unix_ns`. The host folds the runner's
 | `last_issue` | snapshot `last_issue`, `issue_complete` | The newest whole issue: stations issued and failed (sorted), seconds. |
 | `heartbeat` | `heartbeat` (unsequenced) | The runner's latest: says the connection is alive even when it is not issuing. |
 
-`components.feed` is one `ComponentMetaV4` for the whole feed, with the hourly index's
-authority mapping, plus: `Unavailable` after `resume_failed` until the next snapshot, and after
-an artefact whose body did not hash to its `sha256`. Prior state stays resident whatever the
-authority. Whether an issue is usable at the decision time (its `issue_time`, the runner's
-cadence, the feed's authority) is the kernel's rule, not the host's.
+`components.feed` is one `ComponentMetaV4` for the whole feed. Prior state stays resident in
+`supplied` whatever the authority. Whether an available issue is still usable at the decision
+time (its `issue_time`, the runner's cadence) is also the kernel's rule.
 
 `NowcastInputV6::validate(decision_time_unix_ms)` checks the city and station ids, the bounds
 (`MAX_NOWCAST_STATIONS` 16, 3 issues, `MAX_NOWCAST_LEADS` 32, `MAX_NOWCAST_LEVELS` 32,
@@ -619,13 +625,14 @@ cadence, the feed's authority) is the kernel's rule, not the host's.
 `BoundExceeded`), the orders above (`NonCanonicalOrder`), and (`InvalidContract`): a station
 listed with no issue or an issue of another station, `q` not aligned with `levels`, a level
 outside (0, 1) (levels strictly increase by value), a zero lead, canonical decimals, every
-artefact's `sha256`, the feed meta, and times. Observed times (issue, `issued_at`, envelopes,
+artefact's `sha256`, the feed meta and its authority/reason pairing, and times. Observed times (issue, `issued_at`, envelopes,
 METARs, the last issue, the heartbeat, `published_at`) are at most 10 minutes past the
 decision time; `target_time` at most 24 hours; `valid_from` has no upper bound. It does not
 check forecast arithmetic (quantiles non-decreasing, `target_time = issue_time + lead`).
 
 The kernel projection puts it on `StrategyKernelState::nowcast(city)` as
-`strategy_core_kernel::NowcastState { city, feed, supplied }`, `None` for any other city.
+`strategy_core_kernel::NowcastState { city, feed, unavailable, supplied }`, `None` for any
+other city.
 
 ## Conformance
 

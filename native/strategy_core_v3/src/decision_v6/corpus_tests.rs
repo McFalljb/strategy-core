@@ -356,10 +356,11 @@ fn nowcast_context() -> DecisionContextV6 {
     context
 }
 
-/// The runner is down: the connection was lost and the city's state is held over, uncertain.
-fn nowcast_uncertain_context() -> DecisionContextV6 {
+/// The runner is down: the connection was lost and the city's state is held over, unavailable
+/// (`disconnected`).
+fn nowcast_disconnected_context() -> DecisionContextV6 {
     let mut context = hourly_index_context();
-    context.nowcast = Some(crate::nowcast_v6::fixtures::uncertain());
+    context.nowcast = Some(crate::nowcast_v6::fixtures::disconnected());
     context
 }
 
@@ -492,10 +493,13 @@ fn valid_contexts() -> Vec<(&'static str, DecisionContextV6)> {
         ("hourly-index-warming", hourly_index_warming_context()),
         ("book-window-min", book_window_min_context()),
         ("nowcast", nowcast_context()),
-        ("nowcast-uncertain", nowcast_uncertain_context()),
-        ("nowcast-warming", {
+        (
+            "nowcast-unavailable-disconnected",
+            nowcast_disconnected_context(),
+        ),
+        ("nowcast-unavailable-no-snapshot", {
             let mut context = context();
-            context.nowcast = Some(crate::nowcast_v6::fixtures::warming());
+            context.nowcast = Some(crate::nowcast_v6::fixtures::no_snapshot());
             context
         }),
     ]
@@ -890,6 +894,23 @@ fn invalid_contexts() -> Vec<(&'static str, DecisionV6Error, ContextMutation)> {
                 let mut older = station.issues[0].clone();
                 older.issue_time_unix_ns -= 300_000_000_000;
                 station.issues.insert(0, older);
+            },
+        ),
+        (
+            "nowcast-unavailable-without-reason",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = nowcast_disconnected_context();
+                context.nowcast.as_mut().unwrap().unavailable = None;
+            },
+        ),
+        (
+            "nowcast-current-with-reason",
+            DecisionV6Error::InvalidContract,
+            |context| {
+                *context = nowcast_context();
+                context.nowcast.as_mut().unwrap().unavailable =
+                    Some(crate::nowcast_v6::NowcastUnavailableReasonV6::Stale);
             },
         ),
         (
@@ -1723,7 +1744,7 @@ fn v6_corpus_is_current_and_every_vector_decodes_to_its_verdict() {
         }
     }
     let invalid = recorded["invalid"].as_array().unwrap();
-    assert_eq!(invalid.len(), 73);
+    assert_eq!(invalid.len(), 75);
     for entry in invalid {
         let id = entry["id"].as_str().unwrap();
         let bytes = bytes(entry);

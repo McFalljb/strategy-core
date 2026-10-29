@@ -3,9 +3,9 @@ use strategy_core_kernel::{ComponentAuthority, StrategyKernelState};
 use strategy_core_v3::decision_v4::{AuthorityV4, ComponentMetaV4};
 use strategy_core_v3::decision_v6::{DecisionV6Error, decision_fence_v6_sha256};
 use strategy_core_v3::nowcast_v6::{
-    NowcastComponentsV6, NowcastInputV6, SuppliedNowcastArtifactV6, SuppliedNowcastEnvelopeV6,
-    SuppliedNowcastLeadV6, SuppliedNowcastStationV6, SuppliedNowcastV6, SuppliedStationForecastV6,
-    sha256_hex,
+    NowcastComponentsV6, NowcastInputV6, NowcastUnavailableReasonV6, SuppliedNowcastArtifactV6,
+    SuppliedNowcastEnvelopeV6, SuppliedNowcastLeadV6, SuppliedNowcastStationV6, SuppliedNowcastV6,
+    SuppliedStationForecastV6, sha256_hex,
 };
 
 const BODY: &str = r#"{"coef":[1.1383442675728548],"intercept":-0.3241092365517112}"#;
@@ -54,12 +54,13 @@ fn input(decision_time_unix_ms: i64) -> NowcastInputV6 {
         },
         components: NowcastComponentsV6 {
             feed: ComponentMetaV4 {
-                authority: AuthorityV4::Uncertain,
+                authority: AuthorityV4::Unavailable,
                 revision: 3,
                 generation: 1,
                 ..Default::default()
             },
         },
+        unavailable: Some(NowcastUnavailableReasonV6::Disconnected),
     }
 }
 
@@ -89,7 +90,11 @@ fn the_nowcast_reaches_the_kernel_by_city_with_its_feed_authority() {
     let state: &dyn StrategyKernelState = &snapshot;
     assert!(state.nowcast("nyc").is_none());
     let nowcast = state.nowcast("miami").unwrap();
-    assert_eq!(nowcast.feed.authority, ComponentAuthority::Uncertain);
+    assert_eq!(nowcast.feed.authority, ComponentAuthority::Unavailable);
+    assert_eq!(
+        nowcast.available().unwrap_err(),
+        strategy_core_kernel::NowcastUnavailableReason::Disconnected
+    );
     assert_eq!(nowcast.supplied, context.nowcast.as_ref().unwrap().supplied);
     assert_eq!(
         nowcast.supplied.issues("KMIA")[0].leads[0].q[1].to_f64(),

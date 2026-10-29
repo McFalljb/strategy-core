@@ -190,27 +190,153 @@ impl SuppliedNowcast {
 // Kernel state
 // ---------------------------------------------------------------------------------------------
 
+/// Why the host delivers a city's nowcast as unavailable. A Strategy gated on the nowcast
+/// does not trade while it is unavailable (fail closed). New reasons are appended only.
+#[derive(Clone, Copy, Debug, Encode, Decode, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum NowcastUnavailableReason {
+    /// A Strategy asked but the host configures no runner source.
+    NotConfigured,
+    /// The host has no API key for the runner (missing, unreadable or empty key file).
+    NoKey,
+    /// The runner refused the key.
+    AuthFailed,
+    /// The connection is down or was lost; held state awaits a fresh snapshot.
+    Disconnected,
+    /// Connected and subscribed, but no snapshot yet.
+    NoSnapshot,
+    /// A `seq` gap that has not (yet) been closed by a resume.
+    Gap,
+    /// The runner could not replay a gap; awaiting a fresh snapshot.
+    ResumeFailed,
+    /// No frame or heartbeat for too long, or the newest issue is too old.
+    Stale,
+    /// No model artefact is held.
+    NoArtifact,
+    /// An artefact body did not hash to its `sha256`.
+    HashMismatch,
+    /// The runner refused the city's subscription.
+    Rejected,
+    /// The runner speaks another protocol version.
+    ProtocolMismatch,
+    /// A frame for the city could not be read.
+    Unreadable,
+    /// The held state fails the contract at the decision's time.
+    Invalid,
+}
+
+impl NowcastUnavailableReason {
+    pub const ALL: [Self; 14] = [
+        Self::NotConfigured,
+        Self::NoKey,
+        Self::AuthFailed,
+        Self::Disconnected,
+        Self::NoSnapshot,
+        Self::Gap,
+        Self::ResumeFailed,
+        Self::Stale,
+        Self::NoArtifact,
+        Self::HashMismatch,
+        Self::Rejected,
+        Self::ProtocolMismatch,
+        Self::Unreadable,
+        Self::Invalid,
+    ];
+
+    /// The stable snake_case token, for logs and read models.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::NotConfigured => "not_configured",
+            Self::NoKey => "no_key",
+            Self::AuthFailed => "auth_failed",
+            Self::Disconnected => "disconnected",
+            Self::NoSnapshot => "no_snapshot",
+            Self::Gap => "gap",
+            Self::ResumeFailed => "resume_failed",
+            Self::Stale => "stale",
+            Self::NoArtifact => "no_artifact",
+            Self::HashMismatch => "hash_mismatch",
+            Self::Rejected => "rejected",
+            Self::ProtocolMismatch => "protocol_mismatch",
+            Self::Unreadable => "unreadable",
+            Self::Invalid => "invalid",
+        }
+    }
+}
+
+impl std::fmt::Display for NowcastUnavailableReason {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
 /// One city's nowcast as the host delivered it for this invocation.
 ///
-/// `feed` is the host's authority of the runner feed: `Warming` before the first snapshot,
-/// `Current` while every event is applied in `seq` order, `RefreshPending` while a resume is
-/// in flight, `Uncertain` after a lost connection until the next snapshot, `Unavailable` after
-/// a failed resume, a refused city or an artefact whose hash did not match. Prior state stays
-/// resident whatever the authority; whether an issue is still usable is the kernel's rule
-/// (by its issue time), not the host's.
+/// Fail closed: `feed.authority` is `Current` with `unavailable == None` when the host vouches
+/// for the feed at the decision's time, and otherwise `Unavailable` with the reason. A host
+/// delivers a nowcast to every Strategy that asks, so a Strategy that asked and reads none
+/// treats it as unavailable too. Prior state stays resident in `supplied` whatever the
+/// authority; whether an issue is still usable is also the kernel's rule (by its issue time).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct NowcastState {
     pub city: String,
     pub feed: ComponentMeta,
+    pub unavailable: Option<NowcastUnavailableReason>,
     pub supplied: SuppliedNowcast,
 }
 
 impl NowcastState {
-    pub fn from_supplied(nowcast: &SuppliedNowcast, feed: ComponentMeta) -> Self {
+    pub fn from_supplied(
+        nowcast: &SuppliedNowcast,
+        feed: ComponentMeta,
+        unavailable: Option<NowcastUnavailableReason>,
+    ) -> Self {
         Self {
             city: nowcast.city.clone(),
             feed,
+            unavailable,
             supplied: nowcast.clone(),
         }
+    }
+
+    /// The nowcast when the host vouches for it, else why not.
+    pub fn available(&self) -> Result<&SuppliedNowcast, NowcastUnavailableReason> {
+        match self.unavailable {
+            Some(reason) => Err(reason),
+            None if self.feed.authority == crate::state::ComponentAuthority::Current => {
+                Ok(&self.supplied)
+            }
+            None => Err(NowcastUnavailableReason::Invalid),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::ComponentAuthority;
+
+    /// Reason tokens are distinct and snake_case; only a current feed without a reason is
+    /// available.
+    #[test]
+    fn reasons_have_stable_tokens_and_only_current_is_available() {
+        let tokens = NowcastUnavailableReason::ALL
+            .iter()
+            .map(|reason| reason.as_str())
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(tokens.len(), NowcastUnavailableReason::ALL.len());
+        assert!(tokens.iter().all(|token| {
+            token
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte == b'_')
+        }));
+
+        let mut state = NowcastState::default();
+        state.feed.authority = ComponentAuthority::Current;
+        assert!(state.available().is_ok());
+        state.unavailable = Some(NowcastUnavailableReason::Stale);
+        assert_eq!(state.available(), Err(NowcastUnavailableReason::Stale));
+        state.unavailable = None;
+        state.feed.authority = ComponentAuthority::Unavailable;
+        assert_eq!(state.available(), Err(NowcastUnavailableReason::Invalid));
     }
 }

@@ -6,8 +6,9 @@
 //! with [`NowcastInputV6::validate`] (dropping what fails) before it builds the context.
 
 pub use strategy_core_kernel::nowcast::{
-    MAX_NOWCAST_ISSUES, SuppliedMemberMetar as SuppliedMemberMetarV6,
-    SuppliedNowcast as SuppliedNowcastV6, SuppliedNowcastArtifact as SuppliedNowcastArtifactV6,
+    MAX_NOWCAST_ISSUES, NowcastUnavailableReason as NowcastUnavailableReasonV6,
+    SuppliedMemberMetar as SuppliedMemberMetarV6, SuppliedNowcast as SuppliedNowcastV6,
+    SuppliedNowcastArtifact as SuppliedNowcastArtifactV6,
     SuppliedNowcastEnvelope as SuppliedNowcastEnvelopeV6,
     SuppliedNowcastHeartbeat as SuppliedNowcastHeartbeatV6,
     SuppliedNowcastIssue as SuppliedNowcastIssueV6, SuppliedNowcastLead as SuppliedNowcastLeadV6,
@@ -51,10 +52,14 @@ pub struct NowcastComponentsV6 {
 }
 
 /// One city's nowcast and the host's metadata of its feed.
+///
+/// Fail closed: the feed is `Current` with no `unavailable` reason, or `Unavailable` with one;
+/// no other authority is valid. A host delivers one to every Strategy that asks.
 #[derive(Clone, Debug, Default, Encode, Decode, Eq, PartialEq)]
 pub struct NowcastInputV6 {
     pub supplied: SuppliedNowcastV6,
     pub components: NowcastComponentsV6,
+    pub unavailable: Option<NowcastUnavailableReasonV6>,
 }
 
 impl NowcastInputV6 {
@@ -65,6 +70,11 @@ impl NowcastInputV6 {
         let clock = Clock::at(decision_time_unix_ms);
         let meta = &self.components.feed;
         validate_meta(meta)?;
+        match (&meta.authority, self.unavailable) {
+            (crate::decision_v4::AuthorityV4::Current, None)
+            | (crate::decision_v4::AuthorityV4::Unavailable, Some(_)) => {}
+            _ => return Err(DecisionV6Error::InvalidContract),
+        }
         let observed_ms = clock.observed.div_euclid(1_000_000);
         for at in meta
             .updated_at_unix_ms
@@ -256,7 +266,7 @@ fn validate_forecast(
         || forecast
             .levels
             .iter()
-            .any(|level| !level.is_canonical() || !(level.to_f64() > 0.0 && level.to_f64() < 1.0))
+            .any(|level| !(level.is_canonical() && level.to_f64() > 0.0 && level.to_f64() < 1.0))
     {
         return Err(DecisionV6Error::InvalidContract);
     }
@@ -498,20 +508,22 @@ pub(crate) mod fixtures {
                     refresh_error: None,
                 },
             },
+            unavailable: None,
         }
     }
 
     /// The runner is down: the connection was lost, the state held over until a snapshot.
-    pub(crate) fn uncertain() -> NowcastInputV6 {
+    pub(crate) fn disconnected() -> NowcastInputV6 {
         let mut input = snapshot();
-        input.components.feed.authority = AuthorityV4::Uncertain;
+        input.components.feed.authority = AuthorityV4::Unavailable;
         input.components.feed.refresh_error =
             Some("the connection was lost; awaiting a snapshot".to_owned());
+        input.unavailable = Some(NowcastUnavailableReasonV6::Disconnected);
         input
     }
 
     /// A subscribed city before its first snapshot.
-    pub(crate) fn warming() -> NowcastInputV6 {
+    pub(crate) fn no_snapshot() -> NowcastInputV6 {
         NowcastInputV6 {
             supplied: SuppliedNowcastV6 {
                 city: "miami".to_owned(),
@@ -519,12 +531,13 @@ pub(crate) mod fixtures {
             },
             components: NowcastComponentsV6 {
                 feed: ComponentMetaV4 {
-                    authority: AuthorityV4::Warming,
+                    authority: AuthorityV4::Unavailable,
                     revision: 1,
                     generation: 1,
                     ..ComponentMetaV4::default()
                 },
             },
+            unavailable: Some(NowcastUnavailableReasonV6::NoSnapshot),
         }
     }
 }
@@ -533,6 +546,7 @@ pub(crate) mod fixtures {
 mod tests {
     use super::fixtures::*;
     use super::*;
+    use crate::decision_v4::AuthorityV4;
     use crate::hourly_index_v6::fixtures::{DECISION_MS, T0_S, d, ns};
 
     fn rejects(mutate: impl FnOnce(&mut NowcastInputV6), error: DecisionV6Error) {
@@ -544,8 +558,8 @@ mod tests {
     #[test]
     fn the_fixtures_are_valid() {
         snapshot().validate(DECISION_MS).unwrap();
-        uncertain().validate(DECISION_MS).unwrap();
-        warming().validate(DECISION_MS).unwrap();
+        disconnected().validate(DECISION_MS).unwrap();
+        no_snapshot().validate(DECISION_MS).unwrap();
     }
 
     /// Every rule of the contract, one mutation each.
@@ -553,6 +567,24 @@ mod tests {
     fn malformed_nowcasts_are_rejected_with_their_category() {
         type Mutation = fn(&mut NowcastInputV6);
         let cases: &[(&str, Mutation, DecisionV6Error)] = &[
+            (
+                "current with a reason",
+                |input| input.unavailable = Some(NowcastUnavailableReasonV6::Stale),
+                DecisionV6Error::InvalidContract,
+            ),
+            (
+                "unavailable without a reason",
+                |input| input.components.feed.authority = AuthorityV4::Unavailable,
+                DecisionV6Error::InvalidContract,
+            ),
+            (
+                "uncertain is not a delivered authority",
+                |input| {
+                    input.components.feed.authority = AuthorityV4::Uncertain;
+                    input.unavailable = Some(NowcastUnavailableReasonV6::Disconnected);
+                },
+                DecisionV6Error::InvalidContract,
+            ),
             (
                 "city id",
                 |input| input.supplied.city = "mi ami".to_owned(),

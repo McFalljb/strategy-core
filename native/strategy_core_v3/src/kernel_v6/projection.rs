@@ -483,6 +483,7 @@ pub(super) fn nowcast_state(
     Ok(strategy_core_kernel::NowcastState::from_supplied(
         &input.supplied,
         component_meta(&input.components.feed)?,
+        input.unavailable,
     ))
 }
 

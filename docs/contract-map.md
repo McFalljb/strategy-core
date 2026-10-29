@@ -259,9 +259,11 @@ summing their counters. See [Decision V6](decision-v6.md#oracle-error-distributi
 
 `StrategyKernelState::nowcast(city)` (0.6.0) returns the forecast runner's nowcast of an index
 city as `NowcastState` (`native/strategy_core_kernel/src/nowcast.rs`): the feed's
-`ComponentMeta` and the `SuppliedNowcast` (per member station its newest three complete
-issues of quantile forecasts, the versioned model artefacts with their sha256, member METARs,
-the last issue and the runner heartbeat). State only, default `None`. See
+`ComponentMeta`, the `unavailable` reason (fail closed: `NowcastState::available()` is the
+nowcast only when the host vouches for it) and the `SuppliedNowcast` (per member station its
+newest three complete issues of quantile forecasts, the versioned model artefacts with their
+sha256, member METARs, the last issue and the runner heartbeat). State only, default `None`;
+a host delivers one to every Strategy that asks. See
 [Decision V6](decision-v6.md#nowcast).
 
 `StrategyKernelState::hourly_index(city)` returns MinuteTemp's hourly Kalshi Weather Index of

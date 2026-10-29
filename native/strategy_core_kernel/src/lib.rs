@@ -62,8 +62,8 @@ pub use hourly_index::{
     SuppliedIndexStationReading, SuppliedMemberBias,
 };
 pub use nowcast::{
-    MAX_NOWCAST_ISSUES, NowcastState, SuppliedMemberMetar, SuppliedNowcast,
-    SuppliedNowcastArtifact, SuppliedNowcastEnvelope, SuppliedNowcastHeartbeat,
+    MAX_NOWCAST_ISSUES, NowcastState, NowcastUnavailableReason, SuppliedMemberMetar,
+    SuppliedNowcast, SuppliedNowcastArtifact, SuppliedNowcastEnvelope, SuppliedNowcastHeartbeat,
     SuppliedNowcastIssue, SuppliedNowcastLead, SuppliedNowcastStation, SuppliedStationForecast,
 };
 pub use state::{
