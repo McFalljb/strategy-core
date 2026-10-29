@@ -970,6 +970,10 @@ pub struct DecisionContextV6 {
     /// Strategy asks the host for it. State only, and not part of the state fence, like the
     /// books it qualifies.
     pub book_window_min: Option<BookWindowMinV6>,
+    /// The forecast runner's nowcast of the scope's index city, when the Sleeve's Strategy
+    /// asks the host for it (0.6.0). State only: no trigger announces a change. Not part of
+    /// the state fence, like the hourly index.
+    pub nowcast: Option<crate::nowcast_v6::NowcastInputV6>,
 }
 
 /// The longest trailing window a host keeps a book's history for.
@@ -1113,6 +1117,9 @@ impl DecisionContextV6 {
         validate_book_window_min(self)?;
         if let Some(index) = &self.hourly_index {
             index.validate(self.decision_time_unix_ms)?;
+        }
+        if let Some(nowcast) = &self.nowcast {
+            nowcast.validate(self.decision_time_unix_ms)?;
         }
         Ok(())
     }
