@@ -37,8 +37,11 @@ pub const MAX_NOWCAST_LEADS: usize = 32;
 pub const MAX_NOWCAST_LEVELS: usize = 32;
 /// Reasons and sources listed on one station forecast.
 pub const MAX_NOWCAST_REASONS: usize = 32;
-/// Artefacts a city keeps: each kind and model's version in force plus a next one.
-pub const MAX_NOWCAST_ARTIFACTS: usize = 8;
+/// Artefacts a city keeps: each kind and model's version in force plus a next one. With the
+/// open-window taker a city steadily holds 8 (the blend, the copula, two bias tables and two
+/// `combined` models' current and next versions); 16 leaves room for a second pending version.
+/// A list over the bound is refused (`BoundExceeded`), never truncated.
+pub const MAX_NOWCAST_ARTIFACTS: usize = 16;
 /// Bytes of one artefact's canonical body.
 pub const MAX_NOWCAST_ARTIFACT_BYTES: usize = 64 * 1024;
 /// Member METARs a city keeps, across its stations.
@@ -722,6 +725,95 @@ mod tests {
                     .collect()
             },
             DecisionV6Error::BoundExceeded,
+        );
+    }
+
+    /// The open-window taker's steady state: the blend, the copula, two bias tables and two
+    /// `combined` models (current and next version each), padded with further next versions
+    /// to the bound.
+    fn with_taker_sets(count: usize) -> NowcastInputV6 {
+        let mut input = snapshot();
+        let artifacts = &mut input.supplied.artifacts;
+        artifacts.push(artifact(
+            "bias_table",
+            "biascorr_roll7d",
+            T0_S,
+            r#"{"b":{}}"#,
+            SEQ - 29,
+        ));
+        for model in ["taker_v2b_combined", "taker_v3_combined"] {
+            artifacts.push(artifact(
+                "combined",
+                model,
+                T0_S - 43_200,
+                r#"{"coef":[0.5]}"#,
+                SEQ - 28,
+            ));
+        }
+        let mut k = 0;
+        while artifacts.len() < count {
+            let model = ["taker_v2b_combined", "taker_v3_combined"][k % 2];
+            let from = T0_S + 86_400 * (1 + (k / 2) as i64);
+            artifacts.push(artifact(
+                "combined",
+                model,
+                from,
+                r#"{"coef":[0.6]}"#,
+                SEQ - 27,
+            ));
+            k += 1;
+        }
+        artifacts.sort_by(|a, b| {
+            (a.kind.as_str(), a.model_id.as_str(), a.valid_from_unix_ns).cmp(&(
+                b.kind.as_str(),
+                b.model_id.as_str(),
+                b.valid_from_unix_ns,
+            ))
+        });
+        input
+    }
+
+    #[test]
+    fn combined_taker_sets_validate_up_to_sixteen_artefacts() {
+        assert_eq!(MAX_NOWCAST_ARTIFACTS, 16);
+        let steady = with_taker_sets(8);
+        assert_eq!(steady.supplied.artifacts.len(), 8);
+        steady.validate(DECISION_MS).unwrap();
+        let full = with_taker_sets(MAX_NOWCAST_ARTIFACTS);
+        assert_eq!(full.supplied.artifacts.len(), MAX_NOWCAST_ARTIFACTS);
+        full.validate(DECISION_MS).unwrap();
+        assert_eq!(
+            full.supplied
+                .artifacts_of("combined", "taker_v2b_combined")
+                .count(),
+            6
+        );
+        // A `combined` set is read by its kind, never as a blend.
+        assert!(
+            full.supplied
+                .artifacts_of("blend", "taker_v2b_combined")
+                .next()
+                .is_none()
+        );
+    }
+
+    /// Over the bound the list is refused whole, never truncated: validation cannot drop an
+    /// artefact (in force or not), so a host cannot be handed a city missing its blend.
+    #[test]
+    fn a_seventeenth_artefact_is_refused_not_evicted() {
+        let input = with_taker_sets(MAX_NOWCAST_ARTIFACTS + 1);
+        let before = input.clone();
+        assert_eq!(
+            input.validate(DECISION_MS),
+            Err(DecisionV6Error::BoundExceeded)
+        );
+        assert_eq!(input, before);
+        // The over-bound list still holds the blend in force, the oldest artefact of all.
+        assert!(
+            input
+                .supplied
+                .artifacts_of("blend", "lr_full")
+                .any(|artifact| { artifact.valid_from_unix_ns == ns(T0_S - 86_400) })
         );
     }
 }

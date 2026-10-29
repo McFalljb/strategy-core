@@ -610,7 +610,7 @@ exactly as the runner sent them, times `*_unix_ns`. The host folds the runner's
 | `city`, `seq` | snapshot, every event | `seq` is the last folded; 0 before the first snapshot. |
 | `stations` | snapshot | The city's members as the runner lists them, sorted. |
 | `forecasts` | snapshot `issues`, `station_forecast` + `issue_complete` | Per station (sorted, only stations with an issue), its newest `MAX_NOWCAST_ISSUES` (3) complete issues, oldest first, strictly by `issue_time`. An issue counts once its `issue_complete` arrived. Each keeps its envelope (`event_id`, `seq`, `emitted_at`, host `received_at`), `issued_at`, bundle, `code_commit`, `degraded` and reasons, `stale_sources`, `fallback`, `own_age_min` (`input_ages.own`), `ref_f`, `levels` and `leads` (`lead_min`, `target_time`, `median`, `q` aligned with `levels`, `median_model`, `rc_shift`, `rc_scale`). Quantiles are as issued: after the runner's rolling layer, before any bias correction. |
-| `artifacts` | snapshot, `model_artifact` | Strictly by (`kind`, `model_id`, `valid_from`): the version in force of each kind and model and any next one not yet valid, at most 8. `body_json` is the body serialized canonically (keys sorted, no whitespace); `sha256` is its lowercase hex SHA-256. |
+| `artifacts` | snapshot, `model_artifact` | Strictly by (`kind`, `model_id`, `valid_from`): the version in force of each kind and model and any next one not yet valid, at most 16 (a list over it is refused, never truncated). Kinds are any identifier: `blend`, `copula`, `bias_table`, and `combined` for the open-window taker's coefficient sets (`taker_v2b_combined`, `taker_v3_combined`); a `combined` set is not a `blend`. `body_json` is the body serialized canonically (keys sorted, no whitespace); `sha256` is its lowercase hex SHA-256. |
 | `member_metars` | `member_metar` | Strictly by (`station_id`, `valid_time`), at most 64. |
 | `last_issue` | snapshot `last_issue`, `issue_complete` | The newest whole issue: stations issued and failed (sorted), seconds. |
 | `heartbeat` | `heartbeat` (unsequenced) | The runner's latest: says the connection is alive even when it is not issuing. |
@@ -621,7 +621,7 @@ time (its `issue_time`, the runner's cadence) is also the kernel's rule.
 
 `NowcastInputV6::validate(decision_time_unix_ms)` checks the city and station ids, the bounds
 (`MAX_NOWCAST_STATIONS` 16, 3 issues, `MAX_NOWCAST_LEADS` 32, `MAX_NOWCAST_LEVELS` 32,
-32 reasons, 8 artefacts of at most `MAX_NOWCAST_ARTIFACT_BYTES` 64 KiB, 64 METARs;
+32 reasons, 16 artefacts of at most `MAX_NOWCAST_ARTIFACT_BYTES` 64 KiB, 64 METARs;
 `BoundExceeded`), the orders above (`NonCanonicalOrder`), and (`InvalidContract`): a station
 listed with no issue or an issue of another station, a forecast or METAR of a station not in `stations`, `q` not aligned with `levels`, a level
 outside (0, 1) (levels strictly increase by value), a zero lead, canonical decimals, every
